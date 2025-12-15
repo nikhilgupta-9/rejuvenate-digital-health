@@ -62,7 +62,14 @@ $logo = get_header_logo();
                 <li>
                     <i class="fal fa-user-md"></i>
                     <a href="<?= $site ?>doctor-login/">
-                        Doctors / Login
+                        <?php
+                        if(isset($_SESSION['doctor_logged_in'])){
+                            echo "Dr." . htmlspecialchars($doctor_name);
+                        }else{
+                            echo "Doctors / Login";
+                        }
+                        ?>
+                        
                     </a>
                 </li>
                 <li class="suport">
