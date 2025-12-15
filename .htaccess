@@ -1,0 +1,55 @@
+RewriteEngine On
+
+
+
+# ========================
+# URL REWRITING RULES
+# ========================
+
+# Rewrite Product Details URL
+RewriteRule ^department/([^/]+)/?$ e-cardiology.php?alias=$1 [L,QSA]
+RewriteRule ^online-services/([^/]+)/?$ book-your-medicine.php?alias=$1 [L,QSA]
+
+#for doctor profile detail page
+RewriteRule ^doctor-profile/([^/]+)/?$ doctor-details.php?alias=$1 [L,QSA]
+
+RewriteRule ^printers/([^/]+)/?$ blackprinter.php?alias=$1 [L,QSA]
+
+# Rewrite Products URL
+RewriteRule ^products/([^/]+)/?$ products.php?alias=$1 [L,QSA]
+
+RewriteRule ^brand/([^/]+)/?$ brand.php?alias=$1 [L,QSA]
+
+# Rewrite Blog Details URL
+RewriteRule ^blogs/([^/]+)/?$ blog-details.php?alias=$1 [L,QSA]
+
+RewriteRule ^doctor-login/?$ doctor-login.php? [L,QSA]
+RewriteRule ^doctor-signup/?$ doctor-signup.php? [L,QSA]
+RewriteRule ^forgot-password/?$ forgot-password.php? [L,QSA]
+
+#for user login and singup
+RewriteRule ^user-login/?$ login.php? [L,QSA]
+RewriteRule ^user-signup/?$ signup.php? [L,QSA]
+RewriteRule ^terms-and-condition/?$ terms-and-condition.php? [L,QSA]
+RewriteRule ^contact/?$ contact-us.php? [L,QSA]
+
+# Enable RewriteBase if needed (Uncomment if required)
+# RewriteBase /
+
+# Ensure existing files and directories are accessible
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# php -- BEGIN cPanel-generated handler, do not edit
+# Set the “ea-php81” package as the default “PHP” programming language.
+<IfModule mime_module>
+  AddHandler application/x-httpd-ea-php81 .php .php8 .phtml
+</IfModule>
+# php -- END cPanel-generated handler, do not edit
+
+
+# Prevent public access to .env file
+<Files ".env">
+  Order allow,deny
+  Deny from all
+</Files>
