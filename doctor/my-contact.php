@@ -142,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         
         $update_stmt = $conn->prepare($update_sql);
         $update_stmt->bind_param(
-            'sssssisdssssssi',
+            'ssssdisssssssssi',
             $name, $phone, $email, $gender, $dob, $age,
             $degrees, $specialization, $experience_years, $consultation_fee,
             $languages, $short_bio, $long_bio, $area_of_expertise,
@@ -297,15 +297,17 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
         }
         @media (max-width: 768px) {
             .sidebar { display: none; }
-            .sidebar.show { display: block; }
+            .sidebar.show { display: block;         display: block;
+        width: 280px;
+        height: 100vh; }
             .menu-btn { display: block; }
         }
     </style>
 </head>
 <body>
      <?php
-                            $doctor_name = $doctor['name'];
-                            ?>
+         $doctor_name = $doctor['name'];
+      ?>
     <?php include("../header.php") ?>
     
     <section class="contact-appointment-section section-padding fix">
@@ -331,7 +333,7 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
                     <div class="sidebar" id="sidebarMenu">
                         <div class="text-center info-content">
                             <div class="profile-image-container">
-                                <img src="<?= $site . $doctor_profile_image ?>" 
+                                <img src="<?=   $doctor_profile_image ?>" 
                                      class="userd-image" 
                                      id="profileImagePreview"
                                      onclick="document.getElementById('profileImage').click()">

@@ -269,7 +269,10 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
         }
         @media (max-width: 768px) {
             .sidebar { display: none; }
-            .sidebar.show { display: block; }
+            .sidebar.show { display: block;          
+                display: block;
+                width: 280px;
+                height: 100vh;}
             .menu-btn { display: block; }
         }
     </style>
@@ -287,7 +290,7 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
                 <div class="col-md-3">
                     <div class="sidebar" id="sidebarMenu">
                         <div class="text-center info-content">
-                            <img src="<?= $site . $doctor_profile_image ?>" class="userd-image">
+                            <img src="<?= $doctor_profile_image ?>" class="userd-image">
                             <h5>Dr. <?= htmlspecialchars($doctor_name) ?></h5>
                             <p><?= htmlspecialchars($doctor['email']) ?></p>
                             <p>Phone: <?= htmlspecialchars($doctor['phone']) ?></p>
@@ -313,7 +316,7 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
                     <div class="profile-card shadow mb-4">
                         <div class="row align-items-center">
                             <div class="col-md-3 text-center">
-                                <img src="<?= $site . $doctor_profile_image ?>" 
+                                <img src="<?= $doctor_profile_image ?>" 
                                      class="userd-image" 
                                      style="width: 120px; height: 120px;">
                             </div>

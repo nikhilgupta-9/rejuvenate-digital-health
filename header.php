@@ -15,7 +15,7 @@ $logo = get_header_logo();
                 <div class="offcanvas__top mb-5 d-flex justify-content-between align-items-center">
                     <div class="offcanvas__logo">
                         <a href="<?= $site ?>">
-                            <img src="<?= $logo ?>" alt="logo-img">
+                            <img src="<?= $site.$logo ?>" alt="logo-img">
                         </a>
                     </div>
                     <div class="offcanvas__close">

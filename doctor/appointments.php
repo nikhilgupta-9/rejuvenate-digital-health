@@ -285,7 +285,10 @@ $stats = $stats_result->fetch_assoc();
         }
         @media (max-width: 768px) {
             .sidebar { display: none; }
-            .sidebar.show { display: block; }
+            .sidebar.show { display: block;         
+                display: block;
+                width: 280px;
+                height: 100vh;}
             .menu-btn { display: block; }
             .table-responsive { font-size: 12px; }
         }
@@ -316,7 +319,7 @@ $stats = $stats_result->fetch_assoc();
                 <div class="col-md-3">
                     <div class="sidebar" id="sidebarMenu">
                         <div class="text-center info-content">
-                            <img src="<?= $site . $doctor_profile_image ?>" class="userd-image">
+                            <img src="<?=  $doctor_profile_image ?>" class="userd-image">
                             <h5>Dr. <?= htmlspecialchars($doctor_name) ?></h5>
                             <p><?= htmlspecialchars($doctor_email) ?></p>
                             <p>Phone: <?= htmlspecialchars($doctor_phone) ?></p>
