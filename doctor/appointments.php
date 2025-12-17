@@ -89,7 +89,7 @@ if (!empty($date_filter)) {
 }
 
 if (!empty($search_query)) {
-    $where_conditions[] = "(u.name LIKE ? OR u.email LIKE ? OR u.mobile LIKE ?)";
+    $where_conditions[] = "(u.name LIKE ? OR u.email LIKE ? OR u.mobile LIKE ? AND a.approved_by_admin = 1)";
     $search_param = "%" . $search_query . "%";
     $params[] = $search_param;
     $params[] = $search_param;
