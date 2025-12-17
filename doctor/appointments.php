@@ -329,7 +329,7 @@ $stats = $stats_result->fetch_assoc();
                         <a href="<?= $site ?>doctor/doctor-dashboard.php">Dashboard</a>
                         <a href="<?= $site ?>doctor/my-patients.php">My Patients</a>
                         <a href="<?= $site ?>doctor/appointments.php" class="active">Appointments</a>
-                        <a href="<?= $site ?>doctor/patient-form.pdf">Patient Form</a>
+                        <a href="<?= $site ?>doctor/patient-form.php">Patient Form</a>
                         <a href="<?= $site ?>doctor/my-contact.php">Contact Us</a>
                         <a href="<?= $site ?>doctor/doctor-about.php">About Us</a>
                         <a href="<?= $site ?>doctor-logout.php">Logout</a>
@@ -420,18 +420,18 @@ $stats = $stats_result->fetch_assoc();
                     <div class="profile-card shadow">
                         <div class="d-flex justify-content-between align-items-center mb-4">
                             <h4 class="mb-0">Appointments (<?= $appointments_result->num_rows ?>)</h4>
-                            <a href="add-appointment.php" class="btn btn-primary btn-sm">
+                            <!-- <a href="add-appointment.php" class="btn btn-primary btn-sm">
                                 <i class="fa fa-plus"></i> Add New Appointment
-                            </a>
+                            </a> -->
                         </div>
                         
                         <?php if ($appointments_result->num_rows == 0): ?>
                             <div class="text-center py-5">
                                 <h5>No appointments found</h5>
                                 <p class="text-muted">You don't have any appointments yet.</p>
-                                <a href="add-appointment.php" class="btn btn-primary">
+                                <!-- <a href="add-appointment.php" class="btn btn-primary">
                                     <i class="fa fa-plus"></i> Create Your First Appointment
-                                </a>
+                                </a> -->
                             </div>
                         <?php else: ?>
                             <div class="table-responsive">

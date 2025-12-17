@@ -971,4 +971,293 @@ function send_doctor_verification_email($doctor_email, $doctor_name, $verified_b
         return false;
     }
 }
+
+
+
+// Send appointment confirmation email to user
+function send_appointment_confirmation_email($user_email, $user_name, $appointment_details, $doctor_details) {
+    $mail = new PHPMailer(true);
+    
+    try {
+        // Server settings (same as your existing setup)
+        $mail->isSMTP();
+        $mail->Host = 'smtp.gmail.com';
+        $mail->SMTPAuth = true;
+        $mail->Username = 'nik007guptadu@gmail.com'; // Your email
+        $mail->Password = 'ltmnhrwacmwmcrni'; // Your app password
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port = 587;
+        
+        // Recipients
+        $mail->setFrom('no-reply@rejuvenatehealth.com', 'REJUVENATE Digital Health');
+        $mail->addAddress($user_email, $user_name);
+        $mail->addReplyTo('support@rejuvenatehealth.com', 'Support Team');
+        
+        // Content
+        $mail->isHTML(true);
+        $mail->Subject = 'Appointment Confirmed - ' . $appointment_details['appointment_id'];
+        
+        $site_url = $GLOBALS['site']; // Make sure $site is available globally
+        $login_url = $site_url . 'login/';
+        
+        $mail->Body = "
+        <!DOCTYPE html>
+        <html lang='en'>
+        <head>
+            <meta charset='UTF-8'>
+            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+            <title>Appointment Confirmation</title>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background: #2c5aa0; color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                .content { background: #f9f9f9; padding: 40px; border-radius: 0 0 10px 10px; }
+                .confirmation-badge { background: #28a745; color: white; padding: 10px 20px; border-radius: 20px; display: inline-block; margin: 10px 0; font-weight: bold; }
+                .appointment-card { background: white; padding: 25px; border-radius: 10px; margin: 25px 0; box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-left: 4px solid #2c5aa0; }
+                .details-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 20px 0; }
+                .detail-item { padding: 10px; background: #f8f9fa; border-radius: 5px; }
+                .detail-label { font-weight: bold; color: #2c5aa0; display: block; }
+                .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 12px; }
+                .instructions { background: #e8f4fd; padding: 20px; border-radius: 8px; margin: 20px 0; }
+            </style>
+        </head>
+        <body>
+            <div class='container'>
+                <div class='header'>
+                    <h1>REJUVENATE Digital Health</h1>
+                    <p>Appointment Confirmation</p>
+                </div>
+                <div class='content'>
+                    <h2>Hello, $user_name!</h2>
+                    
+                    <div class='confirmation-badge'>
+                        <i class='fas fa-check-circle'></i> APPOINTMENT CONFIRMED
+                    </div>
+                    
+                    <p>Your appointment has been <strong>successfully confirmed</strong> by our admin team.</p>
+                    
+                    <div class='appointment-card'>
+                        <h3>Appointment Details</h3>
+                        <div class='details-grid'>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Appointment ID:</span>
+                                {$appointment_details['appointment_id']}
+                            </div>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Date:</span>
+                                {$appointment_details['date']}
+                            </div>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Time:</span>
+                                {$appointment_details['time']}
+                            </div>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Doctor:</span>
+                                Dr. {$doctor_details['name']}
+                            </div>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Specialization:</span>
+                                {$doctor_details['specialization']}
+                            </div>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Consultation Fee:</span>
+                                ₹{$appointment_details['fee']}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class='instructions'>
+                        <h4>Important Instructions:</h4>
+                        <ol>
+                            <li>Please arrive 10 minutes before your scheduled appointment</li>
+                            <li>Carry your previous medical reports (if any)</li>
+                            <li>For online consultations, ensure stable internet connection</li>
+                            <li>Have your payment ready as per the consultation fee</li>
+                            <li>In case of cancellation, please notify 24 hours in advance</li>
+                        </ol>
+                    </div>
+                    
+                    <p>You can view and manage your appointments by logging into your account:</p>
+                    <div style='text-align: center; margin: 25px 0;'>
+                        <a href='$login_url' style='background: #2c5aa0; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block;'>
+                            View My Appointments
+                        </a>
+                    </div>
+                    
+                    <p>If you need to reschedule or cancel your appointment, please do so at least 24 hours in advance.</p>
+                    
+                    <p>Best regards,<br>
+                    <strong>The REJUVENATE Digital Health Team</strong></p>
+                </div>
+                <div class='footer'>
+                    <p>This is an automated confirmation email. Please do not reply to this email.</p>
+                    <p>For support, contact: support@rejuvenatehealth.com</p>
+                    <p>&copy; " . date('Y') . " REJUVENATE Digital Health. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        ";
+        
+        $mail->send();
+        return true;
+        
+    } catch (Exception $e) {
+        error_log("Appointment confirmation email failed for $user_email: " . $mail->ErrorInfo);
+        return false;
+    }
+}
+
+// Send appointment assignment email to doctor
+function send_appointment_assignment_email($doctor_email, $doctor_name, $appointment_details, $patient_details) {
+    $mail = new PHPMailer(true);
+    
+    try {
+        // Server settings
+        $mail->isSMTP();
+        $mail->Host = 'smtp.gmail.com';
+        $mail->SMTPAuth = true;
+        $mail->Username = 'nik007guptadu@gmail.com';
+        $mail->Password = 'ltmnhrwacmwmcrni';
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port = 587;
+        
+        // Recipients
+        $mail->setFrom('no-reply@rejuvenatehealth.com', 'REJUVENATE Digital Health');
+        $mail->addAddress($doctor_email, 'Dr. ' . $doctor_name);
+        $mail->addReplyTo('support@rejuvenatehealth.com', 'Support Team');
+        
+        // Content
+        $mail->isHTML(true);
+        $mail->Subject = 'New Appointment Assigned - ' . $appointment_details['appointment_id'];
+        
+        $site_url = $GLOBALS['site'];
+        $login_url = $site_url . 'doctor-login/';
+        
+        $mail->Body = "
+        <!DOCTYPE html>
+        <html lang='en'>
+        <head>
+            <meta charset='UTF-8'>
+            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+            <title>New Appointment</title>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background: #2c5aa0; color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                .content { background: #f9f9f9; padding: 40px; border-radius: 0 0 10px 10px; }
+                .new-badge { background: #17a2b8; color: white; padding: 10px 20px; border-radius: 20px; display: inline-block; margin: 10px 0; font-weight: bold; }
+                .appointment-card { background: white; padding: 25px; border-radius: 10px; margin: 25px 0; box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-left: 4px solid #2c5aa0; }
+                .details-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 20px 0; }
+                .detail-item { padding: 10px; background: #f8f9fa; border-radius: 5px; }
+                .detail-label { font-weight: bold; color: #2c5aa0; display: block; }
+                .patient-info { background: #e8f4fd; padding: 20px; border-radius: 8px; margin: 20px 0; }
+                .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 12px; }
+            </style>
+        </head>
+        <body>
+            <div class='container'>
+                <div class='header'>
+                    <h1>REJUVENATE Digital Health</h1>
+                    <p>New Appointment Notification</p>
+                </div>
+                <div class='content'>
+                    <h2>Hello, Dr. $doctor_name!</h2>
+                    
+                    <div class='new-badge'>
+                        <i class='fas fa-calendar-plus'></i> NEW APPOINTMENT ASSIGNED
+                    </div>
+                    
+                    <p>A new appointment has been assigned to you by our admin team.</p>
+                    
+                    <div class='appointment-card'>
+                        <h3>Appointment Details</h3>
+                        <div class='details-grid'>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Appointment ID:</span>
+                                {$appointment_details['appointment_id']}
+                            </div>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Date:</span>
+                                {$appointment_details['date']}
+                            </div>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Time:</span>
+                                {$appointment_details['time']}
+                            </div>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Type:</span>
+                                {$appointment_details['type']}
+                            </div>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Purpose:</span>
+                                {$appointment_details['purpose']}
+                            </div>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Consultation Fee:</span>
+                                ₹{$appointment_details['fee']}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class='patient-info'>
+                        <h4>Patient Information:</h4>
+                        <div class='details-grid'>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Name:</span>
+                                {$patient_details['name']}
+                            </div>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Age/Gender:</span>
+                                {$patient_details['age']} years / {$patient_details['gender']}
+                            </div>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Contact:</span>
+                                {$patient_details['phone']}
+                            </div>
+                            <div class='detail-item'>
+                                <span class='detail-label'>Email:</span>
+                                {$patient_details['email']}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <p>Please review this appointment in your dashboard:</p>
+                    <div style='text-align: center; margin: 25px 0;'>
+                        <a href='$login_url' style='background: #2c5aa0; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block;'>
+                            View Appointment Details
+                        </a>
+                    </div>
+                    
+                    <div style='background: #fff3cd; padding: 15px; border-radius: 5px; margin: 25px 0;'>
+                        <h4>Action Required:</h4>
+                        <ol>
+                            <li>Review the appointment details</li>
+                            <li>Confirm your availability</li>
+                            <li>Prepare consultation notes if needed</li>
+                            <li>Contact patient if any clarification required</li>
+                        </ol>
+                    </div>
+                    
+                    <p>Best regards,<br>
+                    <strong>The REJUVENATE Digital Health Admin Team</strong></p>
+                </div>
+                <div class='footer'>
+                    <p>This is an automated notification. Please do not reply to this email.</p>
+                    <p>For support, contact: support@rejuvenatehealth.com</p>
+                    <p>&copy; " . date('Y') . " REJUVENATE Digital Health. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        ";
+        
+        $mail->send();
+        return true;
+        
+    } catch (Exception $e) {
+        error_log("Doctor appointment assignment email failed for $doctor_email: " . $mail->ErrorInfo);
+        return false;
+    }
+}
 ?>

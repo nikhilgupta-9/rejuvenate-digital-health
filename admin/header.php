@@ -54,6 +54,9 @@ if (!isset($_SESSION['admin_logged_in'])) {
         <li><a href="doctors-list.php"><i class="fa-solid fa-user-doctor" style="color:#44a6ad;"></i>
                 <span>Doctor's</span></a></li>
 
+         <li><a href="all-appointment.php"><i class="fa-solid fa-calendar-check" style="color:#44a6ad;"></i>
+                <span>Appointments</span></a></li>
+
         <!-- <li>
             <a class="has-arrow" href="#"><i class="fas fa-fire" style="color: #ff6b6b;"></i><span>Special Offers</span></a>
             <ul>

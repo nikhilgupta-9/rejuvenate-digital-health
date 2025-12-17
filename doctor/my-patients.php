@@ -250,8 +250,7 @@ $stats = $stats_result->fetch_assoc();
       background: white;
       padding: 15px;
       border-radius: 8px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      margin-bottom: 15px;
+box-shadow: rgba(50, 50, 93, 0.25) 0px 2px 5px -1px, rgba(0, 0, 0, 0.3) 0px 1px 3px -1px;      margin-bottom: 15px;
     }
     .badge-status {
       padding: 5px 10px;

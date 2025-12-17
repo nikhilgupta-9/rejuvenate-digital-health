@@ -1,6 +1,6 @@
 <?php
 include_once(__DIR__ . "/../config/connect.php");
-session_start();
+// session_start();
 
 if (!isset($_SESSION['doctor_logged_in'])) {
     die("Unauthorized access.");

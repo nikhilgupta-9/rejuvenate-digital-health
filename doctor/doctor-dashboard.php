@@ -224,7 +224,7 @@ $earnings = $earnings_result->fetch_assoc();
         .stat-number {
             font-size: 24px;
             font-weight: bold;
-            color: #f5f7f7;;
+            color: #333535;
         }
         .stat-label {
             font-size: 12px;
@@ -322,7 +322,7 @@ $earnings = $earnings_result->fetch_assoc();
                             <div class="col-md-4 text-end">
                                 <div class="stat-card" style="background: rgba(255,255,255,0.2);">
                                     <div class="stat-number"><?= $stats['today_appointments'] ?? 0 ?></div>
-                                    <div class="stat-label">Today's Appointments</div>
+                                    <div class="stat-label text-light">Today's Appointments</div>
                                 </div>
                             </div>
                         </div>
@@ -391,9 +391,9 @@ $earnings = $earnings_result->fetch_assoc();
                                 <?php if ($today_result->num_rows == 0): ?>
                                     <div class="text-center py-4">
                                         <p class="text-muted">No appointments scheduled for today.</p>
-                                        <a href="add-appointment.php" class="btn btn-sm btn-primary">
+                                        <!-- <a href="add-appointment.php" class="btn btn-sm btn-primary">
                                             <i class="fa fa-plus"></i> Add Appointment
-                                        </a>
+                                        </a> -->
                                     </div>
                                 <?php else: ?>
                                     <div class="table-responsive">
@@ -584,40 +584,7 @@ $earnings = $earnings_result->fetch_assoc();
                         </div>
                     </div>
                     
-                    <!-- Quick Actions -->
-                    <div class="row mt-4">
-                        <div class="col-12">
-                            <div class="profile-card">
-                                <h5 class="mb-3">Quick Actions</h5>
-                                <div class="row">
-                                    <div class="col-md-3 col-6 mb-3">
-                                        <a href="add-appointment.php" class="btn btn-outline-primary w-100">
-                                            <i class="fa fa-calendar-plus fa-2x mb-2"></i><br>
-                                            Add Appointment
-                                        </a>
-                                    </div>
-                                    <div class="col-md-3 col-6 mb-3">
-                                        <a href="my-patients.php" class="btn btn-outline-success w-100">
-                                            <i class="fa fa-users fa-2x mb-2"></i><br>
-                                            View Patients
-                                        </a>
-                                    </div>
-                                    <div class="col-md-3 col-6 mb-3">
-                                        <a href="add-prescription.php" class="btn btn-outline-info w-100">
-                                            <i class="fa fa-file-prescription fa-2x mb-2"></i><br>
-                                            Add Prescription
-                                        </a>
-                                    </div>
-                                    <div class="col-md-3 col-6 mb-3">
-                                        <a href="my-contact.php" class="btn btn-outline-warning w-100">
-                                            <i class="fa fa-user-edit fa-2x mb-2"></i><br>
-                                            Edit Profile
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                   
                 </div>
             </div>
         </div>
