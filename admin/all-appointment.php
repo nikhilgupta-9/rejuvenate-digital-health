@@ -16,7 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $doctor_id = intval($_POST['doctor_id']);
 
         // Update appointment status
-        $stmt = $conn->prepare("UPDATE appointments SET status = 'confirmed' WHERE id = ?");
+        $stmt = $conn->prepare("UPDATE appointments SET status = 'approved' WHERE id = ?");
         $stmt->bind_param("i", $appointment_id);
 
         if ($stmt->execute()) {
@@ -186,7 +186,7 @@ $doctors_result = $conn->query($doctors_sql);
 $count_sql = "
     SELECT 
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed,
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
         SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
         SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
@@ -399,7 +399,7 @@ $counts = $count_result->fetch_assoc();
             border: 1px solid #ffeaa7;
         }
 
-        .status-confirmed {
+        .status-approved {
             background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
             color: #155724;
             border: 1px solid #c3e6cb;
@@ -484,41 +484,42 @@ $counts = $count_result->fetch_assoc();
             font-weight: 600;
             border-bottom: 2px solid #2c5aa0;
         }
+
         /* Modal Improvements */
-.modal-header .btn-close-white {
-    filter: invert(1);
-}
+        .modal-header .btn-close-white {
+            filter: invert(1);
+        }
 
-.modal-backdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background-color: #000;
-    opacity: 0.5;
-}
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #000;
+            opacity: 0.5;
+        }
 
-/* Doctor selection styling */
-.form-select option {
-    padding: 8px;
-}
+        /* Doctor selection styling */
+        .form-select option {
+            padding: 8px;
+        }
 
-/* Alert styling inside modals */
-.modal-body .alert {
-    margin-bottom: 20px;
-}
+        /* Alert styling inside modals */
+        .modal-body .alert {
+            margin-bottom: 20px;
+        }
 
-/* Form elements in modals */
-.modal-body .form-check {
-    margin-top: 15px;
-    margin-bottom: 15px;
-}
+        /* Form elements in modals */
+        .modal-body .form-check {
+            margin-top: 15px;
+            margin-bottom: 15px;
+        }
 
-.modal-body .form-text {
-    font-size: 0.85rem;
-    color: #6c757d;
-}
+        .modal-body .form-text {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
     </style>
 </head>
 
@@ -546,8 +547,8 @@ $counts = $count_result->fetch_assoc();
                                     </div>
                                     <div>
                                         <a href="book-appointment.php" class="btn btn-primary">
-                                                    <i class="fas fa-plus me-2"></i> Create New Appointment
-                                                </a>
+                                            <i class="fas fa-plus me-2"></i> Create New Appointment
+                                        </a>
                                     </div>
                                 </div>
                             </div>
@@ -578,7 +579,7 @@ $counts = $count_result->fetch_assoc();
                                         </div>
                                         <div class="col-md-2 col-6">
                                             <div class="stats-card confirmed">
-                                                <div class="stats-number"><?= $counts['confirmed'] ?? 0 ?></div>
+                                                <div class="stats-number"><?= $counts['approved'] ?? 0 ?></div>
                                                 <div>Confirmed</div>
                                             </div>
                                         </div>
@@ -625,7 +626,7 @@ $counts = $count_result->fetch_assoc();
                                                 <select class="form-select" name="status" onchange="this.form.submit()">
                                                     <option value="all" <?= $status_filter === 'all' ? 'selected' : '' ?>>All Status</option>
                                                     <option value="pending" <?= $status_filter === 'pending' ? 'selected' : '' ?>>Pending</option>
-                                                    <option value="confirmed" <?= $status_filter === 'confirmed' ? 'selected' : '' ?>>Confirmed</option>
+                                                    <option value="approved" <?= $status_filter === 'approved' ? 'selected' : '' ?>>Confirmed</option>
                                                     <option value="completed" <?= $status_filter === 'completed' ? 'selected' : '' ?>>Completed</option>
                                                     <option value="cancelled" <?= $status_filter === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
                                                     <option value="rejected" <?= $status_filter === 'rejected' ? 'selected' : '' ?>>Rejected</option>
@@ -654,7 +655,9 @@ $counts = $count_result->fetch_assoc();
                                                 <tbody>
                                                     <?php while ($row = $result->fetch_assoc()):
                                                         $status_class = strtolower($row['status']);
-                                                        $patient_age = date_diff(date_create($row['dob']), date_create('today'))->y;
+                                                        $patient_age = !empty($row['dob'])
+                                                            ? date_diff(date_create($row['dob']), date_create('today'))->y
+                                                            : 'N/A';
                                                     ?>
                                                         <tr>
                                                             <td>
@@ -666,7 +669,7 @@ $counts = $count_result->fetch_assoc();
                                                                         <i class="fas fa-user-circle fa-lg text-primary"></i>
                                                                     </div>
                                                                     <div>
-                                                                        <strong><?= htmlspecialchars($row['user_name']) ?></strong>
+                                                                        <strong><?= htmlspecialchars($row['user_name'] ?? $row['patient_name']) ?></strong>
                                                                         <div class="text-muted small">
                                                                             <?= $patient_age ?>y / <?= $row['gender'] ?>
                                                                         </div>
@@ -692,7 +695,10 @@ $counts = $count_result->fetch_assoc();
                                                                 </div>
                                                             </td>
                                                             <td>
-                                                                <span class="badge bg-success">₹<?= number_format($row['consultation_fee']) ?></span>
+                                                                <span class="badge bg-success">₹<?= isset($row['consultation_fee']) 
+                                                                    ? number_format($row['consultation_fee']) 
+                                                                    : 'Direct Booking' ?>
+                                                                </span>
                                                             </td>
                                                             <td>
                                                                 <span class="status-badge status-<?= $status_class ?>">
@@ -779,7 +785,7 @@ $counts = $count_result->fetch_assoc();
                                                                                     <div class="card-body">
                                                                                         <div class="row mb-2">
                                                                                             <div class="col-4"><strong>Name:</strong></div>
-                                                                                            <div class="col-8"><?= htmlspecialchars($row['user_name']) ?></div>
+                                                                                            <div class="col-8"><?= htmlspecialchars($row['user_name'] ?? $row['patient_name']) ?></div>
                                                                                         </div>
                                                                                         <div class="row mb-2">
                                                                                             <div class="col-4"><strong>Age/Gender:</strong></div>
@@ -787,7 +793,7 @@ $counts = $count_result->fetch_assoc();
                                                                                         </div>
                                                                                         <div class="row mb-2">
                                                                                             <div class="col-4"><strong>Email:</strong></div>
-                                                                                            <div class="col-8"><?= htmlspecialchars($row['user_email']) ?></div>
+                                                                                            <div class="col-8"><?= htmlspecialchars($row['user_email'] ?? $row['patient_email']) ?></div>
                                                                                         </div>
                                                                                     </div>
                                                                                 </div>
@@ -809,7 +815,7 @@ $counts = $count_result->fetch_assoc();
                                                                                             </div>
                                                                                             <div class="row mb-2">
                                                                                                 <div class="col-4"><strong>Email:</strong></div>
-                                                                                                <div class="col-8"><?= htmlspecialchars($row['doctor_email']?? '') ?></div>
+                                                                                                <div class="col-8"><?= htmlspecialchars($row['doctor_email'] ?? '') ?></div>
                                                                                             </div>
                                                                                         <?php else: ?>
                                                                                             <div class="alert alert-warning mb-0">
@@ -837,10 +843,18 @@ $counts = $count_result->fetch_assoc();
                                                                                             <div class="col-4"><strong>Time:</strong></div>
                                                                                             <div class="col-8"><?= $row['formatted_time'] ?></div>
                                                                                         </div>
-                                                                                        <div class="row mb-2">
+                                                                                       <div class="row mb-2">
                                                                                             <div class="col-4"><strong>Fee:</strong></div>
-                                                                                            <div class="col-8">₹<?= number_format($row['consultation_fee']) ?></div>
+
+                                                                                            <?php if (!empty($row['consultation_fee'])) { ?>
+                                                                                                <div class="col-8">₹<?= number_format((float)$row['consultation_fee']) ?></div>
+                                                                                            <?php } else { ?>
+                                                                                                <div class="col-8">
+                                                                                                    <span class="badge bg-warning text-dark">Direct Booking</span>
+                                                                                                </div>
+                                                                                            <?php } ?>
                                                                                         </div>
+
                                                                                     </div>
                                                                                     <div class="col-md-6">
                                                                                         <div class="row mb-2">
@@ -898,7 +912,7 @@ $counts = $count_result->fetch_assoc();
                                                                             <div class="alert alert-info">
                                                                                 <i class="fas fa-info-circle me-2"></i>
                                                                                 <strong>Appointment Details:</strong><br>
-                                                                                <strong>Patient:</strong> <?= htmlspecialchars($row['user_name']) ?><br>
+                                                                                <strong>Patient:</strong> <?= htmlspecialchars($row['user_name'] ?? $row['patient_name']) ?><br>
                                                                                 <strong>Date:</strong> <?= $row['formatted_date'] ?><br>
                                                                                 <strong>Time:</strong> <?= $row['formatted_time'] ?>
                                                                             </div>
@@ -911,6 +925,7 @@ $counts = $count_result->fetch_assoc();
                                                                             </div>
                                                                             <input type="hidden" name="appointment_id" value="<?= $row['id'] ?>">
                                                                             <input type="hidden" name="doctor_id" value="<?= $row['doctor_id'] ?>">
+                                                                            <input type="hidden" name="status" value="approved">
                                                                         </div>
                                                                         <div class="modal-footer">
                                                                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -1204,31 +1219,31 @@ $counts = $count_result->fetch_assoc();
         }
 
         function toggleSelectAll(source) {
-    const checkboxes = document.querySelectorAll('.row-checkbox');
-    checkboxes.forEach(checkbox => {
-        checkbox.checked = source.checked;
-        if (source.checked) {
-            selectedRows.add(checkbox.value);
-        } else {
-            selectedRows.delete(checkbox.value);
+            const checkboxes = document.querySelectorAll('.row-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = source.checked;
+                if (source.checked) {
+                    selectedRows.add(checkbox.value);
+                } else {
+                    selectedRows.delete(checkbox.value);
+                }
+            });
+            updateSelectedCount();
         }
-    });
-    updateSelectedCount();
-}
 
-function updateSelected(checkbox) {
-    if (checkbox.checked) {
-        selectedRows.add(checkbox.value);
-    } else {
-        selectedRows.delete(checkbox.value);
-    }
-    updateSelectedCount();
-    
-    // Update select all checkbox
-    const allCheckboxes = document.querySelectorAll('.row-checkbox');
-    const allChecked = Array.from(allCheckboxes).every(cb => cb.checked);
-    document.getElementById('selectAll').checked = allChecked;
-}
+        function updateSelected(checkbox) {
+            if (checkbox.checked) {
+                selectedRows.add(checkbox.value);
+            } else {
+                selectedRows.delete(checkbox.value);
+            }
+            updateSelectedCount();
+
+            // Update select all checkbox
+            const allCheckboxes = document.querySelectorAll('.row-checkbox');
+            const allChecked = Array.from(allCheckboxes).every(cb => cb.checked);
+            document.getElementById('selectAll').checked = allChecked;
+        }
     </script>
     <script>
         // Auto-close alerts after 5 seconds

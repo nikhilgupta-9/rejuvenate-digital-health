@@ -527,6 +527,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </div>
                             <div class="white_card_body">
                                 <div class="booking-container">
+                                    <div class="d-none">
+
                                     <!-- Success/Error Messages -->
                                     <?php if (isset($success_message)): ?>
                                         <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -543,6 +545,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                                         </div>
                                     <?php endif; ?>
+                                    </div>
 
                                     <form method="POST" action="" id="appointmentForm">
                                         <!-- Quick Stats -->
