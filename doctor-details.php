@@ -64,8 +64,9 @@ if ($profile['is_verified'] == 1) {
       <div class="con-line ">
         <ul>
           <li><a href="<?= $site ?>">Home</a></li>
-          <li><a href="e-cardiology.php">E-Cardiology</a></li>
+          <!-- <li><a href="e-cardiology.php">E-Cardiology</a></li> -->
           <li><a href="#">Profile</a></li>
+          <li><a href="#"><?= $profile['name'] ?></a></li>
         </ul>
       </div>
       <!-- Header Section -->
