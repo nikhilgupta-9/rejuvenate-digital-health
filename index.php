@@ -4,6 +4,7 @@ include_once "util/function.php";
 
 $contact = contact_us();
 
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -357,63 +358,77 @@ $contact = contact_us();
                     <div class="col-lg-8">
                         <div class="appointment-items">
                             <h3>Book An Appointment</h3>
-                            <form action="#">
+
+                            <form id="appointmentForm">
                                 <div class="row">
+
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-clt">
                                             <p>Name</p>
-                                            <input type="text" placeholder="Your name">
+                                            <input type="text" name="name" placeholder="Your name" required>
                                         </div>
                                     </div>
+
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-clt">
                                             <p>Email</p>
-                                            <input type="text" placeholder="Your email">
+                                            <input type="email" name="email" placeholder="Your email" required>
                                         </div>
                                     </div>
+
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-clt">
                                             <p>Phone</p>
-                                            <input type="text" placeholder="Your phone">
+                                            <input type="text" name="phone" placeholder="Your phone" required>
                                         </div>
                                     </div>
+
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-clt">
                                             <p>Department</p>
-                                            <div class="form">
-                                                <select class="single-select w-100">
-                                                    <option>Your department</option>
-                                                     <?php
-                                                    foreach ($department as $dep){
-                                                    ?>
-                                                    <option value="<?= $dep['categories'] ?>"> <?= $dep['categories'] ?></option>
-                                                    <?php } ?>
-                                                </select>
-                                            </div>
+                                            <select class="single-select w-100" name="department" required>
+                                                <option value="">Your department</option>
+                                                <?php foreach ($department as $dep) { ?>
+                                                    <option value="<?= $dep['categories'] ?>">
+                                                        <?= $dep['categories'] ?>
+                                                    </option>
+                                                <?php } ?>
+                                            </select>
                                         </div>
                                     </div>
+
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-clt">
                                             <p>Date</p>
-                                            <input type="date" placeholder="Your date">
+                                            <input type="date" name="date" required>
                                         </div>
                                     </div>
+
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-clt">
                                             <p>Time</p>
-                                            <input type="time" placeholder="Your time">
+                                            <input type="time" name="time" required>
                                         </div>
                                     </div>
+
                                     <div class="col-xl-12">
                                         <div class="form-clt">
-                                            <button class="theme-btn" type="submit">
-                                                Make an Appointment
-                                            </button>
+                                        <button type="submit" class="theme-btn">
+                                            <span class="btn-text">Make an Appointment</span>
+                                            <span class="loader d-none"></span>
+                                        </button>
                                         </div>
                                     </div>
+
+                                    <div class="col-xl-12 mt-3">
+                                        <div id="formMessage"></div>
+                                    </div>
+
                                 </div>
                             </form>
+
                         </div>
+
                     </div>
                     <div class="col-lg-4">
                         <div class="appointment-image">
@@ -606,6 +621,46 @@ $contact = contact_us();
     </section>
 
     <?php include("footer.php") ?>
+    <script>
+document.getElementById("appointmentForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+
+    const form = this;
+    const formData = new FormData(form);
+    const messageBox = document.getElementById("formMessage");
+    const loader = document.querySelector(".loader");
+    const btnText = document.querySelector(".btn-text");
+
+    loader.classList.remove("d-none");
+    btnText.textContent = "Sending...";
+
+    fetch("util/appointment-handler.php", {
+        method: "POST",
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        loader.classList.add("d-none");
+        btnText.textContent = "Make an Appointment";
+
+        if (data.status === "success") {
+            messageBox.innerHTML =
+                `<div class="alert alert-success">${data.message}</div>`;
+            form.reset();
+        } else {
+            messageBox.innerHTML =
+                `<div class="alert alert-danger">${data.message}</div>`;
+        }
+    })
+    .catch(() => {
+        loader.classList.add("d-none");
+        btnText.textContent = "Make an Appointment";
+        messageBox.innerHTML =
+            `<div class="alert alert-danger">Something went wrong.</div>`;
+    });
+});
+</script>
+
 </body>
 
 </html>

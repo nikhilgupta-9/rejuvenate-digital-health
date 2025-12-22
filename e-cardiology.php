@@ -90,7 +90,7 @@ include_once "util/function.php";
 
                   <!-- Primary actions -->
                   <div class="d-flex flex-column flex-sm-row justify-content-center gap-3 mb-4">
-                    <a href="<?= $site ?>departments/" class="btn btn-primary px-4">
+                    <a href="<?= $site ?>" class="btn btn-primary px-4">
                       <i class="fas fa-arrow-left me-2"></i>Other Departments
                     </a>
                     <a href="<?= $site ?>contact/" class="btn btn-outline-dark px-4">
@@ -102,9 +102,9 @@ include_once "util/function.php";
                   <div class="quick-links">
                     <p class="small text-muted mb-2">Quick alternatives:</p>
                     <div class="d-flex justify-content-center gap-3">
-                      <a href="<?= $site ?>telemedicine/" class="small text-decoration-underline text-primary">Telemedicine</a>
-                      <a href="<?= $site ?>health-checkups/" class="small text-decoration-underline text-primary">Health Checkups</a>
-                      <a href="<?= $site ?>find-doctors/" class="small text-decoration-underline text-primary">Find Doctors</a>
+                      <a href="<?= $site ?>" class="small text-decoration-underline text-primary">Telemedicine</a>
+                      <a href="<?= $site ?>" class="small text-decoration-underline text-primary">Health Checkups</a>
+                      <a href="<?= $site ?>" class="small text-decoration-underline text-primary">Find Doctors</a>
                     </div>
                   </div>
                 </div>

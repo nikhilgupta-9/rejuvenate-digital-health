@@ -839,4 +839,141 @@ function send_verification_otp($email, $mobile, $otp_code) {
     
     return $results;
 }
+
+function send_appointment_email( $data) {
+     // 1️⃣ Insert appointment into DB
+    if (!insert_appointment( $data)) {
+        return false;
+    }
+    $mail = new PHPMailer(true);
+
+    try {
+        // SMTP Settings
+        $mail->isSMTP();
+        $mail->Host       = 'smtp.gmail.com';
+        $mail->SMTPAuth   = true;
+        $mail->Username   = 'nik007guptadu@gmail.com'; // your email
+        $mail->Password   = 'ltmnhrwacmwmcrni';        // app password
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port       = 587;
+
+        // Sender & Recipient
+        $mail->setFrom('no-reply@rejuvenatehealth.com', 'REJUVENATE Digital Health');
+        $mail->addAddress('support@rejuvenatehealth.com'); // Admin email
+        $mail->addReplyTo($data['email'], $data['name']);
+
+        // Email Content
+        $mail->isHTML(true);
+        $mail->Subject = 'New Appointment Booking Request';
+
+        $mail->Body = "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; background:#f4f6f8; }
+                .container { max-width:600px; margin:auto; background:#ffffff; padding:20px; }
+                h2 { background:#2c5aa0; color:#fff; padding:15px; text-align:center; }
+                table { width:100%; border-collapse:collapse; }
+                td { padding:10px; border-bottom:1px solid #ddd; }
+                .label { font-weight:bold; width:40%; }
+                .footer { text-align:center; font-size:12px; color:#777; margin-top:20px; }
+            </style>
+        </head>
+        <body>
+            <div class='container'>
+                <h2>New Appointment Booked</h2>
+                <table>
+                    <tr><td class='label'>Name</td><td>{$data['name']}</td></tr>
+                    <tr><td class='label'>Email</td><td>{$data['email']}</td></tr>
+                    <tr><td class='label'>Phone</td><td>{$data['phone']}</td></tr>
+                    <tr><td class='label'>Department</td><td>{$data['department']}</td></tr>
+                    <tr><td class='label'>Date</td><td>{$data['date']}</td></tr>
+                    <tr><td class='label'>Time</td><td>{$data['time']}</td></tr>
+                </table>
+                <div class='footer'>
+                    <p>&copy; " . date('Y') . " REJUVENATE Digital Health</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        ";
+
+        // Plain Text Version
+        $mail->AltBody =
+            "New Appointment Booking\n\n" .
+            "Name: {$data['name']}\n" .
+            "Email: {$data['email']}\n" .
+            "Phone: {$data['phone']}\n" .
+            "Department: {$data['department']}\n" .
+            "Date: {$data['date']}\n" .
+            "Time: {$data['time']}\n";
+
+        $mail->send();
+        return true;
+
+    } catch (Exception $e) {
+        error_log("Appointment Mail Error: " . $mail->ErrorInfo);
+        return false;
+    }
+}
+
+function insert_appointment($data) {
+    global $conn;
+
+    $sql = "INSERT INTO appointments (
+                patient_name,
+                patient_email,
+                patient_phone,
+                appointment_date,
+                appointment_time,
+                purpose,
+                appointment_type,
+                visit_person,
+                status,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'self', 'pending', NOW())";
+
+    $stmt = mysqli_prepare($conn, $sql);
+
+    if (!$stmt) {
+        error_log("Prepare failed: " . mysqli_error($conn));
+        return false;
+    }
+
+    // ✅ DEFINE VARIABLES FIRST
+    $name            = $data['name'];
+    $email           = $data['email'];
+    $phone           = $data['phone'];
+    $date            = $data['date'];
+    $time            = $data['time'];
+    $department      = $data['department'];
+    $appointmentType = 'online';
+
+    // ✅ THEN BIND
+    mysqli_stmt_bind_param(
+        $stmt,
+        "sssssss",
+        $name,
+        $email,
+        $phone,
+        $date,
+        $time,
+        $department,
+        $appointmentType
+    );
+
+    // ✅ EXECUTE
+    $result = mysqli_stmt_execute($stmt);
+
+    if (!$result) {
+        error_log("Execute failed: " . mysqli_stmt_error($stmt));
+    }
+
+    mysqli_stmt_close($stmt);
+
+    return $result;
+}
+
+
 ?>
