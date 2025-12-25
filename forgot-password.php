@@ -2,6 +2,13 @@
 include_once "config/connect.php";
 include_once "util/function.php";
 
+// Import PHPMailer classes
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+use PHPMailer\PHPMailer\SMTP;
+
+require 'vendor/autoload.php'; // Adjust path based on your PHPMailer installation
+
 $contact = contact_us();
 $logo = get_header_logo();
 $error_message = '';
@@ -61,41 +68,90 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $update_stmt->bind_param('ssi', $token_hash, $expiry, $doctor['id']);
                     
                     if ($update_stmt->execute()) {
-                        // Send reset email
+                        // Send reset email using PHPMailer
                         $reset_link = $site . "forgot-password/reset-password.php?token=" . $token . "&email=" . urlencode($email);
                         
-                        // Email subject and body
-                        $subject = "Password Reset Request - REJUVENATE Digital Health";
-                        $message = "
-                        <html>
-                        <head>
-                            <title>Password Reset</title>
-                        </head>
-                        <body>
-                            <h2>Hello Dr. " . htmlspecialchars($doctor['name']) . ",</h2>
-                            <p>We received a request to reset your password for your doctor account.</p>
-                            <p>Click the link below to reset your password:</p>
-                            <p><a href='" . $reset_link . "' style='background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>Reset Password</a></p>
-                            <p>Or copy this link: " . $reset_link . "</p>
-                            <p><strong>This link will expire in 1 hour.</strong></p>
-                            <p>If you didn't request this, please ignore this email. Your password will remain unchanged.</p>
-                            <hr>
-                            <p>REJUVENATE Digital Health Team</p>
-                            <p><small>This is an automated message. Please do not reply to this email.</small></p>
-                        </body>
-                        </html>
-                        ";
+                        $mail = new PHPMailer(true);
                         
-                        // Send email using PHP's mail() function (consider using PHPMailer for production)
-                        $headers = "MIME-Version: 1.0" . "\r\n";
-                        $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
-                        $headers .= "From: REJUVENATE Digital Health <noreply@rejuvenate.com>" . "\r\n";
-                        
-                        if (mail($email, $subject, $message, $headers)) {
+                        try {
+                            // SMTP Settings
+                            $mail->isSMTP();
+                            $mail->Host       = 'smtp.gmail.com';
+                            $mail->SMTPAuth   = true;
+                            $mail->Username   = 'nik007guptadu@gmail.com'; // your email
+                            $mail->Password   = 'ltmnhrwacmwmcrni';        // app password
+                            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                            $mail->Port       = 587;
+                            
+                            // Sender & Recipient
+                            $mail->setFrom('noreply@rejuvenatehealth.com', 'REJUVENATE Digital Health');
+                            $mail->addAddress($email, 'Dr. ' . $doctor['name']);
+                            $mail->addReplyTo('support@rejuvenatehealth.com', 'Support Team');
+                            
+                            // Email Content
+                            $mail->isHTML(true);
+                            $mail->Subject = 'Password Reset Request - REJUVENATE Digital Health';
+                            
+                            $mail->Body = "
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <style>
+                                    body { font-family: Arial, sans-serif; background:#f4f6f8; }
+                                    .container { max-width:600px; margin:auto; background:#ffffff; padding:20px; }
+                                    h2 { background:#2c5aa0; color:#fff; padding:15px; text-align:center; }
+                                    .content { padding:20px; }
+                                    .reset-btn { background:#2c5aa0; color:#fff; padding:12px 30px; text-decoration:none; border-radius:5px; display:inline-block; margin:15px 0; }
+                                    .footer { text-align:center; font-size:12px; color:#777; margin-top:20px; border-top:1px solid #eee; padding-top:20px; }
+                                    .warning { background:#fff3cd; border-left:4px solid #ffc107; padding:10px; margin:15px 0; }
+                                </style>
+                            </head>
+                            <body>
+                                <div class='container'>
+                                    <h2>Password Reset Request</h2>
+                                    <div class='content'>
+                                        <p>Hello Dr. " . htmlspecialchars($doctor['name']) . ",</p>
+                                        <p>We received a request to reset your password for your REJUVENATE Digital Health doctor account.</p>
+                                        <p>Click the button below to reset your password:</p>
+                                        <p style='text-align:center;'>
+                                            <a href='" . $reset_link . "' class='reset-btn'>Reset Password</a>
+                                        </p>
+                                        <p>Or copy and paste this link into your browser:</p>
+                                        <p style='word-break:break-all; color:#2c5aa0;'>" . $reset_link . "</p>
+                                        <div class='warning'>
+                                            <p><strong>⚠️ This link will expire in 1 hour.</strong></p>
+                                            <p>If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.</p>
+                                        </div>
+                                        <p>If you have any questions, please contact our support team.</p>
+                                    </div>
+                                    <div class='footer'>
+                                        <p><strong>REJUVENATE Digital Health</strong></p>
+                                        <p>This is an automated message. Please do not reply to this email.</p>
+                                        <p>&copy; " . date('Y') . " REJUVENATE Digital Health. All rights reserved.</p>
+                                    </div>
+                                </div>
+                            </body>
+                            </html>
+                            ";
+                            
+                            // Plain text version
+                            $mail->AltBody = "Password Reset Request\n\n" .
+                                "Hello Dr. " . $doctor['name'] . ",\n\n" .
+                                "We received a request to reset your password for your REJUVENATE Digital Health doctor account.\n\n" .
+                                "Reset your password by visiting this link:\n" . $reset_link . "\n\n" .
+                                "This link will expire in 1 hour.\n\n" .
+                                "If you didn't request this password reset, you can safely ignore this email.\n\n" .
+                                "REJUVENATE Digital Health Team\n" .
+                                "This is an automated message. Please do not reply to this email.";
+                            
+                            $mail->send();
                             $success_message = "Password reset link has been sent to your email. Please check your inbox (and spam folder).";
-                        } else {
+                            
+                        } catch (Exception $e) {
+                            error_log("Password Reset Mail Error: " . $mail->ErrorInfo);
                             $error_message = "Failed to send email. Please try again later.";
                         }
+                        
                     } else {
                         $error_message = "Failed to process request. Please try again.";
                     }
@@ -107,6 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     } catch (Exception $e) {
         $error_message = "An error occurred. Please try again later.";
+        error_log("Forgot Password Error: " . $e->getMessage());
     }
 }
 ?>
@@ -140,6 +197,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             text-align: center;
             margin-top: 20px;
         }
+        .login-logo img {
+            max-height: 60px;
+        }
+        .form-text {
+            font-size: 0.875em;
+            color: #6c757d;
+        }
     </style>
 </head>
 <body>
@@ -151,21 +215,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <div class="col-md-6">
                     <div class="forgot-password-card">
                         <div class="login-logo text-center mb-4">
-                            <img src="<?= $site . $logo ?>" class="img-fluid" style="max-height: 60px;">
+                            <img src="<?= $site . $logo ?>" class="img-fluid">
                         </div>
                         <h3 class="text-center mb-4">Forgot Your Password?</h3>
                         <p class="text-center text-muted mb-4">Enter your email address and we'll send you a link to reset your password.</p>
                         
                         <?php if (!empty($error_message)): ?>
                             <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                                <?= $error_message ?>
+                                <?= htmlspecialchars($error_message) ?>
                                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                             </div>
                         <?php endif; ?>
                         
                         <?php if (!empty($success_message)): ?>
                             <div class="alert alert-success alert-dismissible fade show" role="alert">
-                                <?= $success_message ?>
+                                <?= htmlspecialchars($success_message) ?>
                                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                             </div>
                         <?php endif; ?>

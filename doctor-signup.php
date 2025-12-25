@@ -50,6 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         
         // Handle document upload
         $documents = [];
+        
         if (isset($_FILES['documents']) && !empty($_FILES['documents']['name'][0])) {
             $upload_dir = 'uploads/doctors/documents/';
             if (!is_dir($upload_dir)) {
@@ -245,7 +246,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <div class="mb-3">
                       <label for="documents" class="form-label">Upload Your Documents</label>
                       <input type="file" class="form-control" id="documents" name="documents[]" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
-                      <small class="text-danger" style="font-size: 12px;">Upload your medical certificates, degree documents, etc. (PDF, JPG, PNG, DOC)</small>
+                      <small class="text-dark" style="font-size: 12px;">Upload your medical certificates, degree documents, etc. (PDF, JPG, PNG, DOC)</small>
                     </div>
                   </div>
                   <div class="col-md-6">
@@ -253,7 +254,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                       <label for="password" class="form-label">Password <span class="text-danger">*</span></label>
                       <input type="password" class="form-control" id="password" name="password" placeholder="Create a password" required>
                       <div id="passwordStrength" class="password-strength mt-2"></div>
-                      <small class="text-danger" style="font-size: 12px;">Password must be at least 8 characters long</small>
+                      <small class="text-dark" style="font-size: 12px;">Password must be at least 8 characters long</small>
                     </div>
                   </div>
                   <div class="col-md-6">
