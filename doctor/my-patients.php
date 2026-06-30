@@ -86,7 +86,6 @@ $total = count($patients);
   <title>Patient List — REJUVENATE Digital Health</title>
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
-  <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
   <style>
     /* ── Patient List Page ───────────────────────────────────── */
     .pl-header {
@@ -255,7 +254,7 @@ $total = count($patients);
 <body>
 <?php $sidebar_active = 'patients'; include(__DIR__ . "/inc/sidebar.php"); ?>
 
-<div class="doctor-content" style="min-height:100vh; padding:0 0 60px;">
+<main class="doctor-content">
   <div style="max-width:680px; margin:0 auto; padding:0 4px;">
 
     <!-- Blue header bar -->
@@ -450,7 +449,7 @@ $total = count($patients);
       </div>
     </div>
   </div>
-</div>
+</main>
 
 <?php include("../footer.php") ?>
 

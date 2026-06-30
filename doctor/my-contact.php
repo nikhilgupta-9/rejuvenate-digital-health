@@ -213,7 +213,6 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
     <title>REJUVENATE Digital Health - My Contact</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
-    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
     <style>
         label {
             display: inline-block;
@@ -324,8 +323,8 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
             <?php endif; ?>
             
           <?php $sidebar_active = 'contact'; include(__DIR__ . "/inc/sidebar.php"); ?>
-          <div class="doctor-content" style="min-height:100vh; padding:24px 20px 40px;">
-          <div style="max-width:1200px; margin:0 auto;">
+          <main class="doctor-content">
+          
 
                     <!-- Profile Form -->
                     <div class="profile-card shadow">
@@ -523,7 +522,7 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
                             </div>
                         </div>
                     </div>
-    </div></div><!-- /.doctor-content -->
+    </main>
     <?php include("../footer.php") ?>
     
     <script>

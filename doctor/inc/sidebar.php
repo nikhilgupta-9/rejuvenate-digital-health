@@ -1,212 +1,165 @@
 <?php
 /**
- * Doctor Panel Sidebar — DriveCase-style
- * Requires: $conn, $doctor_id, $jwt_doctor (from guard)
- * Current page detection via $sidebar_active variable set before include.
+ * Doctor Panel — Sidebar + Topbar
+ * Set $sidebar_active before including (e.g. 'dashboard', 'patients', 'appointments')
+ * Requires $doctor_id to be set (from JWT guard).
  */
+$sidebar_active = $sidebar_active ?? '';
 
-// Fetch full doctor profile for sidebar
-$_sb = $conn->prepare("
-    SELECT name, email, phone, profile_image, specialization,
-           hpr_id, abha_id, hpr_verified
-    FROM doctors WHERE id = ? LIMIT 1
-");
-$_sb->bind_param('i', $doctor_id);
-$_sb->execute();
-$_doc = $_sb->get_result()->fetch_assoc();
+// Fetch doctor info for the sidebar header
+$_d_sql  = "SELECT name, email, profile_image, specialization, hpr_id, hpr_verified, abha_id FROM doctors WHERE id = ?";
+$_d_stmt = $conn->prepare($_d_sql);
+$_d_stmt->bind_param('i', $doctor_id);
+$_d_stmt->execute();
+$_d = $_d_stmt->get_result()->fetch_assoc();
 
-$_name    = htmlspecialchars($_doc['name'] ?? 'Doctor');
-$_email   = htmlspecialchars($_doc['email'] ?? '');
-$_hpr     = htmlspecialchars($_doc['hpr_id'] ?? '');
-$_abha    = htmlspecialchars($_doc['abha_id'] ?? '');
-$_img     = !empty($_doc['profile_image']) ? BASE_URL . $_doc['profile_image'] : BASE_URL . 'assets/img/dummy.png';
-$_hprVerified = !empty($_doc['hpr_verified']);
-$_active  = $sidebar_active ?? 'dashboard';
+$_d_name    = htmlspecialchars($_d['name'] ?? ($doctor_name ?? 'Doctor'));
+$_d_email   = htmlspecialchars($_d['email'] ?? '');
+$_d_spec    = htmlspecialchars($_d['specialization'] ?? 'Doctor');
+$_d_hpr_id  = htmlspecialchars($_d['hpr_id'] ?? '');
+$_d_hpr_ver = (bool)($_d['hpr_verified'] ?? false);
+$_d_pic     = !empty($_d['profile_image']) ? BASE_URL . htmlspecialchars($_d['profile_image']) : null;
+$_d_initial = strtoupper(substr($_d_name, 0, 1));
 
-// Convert HPR ID to @hpr.abdm display format
-$_hprDisplay = $_hpr ? $_hpr . '@hpr.abdm' : '';
+$_page_titles = [
+  'dashboard'    => 'Dashboard',
+  'patients'     => 'My Patients',
+  'appointments' => 'Appointments',
+  'patient-form' => 'Patient Form Report',
+  'reports'      => 'Analysis Report',
+  'settings'     => 'Change Password',
+  'contact'      => 'Contact Us',
+  'about'        => 'About Us',
+];
+$_page_title = $_page_titles[$sidebar_active] ?? 'Doctor Panel';
 
 $_menu = [
-    'dashboard'   => ['icon' => 'fa-th-large',         'label' => 'Dashboard',              'url' => BASE_URL . 'doctor/doctor-dashboard.php'],
-    'patients'    => ['icon' => 'fa-heartbeat',        'label' => 'Patients',               'url' => BASE_URL . 'doctor/my-patients.php'],
-    'appointments'=> ['icon' => 'fa-clock-o',          'label' => 'Appointments',           'url' => BASE_URL . 'doctor/appointments.php'],
-    'patient-form'=> ['icon' => 'fa-file-text-o',      'label' => 'Patient Form Report',    'url' => BASE_URL . 'doctor/patient-form.php'],
-    'reports'     => ['icon' => 'fa-bar-chart',        'label' => 'Overall Analysis Report','url' => BASE_URL . 'doctor/appointments-calendar.php'],
-    'settings'    => ['icon' => 'fa-cog',              'label' => 'Settings',               'url' => BASE_URL . 'doctor/change-password.php'],
-    'contact'     => ['icon' => 'fa-phone',            'label' => 'Contact Us',             'url' => BASE_URL . 'doctor/my-contact.php'],
-    'about'       => ['icon' => 'fa-info-circle',      'label' => 'About Us',               'url' => BASE_URL . 'doctor/doctor-about.php'],
+  'dashboard'    => ['icon' => 'fa fa-th-large',    'label' => 'Dashboard',        'url' => BASE_URL . 'doctor/doctor-dashboard.php',     'section' => 'Main'],
+  'patients'     => ['icon' => 'fa fa-heartbeat',   'label' => 'My Patients',      'url' => BASE_URL . 'doctor/my-patients.php',           'section' => 'Clinical'],
+  'appointments' => ['icon' => 'fa fa-calendar',    'label' => 'Appointments',     'url' => BASE_URL . 'doctor/appointments.php',          'section' => 'Clinical'],
+  'patient-form' => ['icon' => 'fa fa-file-text-o', 'label' => 'Patient Form',     'url' => BASE_URL . 'doctor/patient-form.php',          'section' => 'Clinical'],
+  'reports'      => ['icon' => 'fa fa-bar-chart',   'label' => 'Analysis Report',  'url' => BASE_URL . 'doctor/appointments-calendar.php', 'section' => 'Clinical'],
+  'settings'     => ['icon' => 'fa fa-cog',         'label' => 'Change Password',  'url' => BASE_URL . 'doctor/change-password.php',       'section' => 'Account'],
+  'contact'      => ['icon' => 'fa fa-phone',       'label' => 'Contact Us',       'url' => BASE_URL . 'doctor/my-contact.php',            'section' => 'Account'],
+  'about'        => ['icon' => 'fa fa-info-circle', 'label' => 'About Us',         'url' => BASE_URL . 'doctor/doctor-about.php',          'section' => 'Account'],
 ];
 ?>
+<link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
 
-<!-- ===== SIDEBAR OVERLAY (mobile) ===== -->
-<div id="sidebarOverlay" onclick="closeSidebar()" style="
-    display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1039;"></div>
+<!-- Sidebar Overlay (mobile) -->
+<div class="sidebar-overlay" id="doctorSidebarOverlay"></div>
 
-<!-- ===== SIDEBAR ===== -->
-<nav id="doctorSidebar" style="
-    position:fixed; top:0; left:0; height:100vh; width:280px;
-    background:#fff; z-index:1040; box-shadow:2px 0 16px rgba(0,0,0,.13);
-    display:flex; flex-direction:column; transition:transform .28s ease;
-    transform: translateX(-100%);
-" aria-label="Doctor navigation">
+<aside class="doctor-sidebar" id="doctorSidebar">
 
-    <!-- Profile Header -->
-    <div style="
-        background: linear-gradient(135deg, #0c74c5 0%, #0a5fa8 100%);
-        padding: 28px 20px 22px; flex-shrink:0;
-    ">
-        <div style="display:flex; align-items:center; gap:14px;">
-            <div style="position:relative; flex-shrink:0;">
-                <img src="<?= $_img ?>" alt="<?= $_name ?>"
-                     style="width:60px; height:60px; border-radius:50%; object-fit:cover;
-                            border:2.5px solid rgba(255,255,255,.8);">
-                <?php if ($_hprVerified): ?>
-                <span title="HPR Verified" style="
-                    position:absolute; bottom:0; right:0;
-                    background:#22c55e; border-radius:50%; width:16px; height:16px;
-                    border:2px solid #fff; display:flex; align-items:center; justify-content:center;">
-                    <i class="fa fa-check" style="color:#fff; font-size:8px;"></i>
-                </span>
-                <?php endif; ?>
-            </div>
-            <div style="flex:1; min-width:0;">
-                <div style="color:#fff; font-weight:700; font-size:15px; line-height:1.2;
-                            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                    <?= $_name ?>
-                </div>
-                <div style="color:rgba(255,255,255,.82); font-size:11.5px; margin-top:3px;
-                            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                    <?= $_email ?>
-                </div>
-                <?php if ($_hprDisplay): ?>
-                <div style="color:rgba(255,255,255,.75); font-size:11px; margin-top:2px;
-                            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                    <i class="fa fa-id-card" style="font-size:10px;"></i>
-                    <?= $_hprDisplay ?>
-                </div>
-                <?php else: ?>
-                <a href="<?= BASE_URL ?>doctor/my-contact.php"
-                   style="color:rgba(255,255,255,.65); font-size:11px; margin-top:2px; display:block;">
-                    <i class="fa fa-plus-circle" style="font-size:10px;"></i> Add HPR ID
-                </a>
-                <?php endif; ?>
-                <?php if ($_abha): ?>
-                <div style="color:rgba(255,255,255,.75); font-size:11px; margin-top:2px;
-                            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                    <i class="fa fa-hospital-o" style="font-size:10px;"></i>
-                    <?= $_abha ?>
-                </div>
-                <?php endif; ?>
-            </div>
-        </div>
+  <!-- Brand / Profile Header -->
+  <div class="sidebar-brand">
+    <?php if ($_d_pic): ?>
+      <img src="<?= $_d_pic ?>" alt=""
+           style="width:38px;height:38px;border-radius:8px;object-fit:cover;margin-bottom:8px;border:2px solid rgba(255,255,255,.3);">
+    <?php else: ?>
+      <div class="sidebar-logo"><?= $_d_initial ?></div>
+    <?php endif; ?>
+    <div class="s-name">Dr. <?= $_d_name ?></div>
+    <div class="s-sub"><?= $_d_spec ?></div>
+    <?php if ($_d_hpr_id): ?>
+      <div style="margin-top:5px;">
+        <span style="font-size:.65rem;color:rgba(255,255,255,.5);">HPR</span>
+        <span style="font-size:.7rem;color:rgba(255,255,255,.85);margin-left:4px;"><?= $_d_hpr_id ?>@hpr.abdm</span>
+        <?php if ($_d_hpr_ver): ?>
+          <span style="background:#02c9b8;border-radius:10px;padding:1px 6px;font-size:.6rem;font-weight:700;color:#fff;margin-left:3px;">
+            <i class="fa fa-check"></i> Verified
+          </span>
+        <?php endif; ?>
+      </div>
+    <?php else: ?>
+      <div style="margin-top:5px;">
+        <a href="<?= BASE_URL ?>doctor/my-contact.php"
+           style="font-size:.68rem;color:rgba(255,255,255,.55);text-decoration:underline;">+ Add HPR ID</a>
+      </div>
+    <?php endif; ?>
+  </div>
+
+  <!-- Nav -->
+  <nav class="sidebar-nav">
+    <?php
+    $prev_section = '';
+    foreach ($_menu as $key => $item):
+      if ($item['section'] !== $prev_section):
+        echo '<div class="nav-label">' . htmlspecialchars($item['section']) . '</div>';
+        $prev_section = $item['section'];
+      endif;
+      $is_active = ($sidebar_active === $key);
+    ?>
+    <a href="<?= $item['url'] ?>"<?= $is_active ? ' class="active"' : '' ?>>
+      <span class="nav-icon"><i class="<?= $item['icon'] ?>"></i></span>
+      <?= htmlspecialchars($item['label']) ?>
+    </a>
+    <?php endforeach; ?>
+
+    <div class="nav-label">Session</div>
+    <a href="<?= BASE_URL ?>doctor/doctor-logout.php">
+      <span class="nav-icon"><i class="fa fa-sign-out"></i></span>
+      Logout
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <i class="fa fa-user-circle" style="margin-right:5px;"></i><?= $_d_email ?>
+  </div>
+</aside>
+
+<!-- Top Bar -->
+<div class="doctor-topbar">
+  <div style="display:flex;align-items:center;">
+    <button class="sidebar-toggler" id="doctorSidebarToggle">
+      <i class="fa fa-bars"></i>
+    </button>
+    <div>
+      <div style="font-size:.95rem;font-weight:600;color:#1f2937;"><?= htmlspecialchars($_page_title) ?></div>
+      <div style="font-size:.72rem;color:#9ca3af;"><?= date('l, d M Y') ?></div>
     </div>
-
-    <!-- Menu Items -->
-    <div style="flex:1; overflow-y:auto; padding:8px 0;">
-        <?php foreach ($_menu as $key => $item): ?>
-        <a href="<?= $item['url'] ?>"
-           style="
-               display:flex; align-items:center; gap:14px;
-               padding:13px 22px; text-decoration:none;
-               color: <?= $_active === $key ? '#0c74c5' : '#444' ?>;
-               background: <?= $_active === $key ? '#e8f4fd' : 'transparent' ?>;
-               border-right: <?= $_active === $key ? '3px solid #0c74c5' : '3px solid transparent' ?>;
-               font-size:14px; font-weight: <?= $_active === $key ? '600' : '400' ?>;
-               transition: background .15s, color .15s;
-           "
-           onmouseover="if('<?= $_active ?>'!='<?= $key ?>'){this.style.background='#f5f8ff';this.style.color='#0c74c5';}"
-           onmouseout="if('<?= $_active ?>'!='<?= $key ?>'){this.style.background='transparent';this.style.color='#444';}">
-            <i class="fa <?= $item['icon'] ?>"
-               style="width:20px; text-align:center; font-size:16px; flex-shrink:0;"></i>
-            <?= $item['label'] ?>
-        </a>
-        <?php endforeach; ?>
-
-        <div style="border-top:1px solid #f0f0f0; margin:8px 0;"></div>
-
-        <!-- Logout -->
-        <a href="<?= BASE_URL ?>doctor/doctor-logout.php"
-           style="display:flex; align-items:center; gap:14px; padding:13px 22px;
-                  text-decoration:none; color:#e53e3e; font-size:14px;
-                  border-right:3px solid transparent; transition:background .15s;"
-           onmouseover="this.style.background='#fff5f5';"
-           onmouseout="this.style.background='transparent';">
-            <i class="fa fa-sign-out" style="width:20px; text-align:center; font-size:16px;"></i>
-            Logout
-        </a>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div style="text-align:right;display:none;" id="doctorTopbarName">
+      <span style="font-weight:600;font-size:.82rem;display:block;">Dr. <?= $_d_name ?></span>
+      <span style="font-size:.7rem;color:#9ca3af;"><?= $_d_spec ?></span>
     </div>
-
-    <!-- Footer -->
-    <div style="padding:12px 20px; border-top:1px solid #f0f0f0; flex-shrink:0;">
-        <div style="font-size:10.5px; color:#aaa; text-align:center; line-height:1.5;">
-            ABDM / ABHA Compliant Portal<br>
-            &copy; <?= date('Y') ?> Rejuvenate Digital Health
-        </div>
+    <div class="avatar-circle" style="width:34px;height:34px;font-size:.85rem;flex-shrink:0;overflow:hidden;">
+      <?php if ($_d_pic): ?>
+        <img src="<?= $_d_pic ?>" alt="" style="width:100%;height:100%;object-fit:cover;">
+      <?php else: ?>
+        <?= $_d_initial ?>
+      <?php endif; ?>
     </div>
-</nav>
-
-<!-- ===== TOP NAV BAR (mobile hamburger) ===== -->
-<div id="doctorTopBar" style="
-    position:sticky; top:0; z-index:1030;
-    background:#fff; border-bottom:1px solid #e5e7eb;
-    padding:10px 16px; display:flex; align-items:center; gap:12px;
-    box-shadow:0 1px 4px rgba(0,0,0,.08);
-">
-    <button onclick="openSidebar()" style="
-        background:none; border:none; cursor:pointer; padding:4px 6px;
-        border-radius:6px; color:#0c74c5; font-size:20px; line-height:1;
-    " aria-label="Open menu">☰</button>
-    <span style="font-weight:700; font-size:15px; color:#0c74c5; flex:1;">
-        Rejuvenate Digital Health
-    </span>
-    <img src="<?= $_img ?>" style="width:32px; height:32px; border-radius:50%; object-fit:cover; border:2px solid #0c74c5;">
+    <?php if ($_d_hpr_ver): ?>
+      <span class="hpr-badge"><i class="fa fa-check-circle" style="margin-right:4px;"></i>HPR</span>
+    <?php else: ?>
+      <span class="hpr-badge hpr-unverified"><i class="fa fa-exclamation-circle" style="margin-right:4px;"></i>HPR Pending</span>
+    <?php endif; ?>
+    <a href="<?= BASE_URL ?>doctor/doctor-logout.php" class="btn btn-sm btn-outline-danger" title="Logout">
+      <i class="fa fa-sign-out"></i>
+    </a>
+  </div>
 </div>
 
-<!-- ===== DESKTOP LAYOUT SPACER ===== -->
-<!-- On ≥992px the sidebar is always visible, content shifts right -->
-<style>
-    body { margin:0; padding:0; background:#f4f6fb; }
-
-    /* Desktop: sidebar always open */
-    @media (min-width: 992px) {
-        #doctorSidebar  { transform: translateX(0) !important; }
-        #sidebarOverlay { display:none !important; }
-        #doctorTopBar   { display:none !important; }
-        .doctor-content { margin-left:280px; }
-    }
-
-    /* Mobile: sidebar hidden by default */
-    @media (max-width: 991px) {
-        .doctor-content { margin-left:0; }
-    }
-
-    /* Scrollbar for sidebar */
-    #doctorSidebar > div:nth-child(2) {
-        scrollbar-width: thin;
-        scrollbar-color: #ddd transparent;
-    }
-    #doctorSidebar > div:nth-child(2)::-webkit-scrollbar { width:4px; }
-    #doctorSidebar > div:nth-child(2)::-webkit-scrollbar-thumb { background:#ddd; border-radius:2px; }
-</style>
-
 <script>
-function openSidebar() {
-    document.getElementById('doctorSidebar').style.transform = 'translateX(0)';
-    document.getElementById('sidebarOverlay').style.display = 'block';
-    document.body.style.overflow = 'hidden';
-}
-function closeSidebar() {
-    if (window.innerWidth < 992) {
-        document.getElementById('doctorSidebar').style.transform = 'translateX(-100%)';
-        document.getElementById('sidebarOverlay').style.display = 'none';
-        document.body.style.overflow = '';
-    }
-}
-// Close on resize to desktop
-window.addEventListener('resize', function() {
-    if (window.innerWidth >= 992) {
-        document.getElementById('sidebarOverlay').style.display = 'none';
-        document.body.style.overflow = '';
-    }
-});
+(function(){
+  document.addEventListener('DOMContentLoaded', function(){
+    var toggler = document.getElementById('doctorSidebarToggle');
+    var sidebar  = document.getElementById('doctorSidebar');
+    var overlay  = document.getElementById('doctorSidebarOverlay');
+    // Show doctor name on medium+ screens
+    var nameEl = document.getElementById('doctorTopbarName');
+    if (nameEl && window.innerWidth >= 768) nameEl.style.display = 'block';
+    if (!toggler) return;
+    toggler.addEventListener('click', function(){
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('open');
+    });
+    overlay.addEventListener('click', function(){
+      sidebar.classList.remove('open');
+      overlay.classList.remove('open');
+    });
+  });
+})();
 </script>

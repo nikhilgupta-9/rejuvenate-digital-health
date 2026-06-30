@@ -168,7 +168,6 @@ $stats = $stats_result->fetch_assoc();
     <title>REJUVENATE Digital Health - Appointments</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
-    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
     <style>
         .btn-upload {
             background-color: green;
@@ -311,8 +310,8 @@ $stats = $stats_result->fetch_assoc();
             <?php endif; ?>
             
           <?php $sidebar_active = 'appointments'; include(__DIR__ . "/inc/sidebar.php"); ?>
-          <div class="doctor-content" style="min-height:100vh; padding:24px 20px 40px;">
-          <div style="max-width:1200px; margin:0 auto;">
+          <main class="doctor-content">
+          
 
                     <!-- Statistics Cards -->
                     <div class="row mb-4">
@@ -550,7 +549,7 @@ $stats = $stats_result->fetch_assoc();
                             </div>
                         <?php endif; ?>
                     </div>
-    </div></div><!-- /.doctor-content -->
+    </main>
     <?php include("../footer.php") ?>
     
     <!-- Modal for Appointment Details -->

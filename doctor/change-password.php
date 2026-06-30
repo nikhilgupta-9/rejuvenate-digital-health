@@ -273,7 +273,6 @@ foreach ($create_tables_sql as $sql) {
     <title>REJUVENATE Digital Health - Change Password</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
-    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
     <style>
         .sidebar {
             background: #f8f9fa;
@@ -358,8 +357,8 @@ foreach ($create_tables_sql as $sql) {
     <?php include("../header.php") ?>
     
     <?php $sidebar_active = 'settings'; include(__DIR__ . "/inc/sidebar.php"); ?>
-    <div class="doctor-content" style="min-height:100vh; padding:24px 20px 40px;">
-    <div style="max-width:1200px; margin:0 auto;">
+    <main class="doctor-content">
+    
                     <!-- Password Change Form -->
                     <div class="profile-card shadow">
                         <h4 class="mb-4">Change Password</h4>
@@ -535,7 +534,7 @@ foreach ($create_tables_sql as $sql) {
                         </div>
                     </div>
                     <?php endif; ?>
-    </div></div><!-- /.doctor-content -->
+    </main>
 
     <?php include("../footer.php") ?>
 
