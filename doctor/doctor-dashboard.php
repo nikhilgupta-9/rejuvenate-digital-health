@@ -1,16 +1,12 @@
 <?php
 include_once(__DIR__ . "/../config/connect.php");
 include_once(__DIR__ . "/../util/function.php");
+require_once(__DIR__ . "/auth/guard.php");
 
-// Start session and check doctor login
-// session_start();
-if (!isset($_SESSION['doctor_logged_in']) || $_SESSION['doctor_logged_in'] !== true) {
-    header("Location: " . BASE_URL . "doctor-login.php");
-    exit();
-}
-
-$doctor_id = $_SESSION['doctor_id'];
-$doctor_name = $_SESSION['doctor_name'] ?? 'Doctor';
+// JWT guard — verifies token, auto-refreshes, redirects on failure
+$jwt_doctor  = doctor_jwt_guard();
+$doctor_id   = (int)$jwt_doctor['sub'];
+$doctor_name = $jwt_doctor['name'] ?? 'Doctor';
 
 // Get doctor's profile details
 $doctor_sql = "SELECT name, email, profile_image, phone, specialization, experience_years, rating FROM doctors WHERE id = ?";

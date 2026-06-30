@@ -20,6 +20,7 @@ $username = $_ENV['DB_USERNAME'];
 $password = $_ENV['DB_PASSWORD'];
 $dbName = $_ENV['DB_NAME'];
 define('BASE_URL', $_ENV['SITE']);
+define('JWT_SECRET', $_ENV['JWT_SECRET'] ?? '');
 
 // Make `$site` global
 global $site;

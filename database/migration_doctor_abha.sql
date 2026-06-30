@@ -1,0 +1,40 @@
+-- ============================================================
+-- Migration: Doctor ABHA/HPR fields + JWT refresh tokens
+-- Run once on: u950539402_reju_digi_beta
+-- Date: 2026-06-30
+-- ============================================================
+
+-- Step 1: Add HPR fields to doctors table
+ALTER TABLE `doctors`
+  ADD COLUMN `hpr_id`               VARCHAR(20)  DEFAULT NULL COMMENT 'HPR Health Professional ID (XX-XXXX-XXXX-XXXX)' AFTER `doctor_uid`,
+  ADD COLUMN `nmc_reg_number`       VARCHAR(50)  DEFAULT NULL COMMENT 'NMC or State Council registration number',
+  ADD COLUMN `council_name`         VARCHAR(100) DEFAULT NULL COMMENT 'State Medical Council name',
+  ADD COLUMN `year_of_registration` YEAR         DEFAULT NULL COMMENT 'Year of medical council registration',
+  ADD COLUMN `qualification_year`   YEAR         DEFAULT NULL COMMENT 'Year of primary degree (MBBS/BDS)',
+  ADD COLUMN `hpr_verified`         TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '1 = HPR verified via ABDM',
+  ADD COLUMN `hpr_verified_at`      DATETIME     DEFAULT NULL,
+  ADD COLUMN `hpr_txn_id`           VARCHAR(100) DEFAULT NULL COMMENT 'ABDM transaction ID for HPR verification';
+
+-- Step 2: JWT refresh tokens (all roles share this table)
+CREATE TABLE IF NOT EXISTS `jwt_refresh_tokens` (
+  `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `entity_type` VARCHAR(20)     NOT NULL COMMENT 'doctor | patient | admin',
+  `entity_id`   INT UNSIGNED    NOT NULL,
+  `token_hash`  VARCHAR(64)     NOT NULL COMMENT 'SHA-256 of the raw refresh token',
+  `issued_at`   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `expires_at`  DATETIME        NOT NULL,
+  `revoked`     TINYINT(1)      NOT NULL DEFAULT 0,
+  `revoked_at`  DATETIME        DEFAULT NULL,
+  `ip_address`  VARCHAR(45)     DEFAULT NULL,
+  `user_agent`  VARCHAR(255)    DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  INDEX `idx_entity`  (`entity_type`, `entity_id`),
+  INDEX `idx_token`   (`token_hash`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Step 3: Ensure doctors table has JWT secret constant support
+-- (JWT_SECRET is defined in connect.php via .env)
+
+-- Step 4: Optional — index on hpr_id for fast lookups
+ALTER TABLE `doctors`
+  ADD INDEX `idx_hpr_id` (`hpr_id`);
