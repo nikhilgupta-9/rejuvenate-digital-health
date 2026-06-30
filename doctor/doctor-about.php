@@ -131,7 +131,6 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/swiper-bundle.min.css">
-    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
     <style>
         label {
             display: inline-block;
@@ -282,8 +281,8 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
     <section class="contact-appointment-section section-padding fix">
         <div class="container">
           <?php $sidebar_active = 'about'; include(__DIR__ . "/inc/sidebar.php"); ?>
-          <div class="doctor-content" style="min-height:100vh; padding:24px 20px 40px;">
-          <div style="max-width:1200px; margin:0 auto;">
+          <main class="doctor-content">
+          
 
                     <!-- Doctor Profile Header -->
                     <div class="profile-card shadow mb-4">
@@ -559,7 +558,7 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
                             </div>
                         </div>
                     </div>
-    </div></div><!-- /.doctor-content -->
+    </main>
     <?php include("../footer.php") ?>
     
     <!-- Image Modal -->

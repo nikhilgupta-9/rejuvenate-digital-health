@@ -162,437 +162,293 @@ $earnings = $earnings_result->fetch_assoc();
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="author" content="modinatheme">
-    <meta name="description" content="">
-    <title>REJUVENATE Digital Health - Doctor Dashboard</title>
-    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
-    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        .profile-card {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            border: 1px solid #e5e7eb;
-            margin-bottom: 20px;
-            box-shadow: 0 1px 4px rgba(0,0,0,.05);
-        }
-        .stat-card {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            text-align: center;
-            height: 100%;
-        }
-        .stat-icon {
-            font-size: 24px;
-            margin-bottom: 10px;
-        }
-        .stat-number {
-            font-size: 24px;
-            font-weight: bold;
-            color: #333535;
-        }
-        .stat-label {
-            font-size: 12px;
-            color: #666;
-            text-transform: uppercase;
-        }
-        .menu-btn {
-            display: none;
-            background: #02c9b8;
-            color: white;
-            padding: 10px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-bottom: 15px;
-        }
-        .welcome-card {
-            background: linear-gradient(135deg, #02c9b8 0%, #0c74c5 100%);
-            color: white;
-            padding: 25px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-        .appointment-badge {
-            padding: 3px 8px;
-            border-radius: 10px;
-            font-size: 11px;
-            font-weight: 500;
-        }
-        .badge-pending { background: #fff3cd; color: #856404; }
-        .badge-confirmed { background: #d1ecf1; color: #0c5460; }
-        .badge-completed { background: #d4edda; color: #155724; }
-        .badge-cancelled { background: #f8d7da; color: #721c24; }
-        .patient-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            object-fit: cover;
-        }
-        .chart-container {
-            height: 300px;
-            position: relative;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard | REJUVENATE Doctor Portal</title>
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* ── Page-level overrides ── */
+    .appt-badge { padding:3px 9px; border-radius:10px; font-size:.72rem; font-weight:600; }
+    .appt-pending   { background:#fff3cd; color:#856404; }
+    .appt-confirmed { background:#d1ecf1; color:#0c5460; }
+    .appt-completed { background:#d4edda; color:#155724; }
+    .appt-cancelled { background:#f8d7da; color:#721c24; }
+    .pat-avatar {
+      width:36px; height:36px; border-radius:50%; object-fit:cover;
+      background:#e5e7eb; display:inline-flex; align-items:center; justify-content:center;
+      font-size:14px; color:#6b7280; flex-shrink:0;
+    }
+    .chart-wrap { height:280px; position:relative; }
+  </style>
 </head>
 <body>
+<?php $sidebar_active = 'dashboard'; include(__DIR__ . "/inc/sidebar.php"); ?>
+
+<main class="doctor-content">
+
+  <!-- ── Stats Row ── -->
+  <p class="section-title">Overview</p>
+  <div class="row g-3">
+    <div class="col-6 col-sm-4 col-xl-2">
+      <div class="stat-card card-primary">
+        <i class="fa fa-users bg-icon"></i>
+        <div class="num"><?= $stats['total_patients'] ?? 0 ?></div>
+        <div class="lbl">Patients</div>
+      </div>
+    </div>
+    <div class="col-6 col-sm-4 col-xl-2">
+      <div class="stat-card card-green">
+        <i class="fa fa-calendar bg-icon"></i>
+        <div class="num"><?= $stats['total_appointments'] ?? 0 ?></div>
+        <div class="lbl">Appointments</div>
+      </div>
+    </div>
+    <div class="col-6 col-sm-4 col-xl-2">
+      <div class="stat-card card-orange">
+        <i class="fa fa-clock-o bg-icon"></i>
+        <div class="num"><?= $stats['today_appointments'] ?? 0 ?></div>
+        <div class="lbl">Today</div>
+      </div>
+    </div>
+    <div class="col-6 col-sm-4 col-xl-2">
+      <div class="stat-card card-accent">
+        <i class="fa fa-check-circle bg-icon"></i>
+        <div class="num"><?= $stats['completed_appointments'] ?? 0 ?></div>
+        <div class="lbl">Completed</div>
+      </div>
+    </div>
+    <div class="col-6 col-sm-4 col-xl-2">
+      <div class="stat-card card-purple">
+        <i class="fa fa-hourglass-half bg-icon"></i>
+        <div class="num"><?= $stats['pending_appointments'] ?? 0 ?></div>
+        <div class="lbl">Pending</div>
+      </div>
+    </div>
+    <div class="col-6 col-sm-4 col-xl-2">
+      <div class="stat-card card-teal2">
+        <i class="fa fa-file-text-o bg-icon"></i>
+        <div class="num"><?= $stats['total_documents'] ?? 0 ?></div>
+        <div class="lbl">Documents</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Quick Actions ── -->
+  <p class="section-title">Quick Actions</p>
+  <div class="row g-3">
     <?php
-        $sidebar_active = 'dashboard';
-        include(__DIR__ . "/inc/sidebar.php");
+    $actions = [
+      [BASE_URL.'doctor/my-patients.php',    'bg-primary-theme text-white',  'fa fa-heartbeat',   'My Patients'],
+      [BASE_URL.'doctor/appointments.php',   'bg-accent-theme text-white',   'fa fa-calendar',    'Appointments'],
+      [BASE_URL.'doctor/appointments.php?date='.date('Y-m-d'), 'bg-orange text-white', 'fa fa-clock-o', "Today's"],
+      [BASE_URL.'doctor/patient-form.php',   'bg-green text-white',          'fa fa-file-text-o', 'Patient Form'],
+      [BASE_URL.'doctor/appointments-calendar.php', 'bg-purple text-white',  'fa fa-bar-chart',   'Reports'],
+      [BASE_URL.'doctor/change-password.php','bg-secondary text-white',      'fa fa-cog',         'Settings'],
+    ];
+    foreach ($actions as [$href,$cls,$icon,$title]):
     ?>
+    <div class="col-6 col-sm-4 col-md-3 col-xl-2">
+      <a href="<?= $href ?>" class="quick-action">
+        <div style="width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;"
+             class="<?= $cls ?>">
+          <i class="<?= $icon ?>" style="font-size:1.1rem;"></i>
+        </div>
+        <span><?= $title ?></span>
+      </a>
+    </div>
+    <?php endforeach; ?>
+  </div>
 
-    <div class="doctor-content" style="min-height:100vh; padding:24px 20px 40px;">
-        <div style="max-width:1200px; margin:0 auto;">
+  <!-- ── Chart + Today's Appointments ── -->
+  <div class="row g-3 mt-1">
+    <div class="col-lg-8">
 
-            <!-- Welcome Card -->
-                    <div class="welcome-card">
-                        <div class="row align-items-center">
-                            <div class="col-md-8">
-                                <h3>Welcome back, Dr. <?= htmlspecialchars($doctor_name) ?>! 👋</h3>
-                                <p class="mb-0">
-                                    <?= htmlspecialchars($doctor_specialization) ?> | 
-                                    <?= $doctor_experience ?>+ Years Experience | 
-                                    Rating: <?= number_format($doctor_rating, 1) ?>/5
-                                </p>
-                                <small>Last login: <?= date('d F Y, h:i A') ?></small>
-                            </div>
-                            <div class="col-md-4 text-end">
-                                <div class="stat-card" style="background: rgba(255,255,255,0.2);">
-                                    <div class="stat-number"><?= $stats['today_appointments'] ?? 0 ?></div>
-                                    <div class="stat-label text-light">Today's Appointments</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Statistics Cards -->
-                    <div class="row mb-4">
-                        <div class="col-md-3 col-6 mb-3">
-                            <div class="stat-card">
-                                <div class="stat-icon text-primary">
-                                    <i class="fa fa-users"></i>
-                                </div>
-                                <div class="stat-number"><?= $stats['total_patients'] ?? 0 ?></div>
-                                <div class="stat-label">Total Patients</div>
-                            </div>
-                        </div>
-                        <div class="col-md-3 col-6 mb-3">
-                            <div class="stat-card">
-                                <div class="stat-icon text-success">
-                                    <i class="fa fa-calendar-check"></i>
-                                </div>
-                                <div class="stat-number"><?= $stats['total_appointments'] ?? 0 ?></div>
-                                <div class="stat-label">Total Appointments</div>
-                            </div>
-                        </div>
-                        <div class="col-md-3 col-6 mb-3">
-                            <div class="stat-card">
-                                <div class="stat-icon text-warning">
-                                    <i class="fa fa-clock"></i>
-                                </div>
-                                <div class="stat-number"><?= $stats['pending_appointments'] ?? 0 ?></div>
-                                <div class="stat-label">Pending</div>
-                            </div>
-                        </div>
-                        <div class="col-md-3 col-6 mb-3">
-                            <div class="stat-card">
-                                <div class="stat-icon text-info">
-                                    <i class="fa fa-file-medical"></i>
-                                </div>
-                                <div class="stat-number"><?= $stats['total_documents'] ?? 0 ?></div>
-                                <div class="stat-label">Documents</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="row">
-                        <!-- Left Column -->
-                        <div class="col-lg-8">
-                            <!-- Appointments Chart -->
-                            <div class="profile-card">
-                                <h5 class="mb-3">Appointments Overview (Last 6 Months)</h5>
-                                <div class="chart-container">
-                                    <canvas id="appointmentsChart"></canvas>
-                                </div>
-                            </div>
-                            
-                            <!-- Today's Appointments -->
-                            <div class="profile-card">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h5 class="mb-0">Today's Appointments</h5>
-                                    <a href="appointments.php?date=<?= date('Y-m-d') ?>" class="btn btn-sm btn-outline-primary">
-                                        View All
-                                    </a>
-                                </div>
-                                
-                                <?php if ($today_result->num_rows == 0): ?>
-                                    <div class="text-center py-4">
-                                        <p class="text-muted">No appointments scheduled for today.</p>
-                                        <!-- <a href="add-appointment.php" class="btn btn-sm btn-primary">
-                                            <i class="fa fa-plus"></i> Add Appointment
-                                        </a> -->
-                                    </div>
-                                <?php else: ?>
-                                    <div class="table-responsive">
-                                        <table class="table table-sm">
-                                            <thead>
-                                                <tr>
-                                                    <th>Time</th>
-                                                    <th>Patient</th>
-                                                    <th>Contact</th>
-                                                    <th>Status</th>
-                                                    <th>Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php while ($appointment = $today_result->fetch_assoc()): ?>
-                                                <?php
-                                                $status_class = '';
-                                                switch ($appointment['status']) {
-                                                    case 'Pending': $status_class = 'badge-pending'; break;
-                                                    case 'Confirmed': $status_class = 'badge-confirmed'; break;
-                                                    case 'Completed': $status_class = 'badge-completed'; break;
-                                                    case 'Cancelled': $status_class = 'badge-cancelled'; break;
-                                                    default: $status_class = 'badge-pending';
-                                                }
-                                                ?>
-                                                <tr>
-                                                    <td>
-                                                        <strong><?= date('h:i A', strtotime($appointment['appointment_time'])) ?></strong>
-                                                    </td>
-                                                    <td>
-                                                        <div class="d-flex align-items-center">
-                                                            <?php if (!empty($appointment['patient_image'])): ?>
-                                                                <img src="<?= BASE_URL . $appointment['patient_image'] ?>" 
-                                                                     class="patient-avatar me-2"
-                                                                     onerror="this.src='<?= BASE_URL ?>assets/img/dummy.png'">
-                                                            <?php endif; ?>
-                                                            <span><?= htmlspecialchars($appointment['patient_name']) ?></span>
-                                                        </div>
-                                                    </td>
-                                                    <td>
-                                                        <?php if ($appointment['patient_phone']): ?>
-                                                            <a href="tel:<?= $appointment['patient_phone'] ?>" class="btn btn-sm btn-outline-primary">
-                                                                <i class="fa fa-phone"></i>
-                                                            </a>
-                                                        <?php endif; ?>
-                                                    </td>
-                                                    <td>
-                                                        <?php if($appointment['status'] ){ ?>
-                                                        <span class="appointment-badge <?= $status_class ?>">
-                                                            <?= $appointment['status'] ?>
-                                                        </span>
-                                                        <?php }else{ ?>
-                                                         <span class="appointment-badge <?= $status_class ?>">
-                                                            Pending
-                                                        </span>
-                                                        <?php } ?>
-                                                    </td>
-                                                    <td>
-                                                        <a href="<?=BASE_URL?>doctor/patient-details.php?id=<?= $appointment['id'] ?>" 
-                                                           class="btn btn-sm btn-info" title="View">
-                                                            <i class="fa fa-eye"></i>
-                                                        </a>
-                                                    </td>
-                                                </tr>
-                                                <?php endwhile; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                        
-                        <!-- Right Column -->
-                        <div class="col-lg-4">
-                            <!-- Quick Stats -->
-                            <div class="profile-card mb-4">
-                                <h5 class="mb-3">Quick Stats</h5>
-                                <div class="row">
-                                    <div class="col-6 mb-3">
-                                        <div class="text-center">
-                                            <div class="stat-number"><?= $stats['completed_appointments'] ?? 0 ?></div>
-                                            <div class="stat-label">Completed</div>
-                                        </div>
-                                    </div>
-                                    <div class="col-6 mb-3">
-                                        <div class="text-center">
-                                            <div class="stat-number"><?= $stats['confirmed_today'] ?? 0 ?></div>
-                                            <div class="stat-label">Confirmed Today</div>
-                                        </div>
-                                    </div>
-                                    <div class="col-6">
-                                        <div class="text-center">
-                                            <div class="stat-number">₹<?= number_format($earnings['total_earnings'] ?? 0, 0) ?></div>
-                                            <div class="stat-label">Total Earnings</div>
-                                        </div>
-                                    </div>
-                                    <div class="col-6">
-                                        <div class="text-center">
-                                            <div class="stat-number">₹<?= number_format($earnings['monthly_earnings'] ?? 0, 0) ?></div>
-                                            <div class="stat-label">This Month</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Recent Patients -->
-                            <div class="profile-card mb-4">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h5 class="mb-0">Recent Patients</h5>
-                                    <a href="my-patients.php" class="btn btn-sm btn-outline-primary">
-                                        View All
-                                    </a>
-                                </div>
-                                
-                                <?php if ($recent_result->num_rows == 0): ?>
-                                    <p class="text-muted text-center">No patients yet.</p>
-                                <?php else: ?>
-                                    <div class="list-group">
-                                        <?php while ($patient = $recent_result->fetch_assoc()): 
-                                            $age = $patient['dob'] ? date_diff(date_create($patient['dob']), date_create('today'))->y : 'N/A';
-                                        ?>
-                                        <a href="patient-details.php?id=<?= $patient['id'] ?>" 
-                                           class="list-group-item list-group-item-action d-flex align-items-center">
-                                            <?php if (!empty($patient['profile_pic'])): ?>
-                                                <img src="<?= BASE_URL . $patient['profile_pic'] ?>" 
-                                                     class="patient-avatar me-3"
-                                                     onerror="this.src='<?= BASE_URL ?>assets/img/dummy.png'">
-                                            <?php else: ?>
-                                                <div class="patient-avatar bg-light d-flex align-items-center justify-content-center me-3">
-                                                    <i class="fa fa-user text-muted"></i>
-                                                </div>
-                                            <?php endif; ?>
-                                            <div class="flex-grow-1">
-                                                <strong><?= htmlspecialchars($patient['name']) ?></strong>
-                                                <div class="small text-muted">
-                                                    <?= $patient['gender'] ?> | <?= $age ?> yrs
-                                                </div>
-                                                <div class="small text-muted">
-                                                    Visits: <?= $patient['total_visits'] ?>
-                                                </div>
-                                            </div>
-                                        </a>
-                                        <?php endwhile; ?>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                            
-                            <!-- Upcoming Appointments -->
-                            <div class="profile-card">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h5 class="mb-0">Upcoming Appointments</h5>
-                                    <a href="appointments.php" class="btn btn-sm btn-outline-primary">
-                                        View All
-                                    </a>
-                                </div>
-                                
-                                <?php if ($upcoming_result->num_rows == 0): ?>
-                                    <p class="text-muted text-center">No upcoming appointments.</p>
-                                <?php else: ?>
-                                    <div class="list-group">
-                                        <?php while ($appointment = $upcoming_result->fetch_assoc()): ?>
-                                        <div class="list-group-item">
-                                            <div class="d-flex justify-content-between">
-                                                <div>
-                                                    <strong><?= htmlspecialchars($appointment['patient_name']) ?></strong>
-                                                    <div class="small text-muted">
-                                                        <?= date('d M', strtotime($appointment['appointment_date'])) ?> 
-                                                        at <?= date('h:i A', strtotime($appointment['appointment_time'])) ?>
-                                                    </div>
-                                                </div>
-                                                <span class="appointment-badge <?= 
-                                                    $appointment['status'] == 'Pending' ? 'badge-pending' : 'badge-confirmed'
-                                                ?>">
-                                                    <?= $appointment['status'] ?>
-                                                </span>
-                                            </div>
-                                            <?php if ($appointment['patient_phone']): ?>
-                                            <div class="mt-2">
-                                                <a href="tel:<?= $appointment['patient_phone'] ?>" 
-                                                   class="btn btn-sm btn-outline-primary btn-sm">
-                                                    <i class="fa fa-phone"></i> Call
-                                                </a>
-                                                <a href="appointment-details.php?id=<?= $appointment['id'] ?>" 
-                                                   class="btn btn-sm btn-outline-info btn-sm">
-                                                    <i class="fa fa-eye"></i> View
-                                                </a>
-                                            </div>
-                                            <?php endif; ?>
-                                        </div>
-                                        <?php endwhile; ?>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    </div>
-                    
-                   
-        </div><!-- /.doctor-content inner -->
-    </div><!-- /.doctor-content -->
+      <!-- Chart -->
+      <div class="card border-0 shadow-sm rounded-3 mb-3">
+        <div class="card-header bg-white border-0 pt-3 pb-2">
+          <h6 class="fw-bold mb-0">
+            <i class="fa fa-bar-chart me-2" style="color:var(--primary)"></i>
+            Appointments — Last 6 Months
+          </h6>
+        </div>
+        <div class="card-body">
+          <div class="chart-wrap"><canvas id="appointmentsChart"></canvas></div>
+        </div>
+      </div>
 
-    <script>
-        // Initialize appointments chart
-        document.addEventListener('DOMContentLoaded', function() {
-            const ctx = document.getElementById('appointmentsChart').getContext('2d');
-            const appointmentsChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: <?= json_encode($monthly_labels) ?>,
-                    datasets: [{
-                        label: 'Total Appointments',
-                        data: <?= json_encode($monthly_totals) ?>,
-                        borderColor: '#02c9b8',
-                        backgroundColor: 'rgba(2, 201, 184, 0.1)',
-                        borderWidth: 2,
-                        fill: true
-                    }, {
-                        label: 'Completed',
-                        data: <?= json_encode($monthly_completed) ?>,
-                        borderColor: '#28a745',
-                        backgroundColor: 'rgba(40, 167, 69, 0.1)',
-                        borderWidth: 2,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                stepSize: 1
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            position: 'top',
-                        },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false
-                        }
-                    }
-                }
-            });
-        });
-        
-        // Auto-refresh dashboard every 60 seconds
-        setInterval(function() {
-            if (!document.hidden) {
-                // You can implement partial refresh here if needed
-                // For now, just reload the page
-                // window.location.reload();
-            }
-        }, 60000);
-    </script>
+      <!-- Today's Appointments -->
+      <div class="card border-0 shadow-sm rounded-3">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3 pb-2">
+          <h6 class="fw-bold mb-0">
+            <i class="fa fa-calendar-check-o me-2" style="color:var(--primary)"></i>
+            Today's Appointments
+          </h6>
+          <a href="appointments.php?date=<?= date('Y-m-d') ?>" class="btn btn-sm btn-outline-primary">View All</a>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th style="font-size:.73rem;">Time</th>
+                  <th style="font-size:.73rem;">Patient</th>
+                  <th style="font-size:.73rem;">Status</th>
+                  <th style="font-size:.73rem;">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+              <?php if ($today_result->num_rows == 0): ?>
+                <tr><td colspan="4" class="text-center text-muted py-4">No appointments today.</td></tr>
+              <?php endif; ?>
+              <?php while ($appt = $today_result->fetch_assoc()):
+                $sc = ['Pending'=>'appt-pending','Confirmed'=>'appt-confirmed','Completed'=>'appt-completed','Cancelled'=>'appt-cancelled'][$appt['status']] ?? 'appt-pending';
+              ?>
+              <tr>
+                <td><strong style="font-size:.82rem;"><?= date('h:i A', strtotime($appt['appointment_time'])) ?></strong></td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <div class="pat-avatar">
+                      <?php if (!empty($appt['patient_image'])): ?>
+                        <img src="<?= BASE_URL . $appt['patient_image'] ?>" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">
+                      <?php else: ?>
+                        <i class="fa fa-user"></i>
+                      <?php endif; ?>
+                    </div>
+                    <span style="font-size:.83rem;"><?= htmlspecialchars($appt['patient_name']) ?></span>
+                  </div>
+                </td>
+                <td><span class="appt-badge <?= $sc ?>"><?= $appt['status'] ?: 'Pending' ?></span></td>
+                <td>
+                  <a href="<?= BASE_URL ?>doctor/patient-details.php?id=<?= $appt['id'] ?>"
+                     class="btn btn-sm btn-outline-primary" title="View"><i class="fa fa-eye"></i></a>
+                  <?php if ($appt['patient_phone']): ?>
+                  <a href="tel:<?= $appt['patient_phone'] ?>" class="btn btn-sm btn-outline-success" title="Call">
+                    <i class="fa fa-phone"></i>
+                  </a>
+                  <?php endif; ?>
+                </td>
+              </tr>
+              <?php endwhile; ?>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right column -->
+    <div class="col-lg-4">
+
+      <!-- Recent Patients -->
+      <div class="card border-0 shadow-sm rounded-3 mb-3">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3 pb-2">
+          <h6 class="fw-bold mb-0"><i class="fa fa-users me-2" style="color:var(--primary)"></i>Recent Patients</h6>
+          <a href="my-patients.php" class="btn btn-sm btn-outline-primary">View All</a>
+        </div>
+        <div class="card-body p-0">
+          <?php if ($recent_result->num_rows == 0): ?>
+            <p class="text-muted text-center py-3">No patients yet.</p>
+          <?php else: ?>
+          <div class="list-group list-group-flush">
+            <?php while ($pat = $recent_result->fetch_assoc()):
+              $age = $pat['dob'] ? date_diff(date_create($pat['dob']), date_create('today'))->y : '—';
+            ?>
+            <a href="patient-details.php?id=<?= $pat['id'] ?>"
+               class="list-group-item list-group-item-action"
+               style="display:flex;align-items:center;gap:10px;padding:10px 16px;">
+              <div class="pat-avatar" style="flex-shrink:0;">
+                <?php if (!empty($pat['profile_pic'])): ?>
+                  <img src="<?= BASE_URL . $pat['profile_pic'] ?>" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">
+                <?php else: ?>
+                  <i class="fa fa-user"></i>
+                <?php endif; ?>
+              </div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:.84rem;font-weight:600;"><?= htmlspecialchars($pat['name']) ?></div>
+                <div style="font-size:.73rem;color:#6b7280;"><?= $pat['gender'] ?> · <?= $age ?> yrs · <?= $pat['total_visits'] ?> visits</div>
+              </div>
+            </a>
+            <?php endwhile; ?>
+          </div>
+          <?php endif; ?>
+        </div>
+      </div>
+
+      <!-- Upcoming Appointments -->
+      <div class="card border-0 shadow-sm rounded-3">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3 pb-2">
+          <h6 class="fw-bold mb-0"><i class="fa fa-calendar me-2" style="color:var(--primary)"></i>Upcoming</h6>
+          <a href="appointments.php" class="btn btn-sm btn-outline-primary">View All</a>
+        </div>
+        <div class="card-body p-0">
+          <?php if ($upcoming_result->num_rows == 0): ?>
+            <p class="text-muted text-center py-3">No upcoming appointments.</p>
+          <?php else: ?>
+          <div class="list-group list-group-flush">
+            <?php while ($appt = $upcoming_result->fetch_assoc()):
+              $sc = $appt['status'] === 'Pending' ? 'appt-pending' : 'appt-confirmed';
+            ?>
+            <div class="list-group-item" style="padding:10px 16px;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                <div>
+                  <div style="font-size:.84rem;font-weight:600;"><?= htmlspecialchars($appt['patient_name']) ?></div>
+                  <div style="font-size:.73rem;color:#6b7280;">
+                    <?= date('d M', strtotime($appt['appointment_date'])) ?>
+                    · <?= date('h:i A', strtotime($appt['appointment_time'])) ?>
+                  </div>
+                </div>
+                <span class="appt-badge <?= $sc ?>"><?= $appt['status'] ?></span>
+              </div>
+              <?php if ($appt['patient_phone']): ?>
+              <div style="margin-top:6px;">
+                <a href="tel:<?= $appt['patient_phone'] ?>" class="btn btn-sm btn-outline-primary">
+                  <i class="fa fa-phone"></i> Call
+                </a>
+              </div>
+              <?php endif; ?>
+            </div>
+            <?php endwhile; ?>
+          </div>
+          <?php endif; ?>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  var ctx = document.getElementById('appointmentsChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: <?= json_encode($monthly_labels) ?>,
+      datasets: [{
+        label: 'Total',
+        data: <?= json_encode($monthly_totals) ?>,
+        borderColor: '#0C74C5',
+        backgroundColor: 'rgba(12,116,197,.1)',
+        borderWidth: 2, fill: true, tension: .3
+      },{
+        label: 'Completed',
+        data: <?= json_encode($monthly_completed) ?>,
+        borderColor: '#02c9b8',
+        backgroundColor: 'rgba(2,201,184,.1)',
+        borderWidth: 2, fill: true, tension: .3
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+      plugins: { legend: { position: 'top' }, tooltip: { mode: 'index', intersect: false } }
+    }
+  });
+});
+</script>
 </body>
 </html>
