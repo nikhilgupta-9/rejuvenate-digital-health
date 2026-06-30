@@ -1,0 +1,495 @@
+/* ==========================================================
+   REJUVENATE ADMIN — THEME OVERRIDES
+   Theme: white / #0C74C5 (primary) / #02c9b8 (accent)
+   This file loads LAST in links.php — all overrides live here.
+   ========================================================== */
+
+/* ── CSS Variables ── */
+:root {
+  --adm-primary: #0c74c5;
+  --adm-primary-dk: #0a5fa0;
+  --adm-accent: #02c9b8;
+  --adm-accent-dk: #01a89a;
+}
+
+/* ══════════════════════════════════════════════════
+   SIDEBAR
+   ══════════════════════════════════════════════════ */
+/* .sidebar.dark_sidebar                         { background: var(--adm-primary); } */
+.sidebar.dark_sidebar .logo {
+  background: transparent;
+}
+/* .sidebar.dark_sidebar #sidebar_menu > li ul   { background: var(--adm-primary-dk); } */
+.sidebar.dark_sidebar #sidebar_menu > li.mm-active > a {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff !important;
+  border-left: 3px solid var(--adm-accent);
+  padding: 10px;
+}
+.sidebar.dark_sidebar #sidebar_menu > li > a {
+  color: rgba(255, 255, 255, 0.88);
+}
+.sidebar.dark_sidebar #sidebar_menu > li ul li a.active {
+  color: var(--adm-accent);
+}
+.sidebar.dark_sidebar #sidebar_menu > li ul li a {
+  color: rgba(255, 255, 255, 0.8);
+}
+.sidebar.dark_sidebar #sidebar_menu > li a::after {
+  color: rgba(255, 255, 255, 0.6);
+}
+.sidebar.dark_sidebar #sidebar_menu > li > a:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff !important;
+}
+.sidebar.dark_sidebar .search-box .form-control {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+.sidebar.dark_sidebar .search-box .form-control::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+.sidebar.dark_sidebar .admin-profile h6 {
+  color: #fff;
+}
+
+/* ══════════════════════════════════════════════════
+   TOP NAVIGATION / HEADER
+   ══════════════════════════════════════════════════ */
+.header_iner.default_header {
+  background: var(--adm-primary);
+}
+.header_iner .notification i:after {
+  background-color: var(--adm-accent);
+}
+
+/* ══════════════════════════════════════════════════
+   BUTTONS — override theme blue
+   ══════════════════════════════════════════════════ */
+.btn-primary,
+.btn.btn-primary {
+  background-color: var(--adm-primary) !important;
+  border-color: var(--adm-primary) !important;
+}
+.btn-primary:hover,
+.btn.btn-primary:hover {
+  background-color: var(--adm-primary-dk) !important;
+  border-color: var(--adm-primary-dk) !important;
+}
+.btn-outline-primary {
+  color: var(--adm-primary) !important;
+  border-color: var(--adm-primary) !important;
+}
+.btn-outline-primary:hover {
+  background-color: var(--adm-primary) !important;
+  color: #fff !important;
+}
+a {
+  color: var(--adm-primary);
+}
+a:hover {
+  color: var(--adm-primary-dk);
+}
+
+/* ══════════════════════════════════════════════════
+   DASHBOARD STAT CARDS
+   (solid colors — NO gradients)
+   ══════════════════════════════════════════════════ */
+.dash-stat-card {
+  border-radius: 12px;
+  padding: 22px 20px;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 0.25s,
+    box-shadow 0.25s;
+}
+.dash-stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+}
+.dash-stat-card .icon-bg {
+  position: absolute;
+  right: -12px;
+  top: -12px;
+  font-size: 72px;
+  opacity: 0.12;
+}
+.dash-stat-card .stat-num {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.dash-stat-card .stat-lbl {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  opacity: 0.85;
+  margin-top: 4px;
+}
+.dash-stat-card .stat-sub {
+  font-size: 0.75rem;
+  margin-top: 8px;
+  opacity: 0.8;
+}
+
+/* Solid card backgrounds (no gradients) */
+.card-blue {
+  background: #0c74c5;
+} /* primary */
+.card-green {
+  background: #16a34a;
+}
+.card-cyan {
+  background: #0891b2;
+}
+.card-orange {
+  background: #ea580c;
+}
+.card-purple {
+  background: #7c3aed;
+}
+.card-teal {
+  background: #02c9b8;
+} /* accent */
+.card-red {
+  background: #dc2626;
+}
+.card-indigo {
+  background: #4f46e5;
+}
+
+/* ══════════════════════════════════════════════════
+   SECTION HEADINGS
+   ══════════════════════════════════════════════════ */
+.section-heading {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: #6c757d;
+  border-left: 3px solid var(--adm-primary);
+  padding-left: 10px;
+  margin-bottom: 18px;
+  margin-top: 28px;
+}
+
+/* ══════════════════════════════════════════════════
+   QUICK ACTION CARDS
+   ══════════════════════════════════════════════════ */
+.quick-action-card {
+  border-radius: 10px;
+  border: 1px solid #e9ecef;
+  padding: 18px 14px;
+  text-align: center;
+  text-decoration: none;
+  color: #333;
+  display: block;
+  transition: 0.25s;
+}
+.quick-action-card:hover {
+  border-color: var(--adm-primary);
+  background: #eaf4fd;
+  color: var(--adm-primary);
+  transform: translateY(-3px);
+}
+.quick-action-card .qa-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  margin: 0 auto 10px;
+}
+.quick-action-card h6 {
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin: 0;
+}
+.quick-action-card p {
+  font-size: 0.72rem;
+  color: #888;
+  margin: 4px 0 0;
+}
+
+/* ══════════════════════════════════════════════════
+   PENDING BADGE (animated)
+   ══════════════════════════════════════════════════ */
+.pending-badge {
+  display: inline-block;
+  background: #dc2626;
+  color: #fff;
+  border-radius: 20px;
+  padding: 2px 9px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  animation: pulse-badge 1.5s infinite;
+}
+@keyframes pulse-badge {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   MISC UTILS
+   ══════════════════════════════════════════════════ */
+.activity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+/* White card section inside content area */
+.white_card {
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* DataTable / table overrides */
+.dataTables_wrapper .dataTables_paginate .paginate_button.current,
+.dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+  background: var(--adm-primary) !important;
+  border-color: var(--adm-primary) !important;
+  color: #fff !important;
+}
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+  background: var(--adm-primary-dk) !important;
+  border-color: var(--adm-primary-dk) !important;
+  color: #fff !important;
+}
+
+/* Form focus rings */
+.form-control:focus {
+  border-color: var(--adm-primary) !important;
+  box-shadow: 0 0 0 3px rgba(12, 116, 197, 0.12) !important;
+}
+
+/* ══════════════════════════════════════════════════
+   PAGE HEADING (used on schools, doctors, etc.)
+   ══════════════════════════════════════════════════ */
+.page-heading {
+  border-left: 4px solid var(--adm-primary);
+  padding-left: 12px;
+}
+
+/* ══════════════════════════════════════════════════
+   STAT BOXES (used on schools-list, etc.)
+   ══════════════════════════════════════════════════ */
+.stat-box {
+  border-radius: 10px;
+  padding: 20px;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+.stat-box .big-icon {
+  position: absolute;
+  right: -10px;
+  top: -10px;
+  font-size: 60px;
+  opacity: 0.12;
+}
+.stat-box .num {
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+.stat-box .lbl {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  opacity: 0.85;
+}
+
+/* Solid (no gradient) stat-box backgrounds */
+.bg-stat-blue {
+  background: #0c74c5;
+}
+.bg-stat-warn {
+  background: #ea580c;
+}
+.bg-stat-green {
+  background: #16a34a;
+}
+.bg-stat-red {
+  background: #dc2626;
+}
+.bg-stat-teal {
+  background: #02c9b8;
+}
+
+/* ══════════════════════════════════════════════════
+   SCHOOL / MEMBER AVATAR INITIALS
+   ══════════════════════════════════════════════════ */
+.school-initial,
+.school-avatar-text {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #fff;
+  background: var(--adm-primary);
+  flex-shrink: 0;
+}
+.school-avatar-text {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  font-size: 1.8rem;
+}
+.school-logo-sm {
+  width: 38px;
+  height: 38px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+/* ══════════════════════════════════════════════════
+   FILTER CARD & FILTER BUTTONS
+   ══════════════════════════════════════════════════ */
+.filter-card {
+  background: #f8f9fc;
+  border-radius: 10px;
+  border: 1px solid #e3e6f0;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+.filter-btn {
+  padding: 8px 16px;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #495057;
+  transition: 0.3s;
+  display: inline-block;
+}
+.filter-btn.active,
+.filter-btn:hover {
+  background: var(--adm-primary);
+  color: #fff;
+  border-color: var(--adm-primary);
+}
+
+/* ══════════════════════════════════════════════════
+   TABLE UTILITIES
+   ══════════════════════════════════════════════════ */
+.table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+}
+.tbl-action-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.2s;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+.tbl-action-btn:hover {
+  filter: brightness(1.15);
+}
+
+/* Table header accent */
+.table-header {
+  background: var(--adm-primary);
+  color: #fff;
+  border: none;
+}
+
+/* ══════════════════════════════════════════════════
+   PAGE TITLE UNDERLINE DECORATION
+   ══════════════════════════════════════════════════ */
+.page-title {
+  position: relative;
+  margin-bottom: 30px;
+  padding-bottom: 15px;
+}
+.page-title::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 50px;
+  height: 3px;
+  background: var(--adm-primary);
+}
+
+/* ══════════════════════════════════════════════════
+   APPOINTMENT CARDS
+   ══════════════════════════════════════════════════ */
+.appointment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 20px;
+}
+.appointment-card {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  background: #fff;
+  transition: transform 0.3s;
+  border: 1px solid #e9ecef;
+}
+.appointment-card:hover {
+  transform: translateY(-5px);
+}
+.appointment-header {
+  padding: 15px;
+  border-bottom: 1px solid #e9ecef;
+  background: #f8f9fa;
+}
+.appointment-body {
+  padding: 15px;
+}
+.filter-section {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 30px;
+}
+
+/* ══════════════════════════════════════════════════
+   BADGE / STATUS OVERRIDES
+   ══════════════════════════════════════════════════ */
+.badge-active {
+  background-color: #16a34a !important;
+}
+.badge-inactive {
+  background-color: #dc2626 !important;
+}
+
+/* Action icon hover */
+.action-icon {
+  transition: 0.3s;
+  padding: 5px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+.action-icon:hover {
+  transform: scale(1.1);
+  background: rgba(0, 0, 0, 0.05);
+}

@@ -1,0 +1,26 @@
+# Environment & Secrets
+.env
+.env.local
+.env.production
+
+# Vendor (Composer)
+vendor/
+
+# XAMPP / Server logs
+error_log
+*.log
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Uploads (user files - don't push to git)
+uploads/*
+!uploads/.gitkeep
+
+# ZIP files
+*.zip
+
+# IDE
+.vscode/
+.idea/
