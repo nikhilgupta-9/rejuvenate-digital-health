@@ -7,7 +7,7 @@ $jwt_doctor = doctor_jwt_guard();
 $doctor_id  = (int)$jwt_doctor['sub'];
 $doctor_name = $jwt_doctor['name'] ?? 'Doctor';
 
-// Ensure doctor_patients table exists (graceful fallback if migration not yet run)
+// Ensure doctor_patients table exists
 $conn->query("
     CREATE TABLE IF NOT EXISTS `doctor_patients` (
       `id`           INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -21,7 +21,7 @@ $conn->query("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 ");
 
-// Auto-import existing appointment patients into doctor_patients
+// Auto-import existing appointment patients
 $conn->query("
     INSERT IGNORE INTO doctor_patients (doctor_id, patient_id, added_via)
     SELECT DISTINCT a.doctor_id, a.user_id, 'appointment'
@@ -29,10 +29,8 @@ $conn->query("
     WHERE a.doctor_id = $doctor_id
 ");
 
-// Search / filter
 $search = trim($_GET['search'] ?? '');
 
-// Fetch all patients linked to this doctor
 $sql = "
     SELECT DISTINCT
         u.id            AS patient_id,
@@ -50,13 +48,9 @@ $sql = "
         u.abha_verified,
         dp.added_via,
         dp.added_at,
-        (SELECT COUNT(*) FROM appointments a
-         WHERE a.user_id = u.id AND a.doctor_id = ?) AS total_appointments,
-        (SELECT MAX(a2.appointment_date) FROM appointments a2
-         WHERE a2.user_id = u.id AND a2.doctor_id = ?) AS last_appointment,
-        (SELECT a3.status FROM appointments a3
-         WHERE a3.user_id = u.id AND a3.doctor_id = ?
-         ORDER BY a3.appointment_date DESC LIMIT 1) AS last_status
+        (SELECT COUNT(*) FROM appointments a  WHERE a.user_id = u.id AND a.doctor_id = ?) AS total_appointments,
+        (SELECT MAX(a2.appointment_date) FROM appointments a2 WHERE a2.user_id = u.id AND a2.doctor_id = ?) AS last_appointment,
+        (SELECT a3.status FROM appointments a3 WHERE a3.user_id = u.id AND a3.doctor_id = ? ORDER BY a3.appointment_date DESC LIMIT 1) AS last_status
     FROM users u
     INNER JOIN doctor_patients dp ON dp.patient_id = u.id AND dp.doctor_id = ?
 ";
@@ -75,7 +69,6 @@ $stmt = $conn->prepare($sql);
 $stmt->bind_param($types, ...$params);
 $stmt->execute();
 $patients = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-
 $total = count($patients);
 ?>
 <!DOCTYPE html>
@@ -83,171 +76,61 @@ $total = count($patients);
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Patient List — REJUVENATE Digital Health</title>
+  <title>My Patients — REJUVENATE Doctor Portal</title>
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
   <style>
-    /* ── Patient List Page ───────────────────────────────────── */
-    .pl-header {
-      background: linear-gradient(135deg, #0c74c5 0%, #0a5fa8 100%);
-      color: #fff;
-      padding: 14px 16px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      border-radius: 0 0 18px 18px;
-      margin-bottom: 16px;
-    }
-    .pl-header-title { font-size: 18px; font-weight: 700; flex: 1; }
-    .pl-count-badge {
-      background: rgba(255,255,255,0.25);
-      border: 2px solid #fff;
-      color: #fff;
-      font-weight: 700;
-      font-size: 14px;
-      width: 38px; height: 38px;
-      border-radius: 6px;
-      display: flex; align-items: center; justify-content: center;
-    }
-
-    /* Search bar row */
-    .pl-search-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 0 4px 14px;
-    }
-    .pl-search-wrap {
-      flex: 1;
-      position: relative;
-    }
-    .pl-search-wrap input {
-      width: 100%;
-      border: 1.5px solid #cdd8e8;
-      border-radius: 10px;
-      padding: 10px 40px 10px 14px;
-      font-size: 14px;
-      outline: none;
-      background: #f5f8fd;
-    }
-    .pl-search-wrap input:focus { border-color: #0c74c5; background: #fff; }
-    .pl-search-wrap .search-icon {
-      position: absolute; right: 12px; top: 50%;
-      transform: translateY(-50%);
-      color: #888; font-size: 16px; cursor: pointer;
-    }
-    .pl-btn-add {
-      width: 42px; height: 42px; border-radius: 50%;
-      background: #e74c3c; color: #fff;
-      border: none; font-size: 22px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; flex-shrink: 0;
-      box-shadow: 0 2px 8px rgba(231,76,60,.35);
-    }
-    .pl-btn-refresh {
+    .pat-avatar-sm {
       width: 38px; height: 38px; border-radius: 50%;
-      background: transparent; color: #0c74c5;
-      border: 2px solid #0c74c5; font-size: 16px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; flex-shrink: 0;
-      text-decoration: none;
+      background: #7b8ea8; display: inline-flex;
+      align-items: center; justify-content: center;
+      font-size: 16px; color: #fff; flex-shrink: 0; overflow: hidden;
     }
-    .pl-btn-refresh:hover { background: #0c74c5; color: #fff; }
+    .pat-avatar-sm img { width: 100%; height: 100%; object-fit: cover; }
 
-    /* Patient card */
-    .patient-card {
-      background: #dce8f5;
-      border-radius: 10px;
-      margin-bottom: 10px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 14px;
-      border-left: 4px solid #e91e63;
-      position: relative;
-      transition: box-shadow .15s;
+    .abha-pill {
+      display: inline-flex; align-items: center;
+      background: #e0f2fe; color: #0277bd;
+      font-size: .7rem; border-radius: 20px;
+      padding: 2px 8px; font-weight: 600;
     }
-    .patient-card:hover { box-shadow: 0 4px 14px rgba(12,116,197,.18); }
-    .patient-avatar {
-      width: 50px; height: 50px; border-radius: 50%;
-      background: #7b8ea8;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; overflow: hidden;
-    }
-    .patient-avatar img { width: 100%; height: 100%; object-fit: cover; }
-    .patient-avatar .fa { font-size: 26px; color: #fff; }
-    .patient-info { flex: 1; min-width: 0; }
-    .patient-name {
-      font-size: 15px; font-weight: 700; color: #1a2e44;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .patient-meta { font-size: 12.5px; color: #555; margin-top: 2px; line-height: 1.5; }
-    .patient-abha { font-size: 12px; color: #0c74c5; margin-top: 1px; }
-    .abha-badge {
-      display: inline-block;
-      background: #e8f5e9; color: #2e7d32;
-      font-size: 11px; border-radius: 4px;
-      padding: 1px 6px; margin-left: 4px;
-    }
-    .patient-menu-btn {
-      background: none; border: none; cursor: pointer;
-      color: #555; font-size: 20px; padding: 4px 6px;
-      border-radius: 6px; flex-shrink: 0;
-    }
-    .patient-menu-btn:hover { background: rgba(0,0,0,.07); }
+    .abha-pill.verified { background: #e8f5e9; color: #2e7d32; }
+    .abha-pill.none     { background: #f3f4f6; color: #9ca3af; }
 
-    .patient-dropdown {
-      position: absolute; right: 14px; top: 54px;
-      background: #fff; border-radius: 10px;
-      box-shadow: 0 4px 20px rgba(0,0,0,.15);
-      min-width: 160px; z-index: 1000;
-      display: none;
+    .via-pill {
+      font-size: .68rem; border-radius: 10px;
+      padding: 2px 7px; font-weight: 600;
+      background: #f3e5f5; color: #6a1b9a;
     }
-    .patient-dropdown.show { display: block; }
-    .patient-dropdown a {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 16px; color: #333; text-decoration: none;
-      font-size: 14px;
-    }
-    .patient-dropdown a:hover { background: #f0f6ff; }
-    .patient-dropdown a.text-danger { color: #dc3545 !important; }
-    .patient-dropdown hr { margin: 4px 0; border-color: #eee; }
+    .via-pill.appointment { background: #e0f2fe; color: #0277bd; }
+    .via-pill.abha        { background: #e8f5e9; color: #2e7d32; }
 
-    .pl-empty {
-      text-align: center; padding: 60px 20px; color: #888;
-    }
-    .pl-empty .fa { font-size: 48px; color: #cdd8e8; margin-bottom: 12px; }
+    .patient-row:hover { background: #f0f6ff; }
 
-    /* ── Add Patient Modal ──────────────────────────────────── */
-    .modal-header-blue {
-      background: linear-gradient(135deg, #0c74c5 0%, #0a5fa8 100%);
-      color: #fff; border-radius: 12px 12px 0 0;
-      padding: 16px 20px;
+    /* Modal header */
+    .modal-hdr {
+      background: var(--primary, #0c74c5);
+      color: #fff; padding: 16px 20px;
+      display: flex; align-items: center; justify-content: space-between;
     }
-    .modal-header-blue .btn-close { filter: brightness(0) invert(1); }
+    .modal-hdr .close-btn {
+      background: rgba(255,255,255,.2); border: none;
+      color: #fff; width: 28px; height: 28px; border-radius: 50%;
+      font-size: 16px; cursor: pointer; display: flex;
+      align-items: center; justify-content: center;
+    }
+    .modal-hdr .close-btn:hover { background: rgba(255,255,255,.35); }
+
     .search-result-card {
-      border: 1.5px solid #cdd8e8; border-radius: 10px;
-      padding: 12px; margin-top: 10px;
-      display: flex; align-items: center; gap: 12px;
-      background: #f5f8fd; cursor: pointer;
-      transition: border-color .15s;
+      border: 1.5px solid #e5e7eb; border-radius: 10px;
+      padding: 10px 14px; margin-top: 8px;
+      display: flex; align-items: center; gap: 10px;
+      background: #f9fafb; cursor: pointer; transition: .15s;
     }
-    .search-result-card:hover, .search-result-card.selected {
-      border-color: #0c74c5; background: #e8f2ff;
-    }
-    .search-result-card .sr-avatar {
-      width: 44px; height: 44px; border-radius: 50%;
-      background: #7b8ea8; display: flex; align-items: center;
-      justify-content: center; flex-shrink: 0;
-    }
-    .search-result-card .sr-avatar .fa { color: #fff; font-size: 22px; }
-    .step-indicator {
-      display: flex; gap: 8px; margin-bottom: 16px;
-    }
-    .step-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: #cdd8e8;
-    }
+    .search-result-card:hover { border-color: #0c74c5; background: #eaf4fd; }
+
+    .step-dots { display: flex; gap: 6px; margin-bottom: 14px; }
+    .step-dot  { width: 8px; height: 8px; border-radius: 50%; background: #d1d5db; }
     .step-dot.active { background: #0c74c5; }
   </style>
 </head>
@@ -255,166 +138,280 @@ $total = count($patients);
 <?php $sidebar_active = 'patients'; include(__DIR__ . "/inc/sidebar.php"); ?>
 
 <main class="doctor-content">
-  <div style="max-width:680px; margin:0 auto; padding:0 4px;">
 
-    <!-- Blue header bar -->
-    <div class="pl-header">
-      <span class="pl-header-title">Patient List</span>
-      <div class="pl-count-badge"><?= $total ?></div>
+  <!-- ── Page header row ── -->
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+    <div>
+      <p class="section-title" style="margin:0;">Patient List</p>
+      <span style="font-size:.78rem; color:#6b7280;"><?= $total ?> patient<?= $total !== 1 ? 's' : '' ?> linked to your profile</span>
     </div>
-
-    <!-- Search + Add + Refresh -->
-    <div class="pl-search-row">
-      <div class="pl-search-wrap">
-        <form method="GET" action="" id="searchForm">
-          <input type="text" name="search" id="searchInput"
-                 value="<?= htmlspecialchars($search) ?>"
-                 placeholder="Search by name, mobile, ABHA…"
-                 oninput="debounceSearch(this.value)">
-          <span class="search-icon" onclick="document.getElementById('searchForm').submit()">
-            <i class="fa fa-search"></i>
-          </span>
-        </form>
-      </div>
-      <button class="pl-btn-add" onclick="openAddModal()" title="Add Patient">
-        <i class="fa fa-plus"></i>
-      </button>
-      <a href="my-patients.php" class="pl-btn-refresh" title="Refresh">
-        <i class="fa fa-refresh"></i>
-      </a>
-    </div>
-
-    <!-- Patient Cards -->
-    <?php if ($total === 0): ?>
-      <div class="pl-empty">
-        <div><i class="fa fa-users"></i></div>
-        <h5>No patients yet</h5>
-        <p>Tap <strong>+</strong> to add a patient by mobile, email, or ABHA ID.</p>
-      </div>
-    <?php else: ?>
-      <div id="patientList">
-        <?php foreach ($patients as $p):
-          $full_name  = trim(htmlspecialchars($p['first_name'] . ' ' . $p['last_name']));
-          $mobile     = htmlspecialchars($p['mobile'] ?? '');
-          $email      = htmlspecialchars($p['email'] ?? '');
-          $abha_addr  = htmlspecialchars($p['abha_address'] ?? '');
-          $pid        = (int)$p['patient_id'];
-          $has_pic    = !empty($p['profile_pic']);
-        ?>
-        <div class="patient-card" id="pc-<?= $pid ?>">
-          <div class="patient-avatar">
-            <?php if ($has_pic): ?>
-              <img src="<?= BASE_URL . htmlspecialchars($p['profile_pic']) ?>" alt="">
-            <?php else: ?>
-              <i class="fa fa-user"></i>
-            <?php endif; ?>
-          </div>
-          <div class="patient-info">
-            <div class="patient-name"><?= $full_name ?></div>
-            <div class="patient-meta">
-              <?= $mobile ?>
-              <?php if ($email): ?>
-                <br><?= $email ?>
-              <?php endif; ?>
-            </div>
-            <?php if ($abha_addr): ?>
-              <div class="patient-abha">
-                ABHA: <?= $abha_addr ?>
-                <?php if ($p['abha_verified']): ?>
-                  <span class="abha-badge"><i class="fa fa-check"></i> Verified</span>
-                <?php endif; ?>
-              </div>
-            <?php else: ?>
-              <div class="patient-abha" style="color:#aaa;">ABHA: not linked</div>
-            <?php endif; ?>
-          </div>
-          <button class="patient-menu-btn" onclick="toggleCardMenu(<?= $pid ?>, event)" title="Options">
-            <i class="fa fa-bars"></i>
-          </button>
-          <div class="patient-dropdown" id="dd-<?= $pid ?>">
-            <a href="patient-details.php?id=<?= $pid ?>">
-              <i class="fa fa-eye text-primary"></i> View Details
-            </a>
-            <a href="appointments.php?patient_id=<?= $pid ?>">
-              <i class="fa fa-calendar text-success"></i> Appointments
-            </a>
-            <a href="patient-documents.php?patient_id=<?= $pid ?>">
-              <i class="fa fa-file-text-o text-info"></i> Documents
-            </a>
-            <hr>
-            <a href="#" class="text-danger" onclick="removePatient(<?= $pid ?>); return false;">
-              <i class="fa fa-times"></i> Remove
-            </a>
-          </div>
-        </div>
-        <?php endforeach; ?>
-      </div>
-    <?php endif; ?>
-
+    <button class="btn btn-primary" onclick="openAddModal()" style="display:flex;align-items:center;gap:6px;">
+      <i class="fa fa-user-plus"></i> Add Patient
+    </button>
   </div>
-</div>
 
-<!-- ── Add Patient Modal ─────────────────────────────────────── -->
+  <!-- ── Search + filter bar ── -->
+  <div class="card border-0 shadow-sm rounded-3 mb-3">
+    <div class="card-body" style="padding:14px 16px;">
+      <form method="GET" action="" id="searchForm" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <div style="position:relative;flex:1;min-width:220px;">
+          <input type="text" name="search" id="searchInput"
+                 class="form-control" style="padding-left:36px;"
+                 value="<?= htmlspecialchars($search) ?>"
+                 placeholder="Search name, mobile, email, ABHA…"
+                 oninput="debounceSearch(this.value)">
+          <i class="fa fa-search" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#9ca3af;"></i>
+        </div>
+        <?php if ($search): ?>
+          <a href="my-patients.php" class="btn btn-outline-secondary btn-sm">
+            <i class="fa fa-times"></i> Clear
+          </a>
+        <?php endif; ?>
+        <a href="my-patients.php" class="btn btn-outline-primary btn-sm" title="Refresh">
+          <i class="fa fa-refresh"></i>
+        </a>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Patient table ── -->
+  <div class="card border-0 shadow-sm rounded-3">
+    <div class="card-header bg-white border-0 pt-3 pb-2 d-flex justify-content-between align-items-center">
+      <h6 class="fw-bold mb-0">
+        <i class="fa fa-users me-2" style="color:var(--primary,#0c74c5);"></i>
+        Patients
+        <span style="background:#e0f2fe;color:#0277bd;border-radius:20px;padding:1px 10px;font-size:.72rem;font-weight:700;margin-left:6px;"><?= $total ?></span>
+      </h6>
+    </div>
+    <div class="card-body p-0">
+
+      <?php if ($total === 0): ?>
+        <div style="text-align:center;padding:60px 20px;color:#6b7280;">
+          <i class="fa fa-user-md" style="font-size:3rem;color:#d1d5db;display:block;margin-bottom:12px;"></i>
+          <h6 style="font-weight:600;">No patients yet</h6>
+          <p style="font-size:.84rem;">Click <strong>Add Patient</strong> to add by mobile, email, or ABHA ID.</p>
+          <button class="btn btn-primary btn-sm" onclick="openAddModal()">
+            <i class="fa fa-user-plus me-1"></i> Add Patient
+          </button>
+        </div>
+
+      <?php else: ?>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" id="patientTable">
+            <thead class="table-light">
+              <tr>
+                <th style="font-size:.73rem;width:38px;">#</th>
+                <th style="font-size:.73rem;">Patient</th>
+                <th style="font-size:.73rem;" class="d-none d-md-table-cell">Contact</th>
+                <th style="font-size:.73rem;" class="d-none d-sm-table-cell">ABHA</th>
+                <th style="font-size:.73rem;" class="d-none d-lg-table-cell">Last Visit</th>
+                <th style="font-size:.73rem;" class="d-none d-lg-table-cell">Visits</th>
+                <th style="font-size:.73rem;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($patients as $i => $p):
+              $full_name = trim(($p['first_name'] ?? '') . ' ' . ($p['last_name'] ?? ''));
+              $pid       = (int)$p['patient_id'];
+              $has_pic   = !empty($p['profile_pic']);
+              $age       = !empty($p['dob']) ? date_diff(date_create($p['dob']), date_create('today'))->y : null;
+            ?>
+            <tr class="patient-row" id="pr-<?= $pid ?>">
+              <!-- # -->
+              <td style="font-size:.78rem;color:#9ca3af;"><?= $i + 1 ?></td>
+
+              <!-- Patient name + avatar -->
+              <td>
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <div class="pat-avatar-sm">
+                    <?php if ($has_pic): ?>
+                      <img src="<?= BASE_URL . htmlspecialchars($p['profile_pic']) ?>" alt="">
+                    <?php else: ?>
+                      <i class="fa fa-user"></i>
+                    <?php endif; ?>
+                  </div>
+                  <div>
+                    <div style="font-weight:600;font-size:.85rem;"><?= htmlspecialchars($full_name) ?></div>
+                    <div style="font-size:.72rem;color:#6b7280;">
+                      <?= $p['gender'] ? htmlspecialchars($p['gender']) : '' ?>
+                      <?= $age ? ' · ' . $age . ' yrs' : '' ?>
+                      <?= $p['blood_group'] ? ' · ' . htmlspecialchars($p['blood_group']) : '' ?>
+                    </div>
+                    <!-- Show contact on mobile -->
+                    <div class="d-md-none" style="font-size:.72rem;color:#6b7280;margin-top:2px;">
+                      <?= htmlspecialchars($p['mobile'] ?? '') ?>
+                    </div>
+                  </div>
+                </div>
+              </td>
+
+              <!-- Contact -->
+              <td class="d-none d-md-table-cell" style="font-size:.82rem;">
+                <?php if ($p['mobile']): ?>
+                  <div><?= htmlspecialchars($p['mobile']) ?></div>
+                <?php endif; ?>
+                <?php if ($p['email']): ?>
+                  <div style="font-size:.72rem;color:#6b7280;"><?= htmlspecialchars($p['email']) ?></div>
+                <?php endif; ?>
+              </td>
+
+              <!-- ABHA -->
+              <td class="d-none d-sm-table-cell">
+                <?php if ($p['abha_address']): ?>
+                  <span class="abha-pill <?= $p['abha_verified'] ? 'verified' : '' ?>">
+                    <?php if ($p['abha_verified']): ?>
+                      <i class="fa fa-check-circle" style="margin-right:3px;"></i>
+                    <?php endif; ?>
+                    <?= htmlspecialchars($p['abha_address']) ?>
+                  </span>
+                <?php elseif ($p['abha_number']): ?>
+                  <span class="abha-pill"><?= htmlspecialchars($p['abha_number']) ?></span>
+                <?php else: ?>
+                  <span class="abha-pill none">Not linked</span>
+                <?php endif; ?>
+              </td>
+
+              <!-- Last visit -->
+              <td class="d-none d-lg-table-cell" style="font-size:.82rem;">
+                <?php if ($p['last_appointment']): ?>
+                  <div><?= date('d M Y', strtotime($p['last_appointment'])) ?></div>
+                  <?php if ($p['last_status']): ?>
+                    <span style="font-size:.68rem;padding:1px 7px;border-radius:10px;font-weight:600;
+                      background:<?= $p['last_status']==='Completed'?'#d4edda':($p['last_status']==='Pending'?'#fff3cd':'#f8d7da') ?>;
+                      color:<?= $p['last_status']==='Completed'?'#155724':($p['last_status']==='Pending'?'#856404':'#721c24') ?>;">
+                      <?= htmlspecialchars($p['last_status']) ?>
+                    </span>
+                  <?php endif; ?>
+                <?php else: ?>
+                  <span style="color:#9ca3af;font-size:.78rem;">—</span>
+                <?php endif; ?>
+              </td>
+
+              <!-- Visits count -->
+              <td class="d-none d-lg-table-cell" style="font-size:.84rem;font-weight:600;color:#0c74c5;">
+                <?= (int)$p['total_appointments'] ?>
+              </td>
+
+              <!-- Actions -->
+              <td>
+                <div style="display:flex;gap:4px;align-items:center;">
+                  <a href="patient-details.php?id=<?= $pid ?>"
+                     class="btn btn-sm" title="View"
+                     style="background:#e0f2fe;color:#0277bd;border:none;width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;">
+                    <i class="fa fa-eye" style="font-size:.78rem;"></i>
+                  </a>
+                  <a href="appointments.php?patient_id=<?= $pid ?>"
+                     class="btn btn-sm" title="Appointments"
+                     style="background:#e8f5e9;color:#2e7d32;border:none;width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;">
+                    <i class="fa fa-calendar" style="font-size:.78rem;"></i>
+                  </a>
+                  <div style="position:relative;">
+                    <button onclick="toggleMenu(<?= $pid ?>, event)"
+                            style="background:#f3f4f6;border:none;width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;cursor:pointer;color:#6b7280;">
+                      <i class="fa fa-ellipsis-v" style="font-size:.78rem;"></i>
+                    </button>
+                    <div id="menu-<?= $pid ?>" style="display:none;position:absolute;right:0;top:34px;background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.15);min-width:150px;z-index:100;">
+                      <a href="patient-documents.php?patient_id=<?= $pid ?>"
+                         style="display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:.82rem;color:#374151;text-decoration:none;">
+                        <i class="fa fa-file-text-o" style="color:#6b7280;width:14px;"></i> Documents
+                      </a>
+                      <a href="patient-details.php?id=<?= $pid ?>"
+                         style="display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:.82rem;color:#374151;text-decoration:none;">
+                        <i class="fa fa-user" style="color:#6b7280;width:14px;"></i> Full Profile
+                      </a>
+                      <div style="border-top:1px solid #f3f4f6;"></div>
+                      <a href="#" onclick="removePatient(<?= $pid ?>); return false;"
+                         style="display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:.82rem;color:#dc3545;text-decoration:none;">
+                        <i class="fa fa-times" style="width:14px;"></i> Remove
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      <?php endif; ?>
+
+    </div>
+  </div>
+
+</main>
+
+<!-- ══════════════════════════════════════════
+     ADD PATIENT MODAL
+══════════════════════════════════════════ -->
 <div class="modal fade" id="addPatientModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content" style="border-radius:14px; overflow:hidden; border:none;">
-      <div class="modal-header-blue d-flex align-items-center justify-content-between">
-        <h5 class="mb-0"><i class="fa fa-user-plus me-2"></i> Add Patient</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body p-4">
+    <div class="modal-content" style="border-radius:14px;overflow:hidden;border:none;box-shadow:0 12px 40px rgba(0,0,0,.18);">
 
-        <!-- Step 1: Search -->
+      <!-- Header -->
+      <div class="modal-hdr">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <i class="fa fa-user-plus" style="font-size:1rem;"></i>
+          <span style="font-weight:700;font-size:1rem;">Add Patient</span>
+        </div>
+        <button class="close-btn" data-dismiss="modal" data-bs-dismiss="modal">
+          <i class="fa fa-times"></i>
+        </button>
+      </div>
+
+      <div class="modal-body" style="padding:20px 24px;">
+
+        <!-- STEP 1 — search -->
         <div id="step1">
-          <div class="step-indicator mb-3">
+          <div class="step-dots">
             <div class="step-dot active"></div>
             <div class="step-dot" id="dot2"></div>
           </div>
-          <p class="text-muted mb-3" style="font-size:13.5px;">
-            Enter the patient's <strong>mobile number, email, or ABHA address</strong>.<br>
-            If they're already on the portal, we'll find them instantly.
+          <p style="font-size:.84rem;color:#6b7280;margin-bottom:12px;">
+            Search by <strong>mobile, email, or ABHA address</strong>. If already on the portal, we'll find them instantly.
           </p>
-          <div class="input-group mb-2">
-            <span class="input-group-text"><i class="fa fa-search"></i></span>
-            <input type="text" class="form-control" id="addSearchInput"
-                   placeholder="Mobile / Email / ABHA address"
-                   oninput="debouncePortalSearch(this.value)">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
+            <div style="position:relative;flex:1;">
+              <input type="text" id="addSearchInput" class="form-control"
+                     placeholder="Mobile / Email / ABHA address"
+                     style="padding-left:34px;"
+                     oninput="debouncePortalSearch(this.value)">
+              <i class="fa fa-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#9ca3af;"></i>
+            </div>
           </div>
           <div id="portalSearchResults"></div>
-          <div id="notFoundHint" style="display:none;" class="mt-3">
-            <div class="alert alert-warning py-2 mb-2" style="font-size:13px;">
-              <i class="fa fa-info-circle"></i>
-              No patient found on portal. You can add them via their <strong>ABHA ID or address</strong>.
+          <div id="notFoundHint" style="display:none;margin-top:12px;">
+            <div class="alert alert-warning" style="font-size:.82rem;padding:10px 14px;border-radius:8px;">
+              <i class="fa fa-info-circle"></i> No match on portal.
+              You can add via ABHA ID instead.
             </div>
             <button class="btn btn-outline-primary w-100" onclick="showAbhaStep()">
-              <i class="fa fa-id-card me-1"></i> Add via ABHA ID
+              <i class="fa fa-id-card" style="margin-right:6px;"></i> Add via ABHA ID
             </button>
           </div>
         </div>
 
-        <!-- Step 2: ABHA entry (shown when not in portal) -->
+        <!-- STEP 2 — ABHA -->
         <div id="step2" style="display:none;">
-          <div class="step-indicator mb-3">
+          <div class="step-dots">
             <div class="step-dot"></div>
             <div class="step-dot active"></div>
           </div>
-          <button class="btn btn-sm btn-link ps-0 mb-3" onclick="backToStep1()">
+          <button class="btn btn-sm btn-link" style="padding:0;margin-bottom:12px;" onclick="backToStep1()">
             <i class="fa fa-arrow-left"></i> Back
           </button>
-          <p class="text-muted mb-3" style="font-size:13.5px;">
+          <p style="font-size:.84rem;color:#6b7280;margin-bottom:12px;">
             Enter the patient's <strong>ABHA number</strong> (14-digit) or
             <strong>ABHA address</strong> (e.g. <code>name@abdm</code>).
-            Their medical history will be fetched via ABDM.
+            Their records will be fetched from ABDM.
           </p>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">ABHA Number / Address</label>
-            <input type="text" class="form-control" id="abhaInput"
-                   placeholder="e.g. 91-1234-5678-9012 or name@abdm">
-            <div class="form-text">ABHA number format: XX-XXXX-XXXX-XXXX</div>
-          </div>
+          <label style="font-size:.8rem;font-weight:600;color:#374151;margin-bottom:4px;">ABHA Number / Address</label>
+          <input type="text" class="form-control" id="abhaInput"
+                 placeholder="91-1234-5678-9012  or  name@abdm"
+                 style="margin-bottom:6px;">
+          <div style="font-size:.72rem;color:#9ca3af;margin-bottom:12px;">Format: XX-XXXX-XXXX-XXXX</div>
           <div id="abhaMsg"></div>
-          <button class="btn btn-primary w-100 mt-2" onclick="addViaAbha()">
-            <i class="fa fa-user-plus me-1"></i> Fetch &amp; Add Patient
+          <button class="btn btn-primary w-100" onclick="addViaAbha()">
+            <i class="fa fa-user-plus" style="margin-right:6px;"></i> Fetch &amp; Add Patient
           </button>
         </div>
 
@@ -423,86 +420,83 @@ $total = count($patients);
   </div>
 </div>
 
-<!-- Confirm add portal patient -->
+<!-- ══════════════════════════════════════════
+     CONFIRM ADD (portal patient)
+══════════════════════════════════════════ -->
 <div class="modal fade" id="confirmAddModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered modal-sm">
-    <div class="modal-content" style="border-radius:14px; border:none;">
-      <div class="modal-body p-4 text-center">
-        <div id="confirmAvatar" style="
-          width:64px;height:64px;border-radius:50%;
-          background:#7b8ea8;margin:0 auto 12px;
-          display:flex;align-items:center;justify-content:center;">
-          <i class="fa fa-user" style="color:#fff;font-size:30px;"></i>
+  <div class="modal-dialog modal-dialog-centered" style="max-width:340px;">
+    <div class="modal-content" style="border-radius:14px;border:none;box-shadow:0 12px 40px rgba(0,0,0,.18);">
+      <div class="modal-body" style="padding:28px 24px;text-align:center;">
+        <div style="width:64px;height:64px;border-radius:50%;background:#7b8ea8;margin:0 auto 12px;
+                    display:flex;align-items:center;justify-content:center;">
+          <i class="fa fa-user" style="color:#fff;font-size:28px;"></i>
         </div>
-        <h6 id="confirmName" class="fw-bold mb-1"></h6>
-        <p id="confirmMeta" class="text-muted mb-0" style="font-size:13px;"></p>
-        <p id="confirmAbha" class="text-primary mb-3" style="font-size:13px;"></p>
-        <div id="alreadyLinkedNote" class="alert alert-info py-2" style="font-size:13px; display:none;">
+        <h6 id="confirmName" style="font-weight:700;margin-bottom:4px;"></h6>
+        <p id="confirmMeta" style="color:#6b7280;font-size:.8rem;margin-bottom:2px;"></p>
+        <p id="confirmAbha" style="color:#0c74c5;font-size:.8rem;margin-bottom:14px;"></p>
+        <div id="alreadyLinkedNote" class="alert alert-info" style="font-size:.8rem;padding:8px 12px;display:none;border-radius:8px;">
           <i class="fa fa-check-circle"></i> Already in your patient list.
         </div>
-        <div class="d-flex gap-2 mt-2" id="confirmActions">
-          <button class="btn btn-secondary flex-fill" data-bs-dismiss="modal">Cancel</button>
+        <div style="display:flex;gap:10px;margin-top:6px;">
+          <button class="btn btn-secondary flex-fill" data-dismiss="modal" data-bs-dismiss="modal">Cancel</button>
           <button class="btn btn-primary flex-fill" id="confirmAddBtn" onclick="confirmAddPortal()">
-            <i class="fa fa-user-plus me-1"></i> Add
+            <i class="fa fa-user-plus" style="margin-right:5px;"></i> Add
           </button>
         </div>
       </div>
     </div>
   </div>
-</main>
+</div>
 
 <?php include("../footer.php") ?>
 
 <script>
-let _selectedPortalPatient = null;
-let _searchTimer = null;
-let _portalTimer = null;
+var _sel = null, _st = null, _pt = null;
 
-// ── Live page search (debounced) ──────────────────────────────
-function debounceSearch(val) {
-  clearTimeout(_searchTimer);
-  _searchTimer = setTimeout(() => {
-    document.getElementById('searchForm').submit();
-  }, 600);
+// ── Live search on page ──────────────────────────────────────
+function debounceSearch(v) {
+  clearTimeout(_st);
+  _st = setTimeout(function(){ document.getElementById('searchForm').submit(); }, 600);
 }
 
-// ── Dropdown menus ────────────────────────────────────────────
-function toggleCardMenu(pid, e) {
+// ── Row action menu ──────────────────────────────────────────
+function toggleMenu(pid, e) {
   e.stopPropagation();
-  document.querySelectorAll('.patient-dropdown.show').forEach(d => {
-    if (d.id !== 'dd-' + pid) d.classList.remove('show');
+  document.querySelectorAll('[id^="menu-"]').forEach(function(m){
+    if (m.id !== 'menu-' + pid) m.style.display = 'none';
   });
-  document.getElementById('dd-' + pid).classList.toggle('show');
+  var m = document.getElementById('menu-' + pid);
+  m.style.display = m.style.display === 'block' ? 'none' : 'block';
 }
-document.addEventListener('click', () => {
-  document.querySelectorAll('.patient-dropdown.show').forEach(d => d.classList.remove('show'));
+document.addEventListener('click', function(){
+  document.querySelectorAll('[id^="menu-"]').forEach(function(m){ m.style.display = 'none'; });
 });
 
-// ── Remove patient (from doctor's list only) ──────────────────
+// ── Remove patient ───────────────────────────────────────────
 function removePatient(pid) {
-  if (!confirm('Remove this patient from your list? This will not delete their account.')) return;
+  if (!confirm('Remove this patient from your list?')) return;
   fetch('<?= BASE_URL ?>doctor/api/patient-remove.php', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({patient_id: pid})
-  })
-  .then(r => r.json())
-  .then(d => {
+  }).then(r=>r.json()).then(function(d){
     if (d.success) {
-      const el = document.getElementById('pc-' + pid);
-      el && el.remove();
-    } else {
-      alert(d.error || 'Failed to remove patient.');
-    }
+      var row = document.getElementById('pr-' + pid);
+      if (row) row.remove();
+    } else { alert(d.error || 'Failed.'); }
   });
 }
 
-// ── Add modal ─────────────────────────────────────────────────
+// ── Add modal ────────────────────────────────────────────────
 function openAddModal() {
   resetAddModal();
-  new bootstrap.Modal(document.getElementById('addPatientModal')).show();
+  var el = document.getElementById('addPatientModal');
+  if (typeof bootstrap !== 'undefined') {
+    new bootstrap.Modal(el).show();
+  } else {
+    // Bootstrap 4
+    $(el).modal('show');
+  }
 }
-
 function resetAddModal() {
   document.getElementById('step1').style.display = '';
   document.getElementById('step2').style.display = 'none';
@@ -512,153 +506,133 @@ function resetAddModal() {
   document.getElementById('abhaInput').value = '';
   document.getElementById('abhaMsg').innerHTML = '';
   document.getElementById('dot2').classList.remove('active');
-  _selectedPortalPatient = null;
+  _sel = null;
 }
 
-// ── Portal search ─────────────────────────────────────────────
-function debouncePortalSearch(val) {
-  clearTimeout(_portalTimer);
+// ── Portal search ────────────────────────────────────────────
+function debouncePortalSearch(v) {
+  clearTimeout(_pt);
   document.getElementById('notFoundHint').style.display = 'none';
   document.getElementById('portalSearchResults').innerHTML = '';
-  if (val.length < 3) return;
-  _portalTimer = setTimeout(() => portalSearch(val), 500);
+  if (v.length < 3) return;
+  _pt = setTimeout(function(){ portalSearch(v); }, 500);
 }
 
 function portalSearch(q) {
-  const box = document.getElementById('portalSearchResults');
-  box.innerHTML = '<div class="text-center text-muted py-2"><i class="fa fa-spinner fa-spin"></i></div>';
-
+  var box = document.getElementById('portalSearchResults');
+  box.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:10px;"><i class="fa fa-spinner fa-spin"></i></div>';
   fetch('<?= BASE_URL ?>doctor/api/patient-search.php?q=' + encodeURIComponent(q))
-    .then(r => r.json())
-    .then(data => {
+    .then(function(r){ return r.json(); })
+    .then(function(data){
       box.innerHTML = '';
-      if (!data.success) {
-        box.innerHTML = '<div class="text-danger small mt-1">' + (data.error || 'Error') + '</div>';
-        return;
-      }
-      if (!data.found || data.patients.length === 0) {
+      if (!data.success) { box.innerHTML = '<div style="color:#dc3545;font-size:.8rem;">' + esc(data.error||'Error') + '</div>'; return; }
+      if (!data.found || !data.patients.length) {
         document.getElementById('notFoundHint').style.display = '';
         return;
       }
-      data.patients.forEach(p => {
-        const card = document.createElement('div');
+      data.patients.forEach(function(p){
+        var card = document.createElement('div');
         card.className = 'search-result-card';
-        card.innerHTML = `
-          <div class="sr-avatar"><i class="fa fa-user"></i></div>
-          <div style="flex:1;min-width:0;">
-            <div style="font-weight:700;font-size:14px;">${escHtml(p.name)}</div>
-            <div style="font-size:12.5px;color:#555;">${escHtml(p.mobile || '')} ${p.email ? '· ' + escHtml(p.email) : ''}</div>
-            ${p.abha_address ? '<div style="font-size:12px;color:#0c74c5;">ABHA: ' + escHtml(p.abha_address) + '</div>' : ''}
-          </div>
-          ${p.already_linked ? '<span class="badge bg-success">Added</span>' : ''}
-        `;
-        card.onclick = () => showConfirmAdd(p);
+        card.innerHTML =
+          '<div style="width:40px;height:40px;border-radius:50%;background:#7b8ea8;display:flex;align-items:center;justify-content:center;flex-shrink:0;">' +
+            '<i class="fa fa-user" style="color:#fff;font-size:18px;"></i>' +
+          '</div>' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div style="font-weight:700;font-size:.84rem;">' + esc(p.name) + '</div>' +
+            '<div style="font-size:.72rem;color:#6b7280;">' + esc(p.mobile||'') + (p.email ? ' · ' + esc(p.email) : '') + '</div>' +
+            (p.abha_address ? '<div style="font-size:.7rem;color:#0c74c5;">ABHA: ' + esc(p.abha_address) + '</div>' : '') +
+          '</div>' +
+          (p.already_linked ? '<span style="background:#d4edda;color:#155724;font-size:.68rem;border-radius:10px;padding:2px 8px;font-weight:600;">Added</span>' : '');
+        card.onclick = function(){ showConfirmAdd(p); };
         box.appendChild(card);
       });
     })
-    .catch(() => { box.innerHTML = '<div class="text-danger small">Search failed.</div>'; });
+    .catch(function(){ box.innerHTML = '<div style="color:#dc3545;font-size:.8rem;">Search failed.</div>'; });
 }
 
 function showConfirmAdd(p) {
-  _selectedPortalPatient = p;
+  _sel = p;
   document.getElementById('confirmName').textContent = p.name;
-  document.getElementById('confirmMeta').textContent =
-    [p.mobile, p.gender, p.blood_group].filter(Boolean).join(' · ');
+  document.getElementById('confirmMeta').textContent = [p.mobile, p.gender, p.blood_group].filter(Boolean).join(' · ');
   document.getElementById('confirmAbha').textContent = p.abha_address ? 'ABHA: ' + p.abha_address : '';
+  var note = document.getElementById('alreadyLinkedNote');
+  var btn  = document.getElementById('confirmAddBtn');
+  note.style.display = p.already_linked ? '' : 'none';
+  btn.style.display  = p.already_linked ? 'none' : '';
 
-  const note = document.getElementById('alreadyLinkedNote');
-  const btn  = document.getElementById('confirmAddBtn');
-  if (p.already_linked) {
-    note.style.display = '';
-    btn.style.display = 'none';
+  var addEl = document.getElementById('addPatientModal');
+  var confEl = document.getElementById('confirmAddModal');
+  if (typeof bootstrap !== 'undefined') {
+    bootstrap.Modal.getInstance(addEl) && bootstrap.Modal.getInstance(addEl).hide();
+    new bootstrap.Modal(confEl).show();
   } else {
-    note.style.display = 'none';
-    btn.style.display = '';
+    $(addEl).modal('hide');
+    $(confEl).modal('show');
   }
-
-  bootstrap.Modal.getInstance(document.getElementById('addPatientModal'))?.hide();
-  new bootstrap.Modal(document.getElementById('confirmAddModal')).show();
 }
 
 function confirmAddPortal() {
-  if (!_selectedPortalPatient) return;
-  const btn = document.getElementById('confirmAddBtn');
+  if (!_sel) return;
+  var btn = document.getElementById('confirmAddBtn');
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Adding…';
-
   fetch('<?= BASE_URL ?>doctor/api/patient-add.php', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({mode: 'portal', patient_id: _selectedPortalPatient.id})
-  })
-  .then(r => r.json())
-  .then(d => {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({mode:'portal', patient_id: _sel.id})
+  }).then(function(r){ return r.json(); }).then(function(d){
     if (d.success) {
-      bootstrap.Modal.getInstance(document.getElementById('confirmAddModal'))?.hide();
+      var confEl = document.getElementById('confirmAddModal');
+      if (typeof bootstrap !== 'undefined') { bootstrap.Modal.getInstance(confEl) && bootstrap.Modal.getInstance(confEl).hide(); }
+      else { $(confEl).modal('hide'); }
       window.location.reload();
     } else {
       btn.disabled = false;
-      btn.innerHTML = '<i class="fa fa-user-plus me-1"></i> Add';
-      alert(d.error || 'Failed to add patient.');
+      btn.innerHTML = '<i class="fa fa-user-plus" style="margin-right:5px;"></i> Add';
+      alert(d.error || 'Failed.');
     }
   });
 }
 
-// ── ABHA step ─────────────────────────────────────────────────
+// ── ABHA step ────────────────────────────────────────────────
 function showAbhaStep() {
   document.getElementById('step1').style.display = 'none';
   document.getElementById('step2').style.display = '';
   document.getElementById('dot2').classList.add('active');
 }
-
 function backToStep1() {
   document.getElementById('step2').style.display = 'none';
   document.getElementById('step1').style.display = '';
   document.getElementById('dot2').classList.remove('active');
+  document.getElementById('abhaMsg').innerHTML = '';
 }
-
 function addViaAbha() {
-  const abha  = document.getElementById('abhaInput').value.trim();
-  const msgEl = document.getElementById('abhaMsg');
-
-  if (!abha) {
-    msgEl.innerHTML = '<div class="alert alert-danger py-2">Please enter ABHA number or address.</div>';
-    return;
-  }
-
-  msgEl.innerHTML = '<div class="text-center text-muted"><i class="fa fa-spinner fa-spin"></i> Searching ABDM…</div>';
-
+  var abha = document.getElementById('abhaInput').value.trim();
+  var msg  = document.getElementById('abhaMsg');
+  if (!abha) { msg.innerHTML = '<div class="alert alert-danger" style="font-size:.8rem;padding:8px 12px;border-radius:8px;">Please enter ABHA number or address.</div>'; return; }
+  msg.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:8px;"><i class="fa fa-spinner fa-spin"></i> Searching ABDM…</div>';
   fetch('<?= BASE_URL ?>doctor/api/patient-add.php', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({mode: 'abha', abha: abha})
-  })
-  .then(r => r.json())
-  .then(d => {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({mode:'abha', abha: abha})
+  }).then(function(r){ return r.json(); }).then(function(d){
     if (d.success) {
-      const src = d.source === 'portal' ? 'Found on portal' :
-                  d.source === 'abha_new' ? 'Added via ABHA — will sync when patient registers' : 'Added';
-      msgEl.innerHTML = `<div class="alert alert-success py-2">
-        <i class="fa fa-check-circle"></i> <strong>${escHtml(d.name)}</strong> added!<br>
-        <small class="text-muted">${src}${d.note ? '<br>' + escHtml(d.note) : ''}</small>
-      </div>`;
-      setTimeout(() => {
-        bootstrap.Modal.getInstance(document.getElementById('addPatientModal'))?.hide();
+      msg.innerHTML = '<div class="alert alert-success" style="font-size:.8rem;padding:8px 12px;border-radius:8px;"><i class="fa fa-check-circle"></i> <strong>' + esc(d.name) + '</strong> added!' + (d.note ? '<br><small>' + esc(d.note) + '</small>' : '') + '</div>';
+      setTimeout(function(){
+        var el = document.getElementById('addPatientModal');
+        if (typeof bootstrap !== 'undefined') { bootstrap.Modal.getInstance(el) && bootstrap.Modal.getInstance(el).hide(); }
+        else { $(el).modal('hide'); }
         window.location.reload();
       }, 1800);
     } else {
-      msgEl.innerHTML = '<div class="alert alert-danger py-2"><i class="fa fa-times-circle"></i> ' +
-        escHtml(d.error || 'Failed to add patient.') + '</div>';
+      msg.innerHTML = '<div class="alert alert-danger" style="font-size:.8rem;padding:8px 12px;border-radius:8px;"><i class="fa fa-times-circle"></i> ' + esc(d.error||'Failed.') + '</div>';
     }
-  })
-  .catch(() => {
-    msgEl.innerHTML = '<div class="alert alert-danger py-2">Network error. Please try again.</div>';
+  }).catch(function(){
+    msg.innerHTML = '<div class="alert alert-danger" style="font-size:.8rem;padding:8px 12px;border-radius:8px;">Network error. Try again.</div>';
   });
 }
 
-function escHtml(str) {
-  if (!str) return '';
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>
 </body>
