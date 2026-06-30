@@ -11,10 +11,14 @@ if (!defined('BASE_URL')) {
 }
 require_once __DIR__ . '/../../lib/JWT.php';
 
-function doctor_jwt_guard(): array
+/**
+ * @param bool $return_null  If true, return null on auth failure instead of redirecting (for API endpoints).
+ */
+function doctor_jwt_guard(bool $return_null = false): ?array
 {
     $secret = defined('JWT_SECRET') ? JWT_SECRET : '';
     if (!$secret) {
+        if ($return_null) return null;
         header('Location: ' . BASE_URL . 'doctor-login.php?err=config');
         exit();
     }
@@ -30,6 +34,7 @@ function doctor_jwt_guard(): array
     }
 
     if (!$token) {
+        if ($return_null) return null;
         _doctor_redirect_login('session_expired');
     }
 
@@ -39,11 +44,13 @@ function doctor_jwt_guard(): array
         // Try refresh token before giving up
         $payload = _try_refresh_doctor_token($secret);
         if (!$payload) {
+            if ($return_null) return null;
             _doctor_redirect_login('session_expired');
         }
     }
 
     if (($payload['role'] ?? '') !== 'doctor') {
+        if ($return_null) return null;
         _doctor_redirect_login('unauthorized');
     }
 

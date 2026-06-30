@@ -3,506 +3,664 @@ include_once(__DIR__ . "/../config/connect.php");
 include_once(__DIR__ . "/../util/function.php");
 
 require_once(__DIR__ . "/auth/guard.php");
-$jwt_doctor  = doctor_jwt_guard();
-$doctor_id   = (int)$jwt_doctor['sub'];
+$jwt_doctor = doctor_jwt_guard();
+$doctor_id  = (int)$jwt_doctor['sub'];
 $doctor_name = $jwt_doctor['name'] ?? 'Doctor';
 
-// Get doctor's profile image and details
-$doctor_sql = "SELECT name, email, profile_image, phone FROM doctors WHERE id = ?";
-$doctor_stmt = $conn->prepare($doctor_sql);
-$doctor_stmt->bind_param('i', $doctor_id);
-$doctor_stmt->execute();
-$doctor_result = $doctor_stmt->get_result();
-$doctor_data = $doctor_result->fetch_assoc();
+// Ensure doctor_patients table exists (graceful fallback if migration not yet run)
+$conn->query("
+    CREATE TABLE IF NOT EXISTS `doctor_patients` (
+      `id`           INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      `doctor_id`    INT UNSIGNED NOT NULL,
+      `patient_id`   INT UNSIGNED NOT NULL,
+      `added_at`     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      `added_via`    ENUM('appointment','manual','abha') NOT NULL DEFAULT 'manual',
+      `abha_fetched` TINYINT(1)   NOT NULL DEFAULT 0,
+      PRIMARY KEY (`id`),
+      UNIQUE KEY `unique_link` (`doctor_id`,`patient_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+");
 
-$doctor_name = $doctor_data['name'] ?? 'Doctor';
-$doctor_email = $doctor_data['email'] ?? '';
-$doctor_profile_image = !empty($doctor_data['profile_image']) ? $doctor_data['profile_image'] : 'assets/img/dummy.png';
-$doctor_phone = $doctor_data['phone'] ?? '';
+// Auto-import existing appointment patients into doctor_patients
+$conn->query("
+    INSERT IGNORE INTO doctor_patients (doctor_id, patient_id, added_via)
+    SELECT DISTINCT a.doctor_id, a.user_id, 'appointment'
+    FROM appointments a
+    WHERE a.doctor_id = $doctor_id
+");
 
-// Handle file upload for patients
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['upload_file'])) {
-    $patient_id = intval($_POST['patient_id']);
-    
-    if (isset($_FILES['patient_file']) && $_FILES['patient_file']['error'] == 0) {
-        $allowed_types = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
-        $file_type = $_FILES['patient_file']['type'];
-        $file_name = $_FILES['patient_file']['name'];
-        $file_tmp = $_FILES['patient_file']['tmp_name'];
-        $file_size = $_FILES['patient_file']['size'];
-        
-        if (in_array($file_type, $allowed_types) && $file_size <= 5242880) { // 5MB max
-            $file_ext = pathinfo($file_name, PATHINFO_EXTENSION);
-            $new_file_name = 'patient_doc_' . $patient_id . '_' . time() . '.' . $file_ext;
-            $upload_path = '../uploads/patient_documents/' . $new_file_name;
-            
-            if (move_uploaded_file($file_tmp, $upload_path)) {
-                // Insert document record into database
-                $doc_sql = "INSERT INTO patient_documents (patient_id, doctor_id, document_name, file_path, file_type) 
-                           VALUES (?, ?, ?, ?, ?)";
-                $doc_stmt = $conn->prepare($doc_sql);
-                $doc_stmt->bind_param('iisss', $patient_id, $doctor_id, $file_name, $upload_path, $file_type);
-                
-                if ($doc_stmt->execute()) {
-                    $success_message = "Document uploaded successfully!";
-                } else {
-                    $error_message = "Failed to save document record.";
-                }
-            } else {
-                $error_message = "Failed to upload file.";
-            }
-        } else {
-            $error_message = "Invalid file type or size too large (max 5MB). Only PDF, JPG, PNG allowed.";
-        }
-    }
-}
+// Search / filter
+$search = trim($_GET['search'] ?? '');
 
-// Handle patient deletion
-if (isset($_GET['delete_patient'])) {
-    $patient_id = intval($_GET['delete_patient']);
-    
-    // Check if patient belongs to this doctor
-    $check_sql = "SELECT u.id FROM users u 
-                  INNER JOIN appointments a ON u.id = a.user_id 
-                  WHERE u.id = ? AND a.doctor_id = ?";
-    $check_stmt = $conn->prepare($check_sql);
-    $check_stmt->bind_param('ii', $patient_id, $doctor_id);
-    $check_stmt->execute();
-    $check_result = $check_stmt->get_result();
-    
-    if ($check_result->num_rows > 0) {
-        // Soft delete - update status
-        $delete_sql = "UPDATE appointments SET status = 'Cancelled' 
-                      WHERE user_id = ? AND doctor_id = ?";
-        $delete_stmt = $conn->prepare($delete_sql);
-        $delete_stmt->bind_param('ii', $patient_id, $doctor_id);
-        
-        if ($delete_stmt->execute()) {
-            $success_message = "Patient appointment cancelled successfully!";
-        } else {
-            $error_message = "Failed to cancel patient appointment.";
-        }
-    }
-}
-
-// Get filter parameters
-$status_filter = $_GET['status'] ?? 'all';
-$search_query = $_GET['search'] ?? '';
-
-// Build query for patients
-$where_conditions = ["a.doctor_id = ?"];
-$params = [$doctor_id];
-$types = "i";
-
-if ($status_filter != 'all' && !empty($status_filter)) {
-    $where_conditions[] = "a.status = ?";
-    $params[] = $status_filter;
-    $types .= "s";
-}
-
-if (!empty($search_query)) {
-    $where_conditions[] = "(u.name LIKE ? OR u.email LIKE ? OR u.mobile LIKE ?)";
-    $search_param = "%" . $search_query . "%";
-    $params[] = $search_param;
-    $params[] = $search_param;
-    $params[] = $search_param;
-    $types .= "sss";
-}
-
-$where_sql = "WHERE " . implode(" AND ", $where_conditions);
-
-// Get patients with their latest appointment
-$patients_sql = "
-    SELECT 
-        u.id as patient_id,
-        u.name as patient_name,
-        u.email as patient_email,
-        u.mobile as patient_phone,
-        u.profile_pic as patient_image,
-        u.blood_group,
+// Fetch all patients linked to this doctor
+$sql = "
+    SELECT DISTINCT
+        u.id            AS patient_id,
+        u.name          AS first_name,
+        u.last_name,
+        u.email,
+        u.mobile,
+        u.profile_pic,
         u.gender,
+        u.blood_group,
         u.dob,
-        a.id as appointment_id,
-        a.appointment_date,
-        a.appointment_time,
-        a.purpose,
-        a.status as appointment_status,
-        a.created_at as appointment_created,
-        MAX(a.appointment_date) as latest_appointment,
-        COUNT(DISTINCT a.id) as total_appointments
+        u.abha_address,
+        u.abha_number,
+        u.abha_linked,
+        u.abha_verified,
+        dp.added_via,
+        dp.added_at,
+        (SELECT COUNT(*) FROM appointments a
+         WHERE a.user_id = u.id AND a.doctor_id = ?) AS total_appointments,
+        (SELECT MAX(a2.appointment_date) FROM appointments a2
+         WHERE a2.user_id = u.id AND a2.doctor_id = ?) AS last_appointment,
+        (SELECT a3.status FROM appointments a3
+         WHERE a3.user_id = u.id AND a3.doctor_id = ?
+         ORDER BY a3.appointment_date DESC LIMIT 1) AS last_status
     FROM users u
-    INNER JOIN appointments a ON u.id = a.user_id
-    $where_sql
-    GROUP BY u.id, u.name, u.email, u.mobile
-    ORDER BY latest_appointment DESC, u.name ASC
+    INNER JOIN doctor_patients dp ON dp.patient_id = u.id AND dp.doctor_id = ?
 ";
+$types  = 'iiii';
+$params = [$doctor_id, $doctor_id, $doctor_id, $doctor_id];
 
-$patients_stmt = $conn->prepare($patients_sql);
-
-if (!empty($params)) {
-    $patients_stmt->bind_param($types, ...$params);
+if ($search !== '') {
+    $sql   .= " WHERE (u.name LIKE ? OR u.last_name LIKE ? OR u.mobile LIKE ? OR u.email LIKE ? OR u.abha_address LIKE ?)";
+    $like   = "%$search%";
+    $types .= 'sssss';
+    $params = array_merge($params, [$like, $like, $like, $like, $like]);
 }
+$sql .= " ORDER BY dp.added_at DESC";
 
-$patients_stmt->execute();
-$patients_result = $patients_stmt->get_result();
+$stmt = $conn->prepare($sql);
+$stmt->bind_param($types, ...$params);
+$stmt->execute();
+$patients = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
-// Get document counts for each patient
-$patient_docs = [];
-while ($patient = $patients_result->fetch_assoc()) {
-    $doc_sql = "SELECT COUNT(*) as doc_count FROM patient_documents 
-                WHERE patient_id = ? AND doctor_id = ?";
-    $doc_stmt = $conn->prepare($doc_sql);
-    $doc_stmt->bind_param('ii', $patient['patient_id'], $doctor_id);
-    $doc_stmt->execute();
-    $doc_result = $doc_stmt->get_result();
-    $doc_data = $doc_result->fetch_assoc();
-    
-    $patient['document_count'] = $doc_data['doc_count'] ?? 0;
-    $patient_docs[] = $patient;
-}
-
-// Get appointment statistics
-$stats_sql = "
-    SELECT 
-        COUNT(DISTINCT u.id) as total_patients,
-        SUM(CASE WHEN a.status = 'Pending' THEN 1 ELSE 0 END) as pending_count,
-        SUM(CASE WHEN a.status = 'Completed' THEN 1 ELSE 0 END) as completed_count,
-        SUM(CASE WHEN a.status = 'Cancelled' THEN 1 ELSE 0 END) as cancelled_count
-    FROM users u
-    INNER JOIN appointments a ON u.id = a.user_id
-    WHERE a.doctor_id = ?
-";
-
-$stats_stmt = $conn->prepare($stats_sql);
-$stats_stmt->bind_param('i', $doctor_id);
-$stats_stmt->execute();
-$stats_result = $stats_stmt->get_result();
-$stats = $stats_result->fetch_assoc();
+$total = count($patients);
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="author" content="modinatheme">
-  <meta name="description" content="">
-  <title>REJUVENATE Digital Health - My Patients</title>
+  <title>Patient List — REJUVENATE Digital Health</title>
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
   <style>
-    .btn-upload {
-      background-color: green;
+    /* ── Patient List Page ───────────────────────────────────── */
+    .pl-header {
+      background: linear-gradient(135deg, #0c74c5 0%, #0a5fa8 100%);
       color: #fff;
-      font-size: 12px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-radius: 0 0 18px 18px;
+      margin-bottom: 16px;
     }
-    .btn-upload:hover {
-      background-color: darkgreen;
-    }
-    .btn-delete {
-      font-size: 12px;
-      background-color: red;
+    .pl-header-title { font-size: 18px; font-weight: 700; flex: 1; }
+    .pl-count-badge {
+      background: rgba(255,255,255,0.25);
+      border: 2px solid #fff;
       color: #fff;
+      font-weight: 700;
+      font-size: 14px;
+      width: 38px; height: 38px;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
     }
-    .btn-delete:hover {
-      background-color: darkred;
+
+    /* Search bar row */
+    .pl-search-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 4px 14px;
     }
-    .sidebar {
-      background: #f8f9fa;
-      padding: 20px;
+    .pl-search-wrap {
+      flex: 1;
+      position: relative;
+    }
+    .pl-search-wrap input {
+      width: 100%;
+      border: 1.5px solid #cdd8e8;
       border-radius: 10px;
-      height: fit-content;
+      padding: 10px 40px 10px 14px;
+      font-size: 14px;
+      outline: none;
+      background: #f5f8fd;
     }
-    .sidebar a {
-      display: block;
-      padding: 10px 15px;
-      margin: 5px 0;
-      color: #333;
+    .pl-search-wrap input:focus { border-color: #0c74c5; background: #fff; }
+    .pl-search-wrap .search-icon {
+      position: absolute; right: 12px; top: 50%;
+      transform: translateY(-50%);
+      color: #888; font-size: 16px; cursor: pointer;
+    }
+    .pl-btn-add {
+      width: 42px; height: 42px; border-radius: 50%;
+      background: #e74c3c; color: #fff;
+      border: none; font-size: 22px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(231,76,60,.35);
+    }
+    .pl-btn-refresh {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: transparent; color: #0c74c5;
+      border: 2px solid #0c74c5; font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0;
       text-decoration: none;
-      border-radius: 5px;
     }
-    .sidebar a:hover, .sidebar a.active {
-      background: #02c9b8;
-      color: white;
-    }
-    .userd-image {
-      width: 100px;
-      height: 100px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 3px solid #02c9b8;
-    }
-    .profile-card {
-      background: white;
-      padding: 25px;
+    .pl-btn-refresh:hover { background: #0c74c5; color: #fff; }
+
+    /* Patient card */
+    .patient-card {
+      background: #dce8f5;
       border-radius: 10px;
-      border: 1px solid #dee2e6;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-left: 4px solid #e91e63;
+      position: relative;
+      transition: box-shadow .15s;
     }
-    .stats-card {
-      background: white;
-      padding: 15px;
-      border-radius: 8px;
-box-shadow: rgba(50, 50, 93, 0.25) 0px 2px 5px -1px, rgba(0, 0, 0, 0.3) 0px 1px 3px -1px;      margin-bottom: 15px;
+    .patient-card:hover { box-shadow: 0 4px 14px rgba(12,116,197,.18); }
+    .patient-avatar {
+      width: 50px; height: 50px; border-radius: 50%;
+      background: #7b8ea8;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; overflow: hidden;
     }
-    .badge-status {
-      padding: 5px 10px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 500;
+    .patient-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .patient-avatar .fa { font-size: 26px; color: #fff; }
+    .patient-info { flex: 1; min-width: 0; }
+    .patient-name {
+      font-size: 15px; font-weight: 700; color: #1a2e44;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .badge-pending { background: #fff3cd; color: #856404; }
-    .badge-completed {
-    background-color: #e8f7ee; /* very light green */
-    color: #1f7a4a;            /* soft green text */
-}
-    .badge-cancelled { background: #f8d7da; color: #721c24; }
-    .filter-section {
-      background: #f8f9fa;
-      padding: 15px;
-      border-radius: 8px;
-      margin-bottom: 20px;
+    .patient-meta { font-size: 12.5px; color: #555; margin-top: 2px; line-height: 1.5; }
+    .patient-abha { font-size: 12px; color: #0c74c5; margin-top: 1px; }
+    .abha-badge {
+      display: inline-block;
+      background: #e8f5e9; color: #2e7d32;
+      font-size: 11px; border-radius: 4px;
+      padding: 1px 6px; margin-left: 4px;
     }
-    .menu-btn {
+    .patient-menu-btn {
+      background: none; border: none; cursor: pointer;
+      color: #555; font-size: 20px; padding: 4px 6px;
+      border-radius: 6px; flex-shrink: 0;
+    }
+    .patient-menu-btn:hover { background: rgba(0,0,0,.07); }
+
+    .patient-dropdown {
+      position: absolute; right: 14px; top: 54px;
+      background: #fff; border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.15);
+      min-width: 160px; z-index: 1000;
       display: none;
-      background: #02c9b8;
-      color: white;
-      padding: 10px 15px;
-      border-radius: 5px;
-      cursor: pointer;
-      margin-bottom: 15px;
     }
-    @media (max-width: 768px) {
-      .sidebar { display: none; }
-       .sidebar.show { display: block;         
-                display: block;
-                width: 280px;
-                height: 100vh;}
-      .menu-btn { display: block; }
-      .table-responsive { font-size: 12px; }
+    .patient-dropdown.show { display: block; }
+    .patient-dropdown a {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px; color: #333; text-decoration: none;
+      font-size: 14px;
     }
+    .patient-dropdown a:hover { background: #f0f6ff; }
+    .patient-dropdown a.text-danger { color: #dc3545 !important; }
+    .patient-dropdown hr { margin: 4px 0; border-color: #eee; }
+
+    .pl-empty {
+      text-align: center; padding: 60px 20px; color: #888;
+    }
+    .pl-empty .fa { font-size: 48px; color: #cdd8e8; margin-bottom: 12px; }
+
+    /* ── Add Patient Modal ──────────────────────────────────── */
+    .modal-header-blue {
+      background: linear-gradient(135deg, #0c74c5 0%, #0a5fa8 100%);
+      color: #fff; border-radius: 12px 12px 0 0;
+      padding: 16px 20px;
+    }
+    .modal-header-blue .btn-close { filter: brightness(0) invert(1); }
+    .search-result-card {
+      border: 1.5px solid #cdd8e8; border-radius: 10px;
+      padding: 12px; margin-top: 10px;
+      display: flex; align-items: center; gap: 12px;
+      background: #f5f8fd; cursor: pointer;
+      transition: border-color .15s;
+    }
+    .search-result-card:hover, .search-result-card.selected {
+      border-color: #0c74c5; background: #e8f2ff;
+    }
+    .search-result-card .sr-avatar {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: #7b8ea8; display: flex; align-items: center;
+      justify-content: center; flex-shrink: 0;
+    }
+    .search-result-card .sr-avatar .fa { color: #fff; font-size: 22px; }
+    .step-indicator {
+      display: flex; gap: 8px; margin-bottom: 16px;
+    }
+    .step-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #cdd8e8;
+    }
+    .step-dot.active { background: #0c74c5; }
   </style>
 </head>
-
 <body>
-  <?php $sidebar_active = 'patients'; include(__DIR__ . "/inc/sidebar.php"); ?>
+<?php $sidebar_active = 'patients'; include(__DIR__ . "/inc/sidebar.php"); ?>
 
-  <div class="doctor-content" style="min-height:100vh; padding:24px 20px 40px;">
-    <div style="max-width:1200px; margin:0 auto;">
+<div class="doctor-content" style="min-height:100vh; padding:0 0 60px;">
+  <div style="max-width:680px; margin:0 auto; padding:0 4px;">
 
-      <!-- Flash Messages -->
-      <?php if (!empty($success_message)): ?>
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-          <?= $success_message ?>
-          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-      <?php endif; ?>
-      <?php if (!empty($error_message)): ?>
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-          <?= $error_message ?>
-          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-      <?php endif; ?>
+    <!-- Blue header bar -->
+    <div class="pl-header">
+      <span class="pl-header-title">Patient List</span>
+      <div class="pl-count-badge"><?= $total ?></div>
+    </div>
 
-          <!-- Statistics Cards -->
-          <div class="row mb-4">
-            <div class="col-md-3 col-6">
-              <div class="stats-card text-center">
-                <h5>Total Patients</h5>
-                <h3 class="text-primary"><?= $stats['total_patients'] ?? 0 ?></h3>
-              </div>
-            </div>
-            <div class="col-md-3 col-6">
-              <div class="stats-card text-center">
-                <h5>Pending</h5>
-                <h3 class="text-warning"><?= $stats['pending_count'] ?? 0 ?></h3>
-              </div>
-            </div>
-            <div class="col-md-3 col-6">
-              <div class="stats-card text-center">
-                <h5>Completed</h5>
-                <h3 class="text-success"><?= $stats['completed_count'] ?? 0 ?></h3>
-              </div>
-            </div>
-            <div class="col-md-3 col-6">
-              <div class="stats-card text-center">
-                <h5>Cancelled</h5>
-                <h3 class="text-danger"><?= $stats['cancelled_count'] ?? 0 ?></h3>
-              </div>
-            </div>
+    <!-- Search + Add + Refresh -->
+    <div class="pl-search-row">
+      <div class="pl-search-wrap">
+        <form method="GET" action="" id="searchForm">
+          <input type="text" name="search" id="searchInput"
+                 value="<?= htmlspecialchars($search) ?>"
+                 placeholder="Search by name, mobile, ABHA…"
+                 oninput="debounceSearch(this.value)">
+          <span class="search-icon" onclick="document.getElementById('searchForm').submit()">
+            <i class="fa fa-search"></i>
+          </span>
+        </form>
+      </div>
+      <button class="pl-btn-add" onclick="openAddModal()" title="Add Patient">
+        <i class="fa fa-plus"></i>
+      </button>
+      <a href="my-patients.php" class="pl-btn-refresh" title="Refresh">
+        <i class="fa fa-refresh"></i>
+      </a>
+    </div>
+
+    <!-- Patient Cards -->
+    <?php if ($total === 0): ?>
+      <div class="pl-empty">
+        <div><i class="fa fa-users"></i></div>
+        <h5>No patients yet</h5>
+        <p>Tap <strong>+</strong> to add a patient by mobile, email, or ABHA ID.</p>
+      </div>
+    <?php else: ?>
+      <div id="patientList">
+        <?php foreach ($patients as $p):
+          $full_name  = trim(htmlspecialchars($p['first_name'] . ' ' . $p['last_name']));
+          $mobile     = htmlspecialchars($p['mobile'] ?? '');
+          $email      = htmlspecialchars($p['email'] ?? '');
+          $abha_addr  = htmlspecialchars($p['abha_address'] ?? '');
+          $pid        = (int)$p['patient_id'];
+          $has_pic    = !empty($p['profile_pic']);
+        ?>
+        <div class="patient-card" id="pc-<?= $pid ?>">
+          <div class="patient-avatar">
+            <?php if ($has_pic): ?>
+              <img src="<?= BASE_URL . htmlspecialchars($p['profile_pic']) ?>" alt="">
+            <?php else: ?>
+              <i class="fa fa-user"></i>
+            <?php endif; ?>
           </div>
-          
-          <!-- Filter Section -->
-          <div class="filter-section">
-            <form method="GET" action="" class="row g-3">
-              <div class="col-md-4">
-                <label>Filter by Status</label>
-                <select name="status" class="form-select">
-                  <option value="all" <?= $status_filter == 'all' ? 'selected' : '' ?>>All Status</option>
-                  <option value="Pending" <?= $status_filter == 'Pending' ? 'selected' : '' ?>>Pending</option>
-                  <option value="Completed" <?= $status_filter == 'Completed' ? 'selected' : '' ?>>Completed</option>
-                  <option value="Cancelled" <?= $status_filter == 'Cancelled' ? 'selected' : '' ?>>Cancelled</option>
-                </select>
-              </div>
-              <div class="col-md-4">
-                <label>Search Patients</label>
-                <input type="text" name="search" class="form-control" placeholder="Name, Email or Phone" value="<?= htmlspecialchars($search_query) ?>">
-              </div>
-              <div class="col-md-4 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary me-2">Apply Filter</button>
-                <a href="my-patients.php" class="btn btn-secondary">Reset</a>
-              </div>
-            </form>
-          </div>
-          
-          <!-- Patients Table -->
-          <div class="profile-card shadow">
-            <h4 class="mb-4">My Patients (<?= count($patient_docs) ?>)</h4>
-            
-            <?php if (count($patient_docs) == 0): ?>
-              <div class="text-center py-5">
-                <h5>No patients found</h5>
-                <p class="text-muted">You don't have any patients yet.</p>
+          <div class="patient-info">
+            <div class="patient-name"><?= $full_name ?></div>
+            <div class="patient-meta">
+              <?= $mobile ?>
+              <?php if ($email): ?>
+                <br><?= $email ?>
+              <?php endif; ?>
+            </div>
+            <?php if ($abha_addr): ?>
+              <div class="patient-abha">
+                ABHA: <?= $abha_addr ?>
+                <?php if ($p['abha_verified']): ?>
+                  <span class="abha-badge"><i class="fa fa-check"></i> Verified</span>
+                <?php endif; ?>
               </div>
             <?php else: ?>
-              <div class="table-responsive">
-                <table class="table table-striped">
-                  <thead>
-                    <tr>
-                      <th>Sr.</th>
-                      <th>Patient Info</th>
-                      <th>Contact</th>
-                      <th>Last Appointment</th>
-                      <th>Status</th>
-                      <th>Documents</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <?php foreach ($patient_docs as $index => $patient): ?>
-                      <tr>
-                        <td><?= $index + 1 ?></td>
-                        <td>
-                          <strong><?= htmlspecialchars($patient['patient_name']) ?></strong><br>
-                          <small class="text-muted">
-                            <?= $patient['gender'] ?? 'N/A' ?> | 
-                            <?= $patient['blood_group'] ? 'Blood: ' . $patient['blood_group'] : '' ?>
-                          </small>
-                        </td>
-                        <td>
-                          <?php if ($patient['patient_email']): ?>
-                            <div><?= htmlspecialchars($patient['patient_email']) ?></div>
-                          <?php endif; ?>
-                          <?php if ($patient['patient_phone']): ?>
-                            <a href="tel:<?= $patient['patient_phone'] ?>"><?= $patient['patient_phone'] ?></a>
-                          <?php endif; ?>
-                        </td>
-                        <td>
-                          <?php if ($patient['appointment_date']): ?>
-                            <?= date('d/m/Y', strtotime($patient['appointment_date'])) ?><br>
-                            <small><?= date('h:i A', strtotime($patient['appointment_time'])) ?></small>
-                          <?php else: ?>
-                            <span class="text-muted">No appointment</span>
-                          <?php endif; ?>
-                        </td>
-                        <td>
-                          <?php 
-                          $status_class = '';
-                          switch ($patient['appointment_status']) {
-                              case 'Pending': $status_class = 'badge-pending'; break;
-                              case 'Completed': $status_class = 'badge-completed'; break;
-                              case 'Cancelled': $status_class = 'badge-cancelled'; break;
-                              default: $status_class = 'badge-pending';
-                          }
-                          if($patient['appointment_status'] == ""){
-                              echo ' <span class="badge-status '. $status_class.'">
-                            Pending
-                          </span>';
-                          }else{
-                              echo ' <span class="badge-status '. $status_class.' ">
-                            '.$patient['appointment_status'].'
-                          </span>';
-                          }
-                          ?>
-                         
-                        </td>
-                        <td>
-                          <?php if ($patient['document_count'] > 0): ?>
-                            <a href="patient-documents.php?patient_id=<?= $patient['patient_id'] ?>" 
-                               class="btn btn-sm btn-info" title="View Documents">
-                              <i class="fa fa-file"></i> (<?= $patient['document_count'] ?>)
-                            </a>
-                          <?php else: ?>
-                            <span class="text-muted">No docs</span>
-                          <?php endif; ?>
-                        </td>
-                        <td>
-                          <!-- File Upload Form -->
-                          <form method="POST" action="" enctype="multipart/form-data" class="d-inline">
-                            <input type="hidden" name="patient_id" value="<?= $patient['patient_id'] ?>">
-                            <input type="file" name="patient_file" id="file_<?= $patient['patient_id'] ?>" 
-                                   style="display: none;" onchange="this.form.submit()">
-                            <button type="button" class="btn btn-upload btn-sm" 
-                                    onclick="document.getElementById('file_<?= $patient['patient_id'] ?>').click()">
-                              <i class="fa fa-upload"></i> Upload
-                            </button>
-                            <input type="hidden" name="upload_file" value="1">
-                          </form>
-                          
-                          <a href="my-patients.php?delete_patient=<?= $patient['patient_id'] ?>" 
-                             class="btn btn-delete btn-sm"
-                             onclick="return confirm('Are you sure you want to cancel this patient appointment?')">
-                            <i class="fa fa-trash"></i> Cancel
-                          </a>
-                          
-                          <a href="patient-details.php?id=<?= $patient['patient_id'] ?>" 
-                             class="btn btn-info btn-sm" title="View Details">
-                            <i class="fa fa-eye"></i>
-                          </a>
-                        </td>
-                      </tr>
-                    <?php endforeach; ?>
-                  </tbody>
-                </table>
-              </div>
+              <div class="patient-abha" style="color:#aaa;">ABHA: not linked</div>
             <?php endif; ?>
-    </div><!-- /.doctor-content inner -->
-  </div><!-- /.doctor-content -->
-
-  <?php include("../footer.php") ?>
-  
-  <!-- Modal for Document Upload -->
-  <div class="modal fade" id="uploadModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Upload Patient Document</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <button class="patient-menu-btn" onclick="toggleCardMenu(<?= $pid ?>, event)" title="Options">
+            <i class="fa fa-bars"></i>
+          </button>
+          <div class="patient-dropdown" id="dd-<?= $pid ?>">
+            <a href="patient-details.php?id=<?= $pid ?>">
+              <i class="fa fa-eye text-primary"></i> View Details
+            </a>
+            <a href="appointments.php?patient_id=<?= $pid ?>">
+              <i class="fa fa-calendar text-success"></i> Appointments
+            </a>
+            <a href="patient-documents.php?patient_id=<?= $pid ?>">
+              <i class="fa fa-file-text-o text-info"></i> Documents
+            </a>
+            <hr>
+            <a href="#" class="text-danger" onclick="removePatient(<?= $pid ?>); return false;">
+              <i class="fa fa-times"></i> Remove
+            </a>
+          </div>
         </div>
-        <div class="modal-body">
-          <form id="uploadForm" method="POST" enctype="multipart/form-data">
-            <input type="hidden" name="patient_id" id="modal_patient_id">
-            <div class="mb-3">
-              <label>Select Document</label>
-              <input type="file" name="patient_file" class="form-control" accept=".pdf,.jpg,.jpeg,.png" required>
-              <small class="text-muted">Max file size: 5MB (PDF, JPG, PNG only)</small>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+
+  </div>
+</div>
+
+<!-- ── Add Patient Modal ─────────────────────────────────────── -->
+<div class="modal fade" id="addPatientModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:14px; overflow:hidden; border:none;">
+      <div class="modal-header-blue d-flex align-items-center justify-content-between">
+        <h5 class="mb-0"><i class="fa fa-user-plus me-2"></i> Add Patient</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+
+        <!-- Step 1: Search -->
+        <div id="step1">
+          <div class="step-indicator mb-3">
+            <div class="step-dot active"></div>
+            <div class="step-dot" id="dot2"></div>
+          </div>
+          <p class="text-muted mb-3" style="font-size:13.5px;">
+            Enter the patient's <strong>mobile number, email, or ABHA address</strong>.<br>
+            If they're already on the portal, we'll find them instantly.
+          </p>
+          <div class="input-group mb-2">
+            <span class="input-group-text"><i class="fa fa-search"></i></span>
+            <input type="text" class="form-control" id="addSearchInput"
+                   placeholder="Mobile / Email / ABHA address"
+                   oninput="debouncePortalSearch(this.value)">
+          </div>
+          <div id="portalSearchResults"></div>
+          <div id="notFoundHint" style="display:none;" class="mt-3">
+            <div class="alert alert-warning py-2 mb-2" style="font-size:13px;">
+              <i class="fa fa-info-circle"></i>
+              No patient found on portal. You can add them via their <strong>ABHA ID or address</strong>.
             </div>
-            <button type="submit" name="upload_file" class="btn btn-primary">Upload</button>
-          </form>
+            <button class="btn btn-outline-primary w-100" onclick="showAbhaStep()">
+              <i class="fa fa-id-card me-1"></i> Add via ABHA ID
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 2: ABHA entry (shown when not in portal) -->
+        <div id="step2" style="display:none;">
+          <div class="step-indicator mb-3">
+            <div class="step-dot"></div>
+            <div class="step-dot active"></div>
+          </div>
+          <button class="btn btn-sm btn-link ps-0 mb-3" onclick="backToStep1()">
+            <i class="fa fa-arrow-left"></i> Back
+          </button>
+          <p class="text-muted mb-3" style="font-size:13.5px;">
+            Enter the patient's <strong>ABHA number</strong> (14-digit) or
+            <strong>ABHA address</strong> (e.g. <code>name@abdm</code>).
+            Their medical history will be fetched via ABDM.
+          </p>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">ABHA Number / Address</label>
+            <input type="text" class="form-control" id="abhaInput"
+                   placeholder="e.g. 91-1234-5678-9012 or name@abdm">
+            <div class="form-text">ABHA number format: XX-XXXX-XXXX-XXXX</div>
+          </div>
+          <div id="abhaMsg"></div>
+          <button class="btn btn-primary w-100 mt-2" onclick="addViaAbha()">
+            <i class="fa fa-user-plus me-1"></i> Fetch &amp; Add Patient
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm add portal patient -->
+<div class="modal fade" id="confirmAddModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content" style="border-radius:14px; border:none;">
+      <div class="modal-body p-4 text-center">
+        <div id="confirmAvatar" style="
+          width:64px;height:64px;border-radius:50%;
+          background:#7b8ea8;margin:0 auto 12px;
+          display:flex;align-items:center;justify-content:center;">
+          <i class="fa fa-user" style="color:#fff;font-size:30px;"></i>
+        </div>
+        <h6 id="confirmName" class="fw-bold mb-1"></h6>
+        <p id="confirmMeta" class="text-muted mb-0" style="font-size:13px;"></p>
+        <p id="confirmAbha" class="text-primary mb-3" style="font-size:13px;"></p>
+        <div id="alreadyLinkedNote" class="alert alert-info py-2" style="font-size:13px; display:none;">
+          <i class="fa fa-check-circle"></i> Already in your patient list.
+        </div>
+        <div class="d-flex gap-2 mt-2" id="confirmActions">
+          <button class="btn btn-secondary flex-fill" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary flex-fill" id="confirmAddBtn" onclick="confirmAddPortal()">
+            <i class="fa fa-user-plus me-1"></i> Add
+          </button>
         </div>
       </div>
     </div>
   </div>
-  
-  <script>
-    
-    function showUploadModal(patientId, patientName) {
-      document.getElementById('modal_patient_id').value = patientId;
-      document.getElementById('uploadModalLabel').innerText = 'Upload Document for ' + patientName;
-      new bootstrap.Modal(document.getElementById('uploadModal')).show();
+</div>
+
+<?php include("../footer.php") ?>
+
+<script>
+let _selectedPortalPatient = null;
+let _searchTimer = null;
+let _portalTimer = null;
+
+// ── Live page search (debounced) ──────────────────────────────
+function debounceSearch(val) {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => {
+    document.getElementById('searchForm').submit();
+  }, 600);
+}
+
+// ── Dropdown menus ────────────────────────────────────────────
+function toggleCardMenu(pid, e) {
+  e.stopPropagation();
+  document.querySelectorAll('.patient-dropdown.show').forEach(d => {
+    if (d.id !== 'dd-' + pid) d.classList.remove('show');
+  });
+  document.getElementById('dd-' + pid).classList.toggle('show');
+}
+document.addEventListener('click', () => {
+  document.querySelectorAll('.patient-dropdown.show').forEach(d => d.classList.remove('show'));
+});
+
+// ── Remove patient (from doctor's list only) ──────────────────
+function removePatient(pid) {
+  if (!confirm('Remove this patient from your list? This will not delete their account.')) return;
+  fetch('<?= BASE_URL ?>doctor/api/patient-remove.php', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({patient_id: pid})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) {
+      const el = document.getElementById('pc-' + pid);
+      el && el.remove();
+    } else {
+      alert(d.error || 'Failed to remove patient.');
     }
-  </script>
+  });
+}
+
+// ── Add modal ─────────────────────────────────────────────────
+function openAddModal() {
+  resetAddModal();
+  new bootstrap.Modal(document.getElementById('addPatientModal')).show();
+}
+
+function resetAddModal() {
+  document.getElementById('step1').style.display = '';
+  document.getElementById('step2').style.display = 'none';
+  document.getElementById('addSearchInput').value = '';
+  document.getElementById('portalSearchResults').innerHTML = '';
+  document.getElementById('notFoundHint').style.display = 'none';
+  document.getElementById('abhaInput').value = '';
+  document.getElementById('abhaMsg').innerHTML = '';
+  document.getElementById('dot2').classList.remove('active');
+  _selectedPortalPatient = null;
+}
+
+// ── Portal search ─────────────────────────────────────────────
+function debouncePortalSearch(val) {
+  clearTimeout(_portalTimer);
+  document.getElementById('notFoundHint').style.display = 'none';
+  document.getElementById('portalSearchResults').innerHTML = '';
+  if (val.length < 3) return;
+  _portalTimer = setTimeout(() => portalSearch(val), 500);
+}
+
+function portalSearch(q) {
+  const box = document.getElementById('portalSearchResults');
+  box.innerHTML = '<div class="text-center text-muted py-2"><i class="fa fa-spinner fa-spin"></i></div>';
+
+  fetch('<?= BASE_URL ?>doctor/api/patient-search.php?q=' + encodeURIComponent(q))
+    .then(r => r.json())
+    .then(data => {
+      box.innerHTML = '';
+      if (!data.success) {
+        box.innerHTML = '<div class="text-danger small mt-1">' + (data.error || 'Error') + '</div>';
+        return;
+      }
+      if (!data.found || data.patients.length === 0) {
+        document.getElementById('notFoundHint').style.display = '';
+        return;
+      }
+      data.patients.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'search-result-card';
+        card.innerHTML = `
+          <div class="sr-avatar"><i class="fa fa-user"></i></div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:14px;">${escHtml(p.name)}</div>
+            <div style="font-size:12.5px;color:#555;">${escHtml(p.mobile || '')} ${p.email ? '· ' + escHtml(p.email) : ''}</div>
+            ${p.abha_address ? '<div style="font-size:12px;color:#0c74c5;">ABHA: ' + escHtml(p.abha_address) + '</div>' : ''}
+          </div>
+          ${p.already_linked ? '<span class="badge bg-success">Added</span>' : ''}
+        `;
+        card.onclick = () => showConfirmAdd(p);
+        box.appendChild(card);
+      });
+    })
+    .catch(() => { box.innerHTML = '<div class="text-danger small">Search failed.</div>'; });
+}
+
+function showConfirmAdd(p) {
+  _selectedPortalPatient = p;
+  document.getElementById('confirmName').textContent = p.name;
+  document.getElementById('confirmMeta').textContent =
+    [p.mobile, p.gender, p.blood_group].filter(Boolean).join(' · ');
+  document.getElementById('confirmAbha').textContent = p.abha_address ? 'ABHA: ' + p.abha_address : '';
+
+  const note = document.getElementById('alreadyLinkedNote');
+  const btn  = document.getElementById('confirmAddBtn');
+  if (p.already_linked) {
+    note.style.display = '';
+    btn.style.display = 'none';
+  } else {
+    note.style.display = 'none';
+    btn.style.display = '';
+  }
+
+  bootstrap.Modal.getInstance(document.getElementById('addPatientModal'))?.hide();
+  new bootstrap.Modal(document.getElementById('confirmAddModal')).show();
+}
+
+function confirmAddPortal() {
+  if (!_selectedPortalPatient) return;
+  const btn = document.getElementById('confirmAddBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Adding…';
+
+  fetch('<?= BASE_URL ?>doctor/api/patient-add.php', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({mode: 'portal', patient_id: _selectedPortalPatient.id})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) {
+      bootstrap.Modal.getInstance(document.getElementById('confirmAddModal'))?.hide();
+      window.location.reload();
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa fa-user-plus me-1"></i> Add';
+      alert(d.error || 'Failed to add patient.');
+    }
+  });
+}
+
+// ── ABHA step ─────────────────────────────────────────────────
+function showAbhaStep() {
+  document.getElementById('step1').style.display = 'none';
+  document.getElementById('step2').style.display = '';
+  document.getElementById('dot2').classList.add('active');
+}
+
+function backToStep1() {
+  document.getElementById('step2').style.display = 'none';
+  document.getElementById('step1').style.display = '';
+  document.getElementById('dot2').classList.remove('active');
+}
+
+function addViaAbha() {
+  const abha  = document.getElementById('abhaInput').value.trim();
+  const msgEl = document.getElementById('abhaMsg');
+
+  if (!abha) {
+    msgEl.innerHTML = '<div class="alert alert-danger py-2">Please enter ABHA number or address.</div>';
+    return;
+  }
+
+  msgEl.innerHTML = '<div class="text-center text-muted"><i class="fa fa-spinner fa-spin"></i> Searching ABDM…</div>';
+
+  fetch('<?= BASE_URL ?>doctor/api/patient-add.php', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({mode: 'abha', abha: abha})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) {
+      const src = d.source === 'portal' ? 'Found on portal' :
+                  d.source === 'abha_new' ? 'Added via ABHA — will sync when patient registers' : 'Added';
+      msgEl.innerHTML = `<div class="alert alert-success py-2">
+        <i class="fa fa-check-circle"></i> <strong>${escHtml(d.name)}</strong> added!<br>
+        <small class="text-muted">${src}${d.note ? '<br>' + escHtml(d.note) : ''}</small>
+      </div>`;
+      setTimeout(() => {
+        bootstrap.Modal.getInstance(document.getElementById('addPatientModal'))?.hide();
+        window.location.reload();
+      }, 1800);
+    } else {
+      msgEl.innerHTML = '<div class="alert alert-danger py-2"><i class="fa fa-times-circle"></i> ' +
+        escHtml(d.error || 'Failed to add patient.') + '</div>';
+    }
+  })
+  .catch(() => {
+    msgEl.innerHTML = '<div class="alert alert-danger py-2">Network error. Please try again.</div>';
+  });
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
 </body>
 </html>

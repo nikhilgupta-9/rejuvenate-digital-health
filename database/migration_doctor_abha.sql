@@ -38,3 +38,18 @@ CREATE TABLE IF NOT EXISTS `jwt_refresh_tokens` (
 -- Step 4: Optional — index on hpr_id for fast lookups
 ALTER TABLE `doctors`
   ADD INDEX `idx_hpr_id` (`hpr_id`);
+
+-- Step 5: Doctor–Patient explicit link table
+-- Tracks patients directly added to a doctor's panel (not just via appointments)
+CREATE TABLE IF NOT EXISTS `doctor_patients` (
+  `id`          INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+  `doctor_id`   INT UNSIGNED    NOT NULL,
+  `patient_id`  INT UNSIGNED    NOT NULL,
+  `added_at`    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `added_via`   ENUM('appointment','manual','abha') NOT NULL DEFAULT 'manual',
+  `abha_fetched` TINYINT(1)     NOT NULL DEFAULT 0 COMMENT '1 = profile fetched from ABDM',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_link` (`doctor_id`, `patient_id`),
+  INDEX `idx_doctor` (`doctor_id`),
+  INDEX `idx_patient` (`patient_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
