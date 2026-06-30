@@ -2,14 +2,10 @@
 include_once(__DIR__ . "/../config/connect.php");
 include_once(__DIR__ . "/../util/function.php");
 
-// Start session and check doctor login
-// session_start();
-if (!isset($_SESSION['doctor_logged_in']) || $_SESSION['doctor_logged_in'] !== true) {
-    header("Location: " . BASE_URL . "doctor-login.php");
-    exit();
-}
-
-$doctor_id = $_SESSION['doctor_id'];
+require_once(__DIR__ . "/auth/guard.php");
+$jwt_doctor  = doctor_jwt_guard();
+$doctor_id   = (int)$jwt_doctor['sub'];
+$doctor_name = $jwt_doctor['name'] ?? 'Doctor';
 $success_message = '';
 $error_message = '';
 
@@ -327,44 +323,10 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
                 </div>
             <?php endif; ?>
             
-            <div class="row mb-5">
-                <!-- Sidebar -->
-                <div class="col-md-3">
-                    <div class="sidebar" id="sidebarMenu">
-                        <div class="text-center info-content">
-                            <div class="profile-image-container">
-                                <img src="<?=   $doctor_profile_image ?>" 
-                                     class="userd-image" 
-                                     id="profileImagePreview"
-                                     onclick="document.getElementById('profileImage').click()">
-                                <div class="profile-image-overlay" 
-                                     onclick="document.getElementById('profileImage').click()">
-                                    Change Photo
-                                </div>
-                            </div>
-                           
-                            <h5>Dr. <?= htmlspecialchars($doctor_name) ?></h5>
-                            <p><?= htmlspecialchars($doctor['email']) ?></p>
-                            <p>Phone: <?= htmlspecialchars($doctor['phone']) ?></p>
-                            <a href="my-contact.php" class="btn btn-info btn-sm mb-3 mt-2 active">Edit Profile</a>
-                        </div>
+          <?php $sidebar_active = 'contact'; include(__DIR__ . "/inc/sidebar.php"); ?>
+          <div class="doctor-content" style="min-height:100vh; padding:24px 20px 40px;">
+          <div style="max-width:1200px; margin:0 auto;">
 
-                        <a href="<?= BASE_URL ?>doctor/doctor-dashboard.php">Dashboard</a>
-                        <a href="<?= BASE_URL ?>doctor/my-patients.php">My Patients</a>
-                        <a href="<?= BASE_URL ?>doctor/appointments.php">Appointments</a>
-                        <a href="<?= BASE_URL ?>doctor/patient-form.php">Patient Form</a>
-                        <a href="<?= BASE_URL ?>doctor/my-contact.php" class="active">Contact Us</a>
-                        <a href="<?= BASE_URL ?>doctor/doctor-about.php">About Us</a>
-                        <a href="<?= BASE_URL ?>doctor/change-password.php">Change Password</a>
-                        <a href="<?= BASE_URL ?>doctor/doctor-logout.php">Logout</a>
-                    </div>
-                </div>
-                
-                <!-- Main Content -->
-                <div class="col-lg-9">
-                    <!-- Mobile Toggle Button -->
-                    <span class="menu-btn d-lg-none mb-3" onclick="toggleMenu()">☰ Menu</span>
-                    
                     <!-- Profile Form -->
                     <div class="profile-card shadow">
                         <h4 class="mb-4">My Contact Details</h4>
@@ -561,17 +523,10 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
-    </section>
-    
+    </div></div><!-- /.doctor-content -->
     <?php include("../footer.php") ?>
     
     <script>
-        function toggleMenu() {
-            document.getElementById("sidebarMenu").classList.toggle("show");
-        }
         
         // Preview profile image before upload
         function previewProfileImage(input) {

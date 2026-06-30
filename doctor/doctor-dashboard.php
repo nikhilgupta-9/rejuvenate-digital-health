@@ -173,37 +173,13 @@ $earnings = $earnings_result->fetch_assoc();
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        .sidebar {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            height: fit-content;
-        }
-        .sidebar a {
-            display: block;
-            padding: 10px 15px;
-            margin: 5px 0;
-            color: #333;
-            text-decoration: none;
-            border-radius: 5px;
-        }
-        .sidebar a:hover, .sidebar a.active {
-            background: #02c9b8;
-            color: white;
-        }
-        .userd-image {
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 3px solid #02c9b8;
-        }
         .profile-card {
             background: white;
             padding: 20px;
-            border-radius: 10px;
-            border: 1px solid #dee2e6;
+            border-radius: 12px;
+            border: 1px solid #e5e7eb;
             margin-bottom: 20px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.05);
         }
         .stat-card {
             background: white;
@@ -263,47 +239,18 @@ $earnings = $earnings_result->fetch_assoc();
             height: 300px;
             position: relative;
         }
-        @media (max-width: 768px) {
-            .sidebar { display: none; }
-            .sidebar.show { display: block; }
-            .menu-btn { display: block; }
-        }
     </style>
 </head>
 <body>
-    <?php include("../header.php") ?>
-    
-    <section class="contact-appointment-section section-padding fix">
-        <div class="container">
-            <div class="row mb-5">
-                <!-- Sidebar -->
-                <div class="col-md-3">
-                    <div class="sidebar" id="sidebarMenu">
-                        <div class="text-center info-content">
-                            <img src="<?=  $doctor_profile_image ?>" class="userd-image">
-                            <h5>Dr. <?= htmlspecialchars($doctor_name) ?></h5>
-                            <p><?= htmlspecialchars($doctor_email) ?></p>
-                            <p>Phone: <?= htmlspecialchars($doctor_phone) ?></p>
-                            <a href="my-contact.php" class="btn btn-info btn-sm mb-3 mt-2">Edit Profile</a>
-                        </div>
+    <?php
+        $sidebar_active = 'dashboard';
+        include(__DIR__ . "/inc/sidebar.php");
+    ?>
 
-                        <a href="<?= BASE_URL ?>doctor/doctor-dashboard.php" class="active">Dashboard</a>
-                        <a href="<?= BASE_URL ?>doctor/my-patients.php">My Patients</a>
-                        <a href="<?= BASE_URL ?>doctor/appointments.php">Appointments</a>
-                        <a href="<?= BASE_URL ?>doctor/patient-form.php">Patient Form</a>
-                        <a href="<?= BASE_URL ?>doctor/my-contact.php">Contact Us</a>
-                        <a href="<?= BASE_URL ?>doctor/doctor-about.php">About Us</a>
-                        <a href="<?= BASE_URL ?>doctor/change-password.php">Change Password</a>
-                        <a href="<?= BASE_URL ?>doctor/doctor-logout.php">Logout</a>
-                    </div>
-                </div>
-                
-                <!-- Main Content -->
-                <div class="col-lg-9">
-                    <!-- Mobile Toggle Button -->
-                    <span class="menu-btn d-lg-none mb-3" onclick="toggleMenu()">☰ Menu</span>
-                    
-                    <!-- Welcome Card -->
+    <div class="doctor-content" style="min-height:100vh; padding:24px 20px 40px;">
+        <div style="max-width:1200px; margin:0 auto;">
+
+            <!-- Welcome Card -->
                     <div class="welcome-card">
                         <div class="row align-items-center">
                             <div class="col-md-8">
@@ -587,18 +534,10 @@ $earnings = $earnings_result->fetch_assoc();
                     </div>
                     
                    
-                </div>
-            </div>
-        </div>
-    </section>
-    
-    <?php include("../footer.php") ?>
-    
+        </div><!-- /.doctor-content inner -->
+    </div><!-- /.doctor-content -->
+
     <script>
-        function toggleMenu() {
-            document.getElementById("sidebarMenu").classList.toggle("show");
-        }
-        
         // Initialize appointments chart
         document.addEventListener('DOMContentLoaded', function() {
             const ctx = document.getElementById('appointmentsChart').getContext('2d');

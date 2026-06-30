@@ -2,14 +2,10 @@
 include_once(__DIR__ . "/../config/connect.php");
 include_once(__DIR__ . "/../util/function.php");
 
-// Start session and check doctor login
-// session_start();
-if (!isset($_SESSION['doctor_logged_in']) || $_SESSION['doctor_logged_in'] !== true) {
-    header("Location: " . BASE_URL . "doctor-login.php");
-    exit();
-}
-
-$doctor_id = $_SESSION['doctor_id'];
+require_once(__DIR__ . "/auth/guard.php");
+$jwt_doctor  = doctor_jwt_guard();
+$doctor_id   = (int)$jwt_doctor['sub'];
+$doctor_name = $jwt_doctor['name'] ?? 'Doctor';
 $success_message = '';
 $error_message = '';
 
@@ -361,36 +357,9 @@ foreach ($create_tables_sql as $sql) {
 <body>
     <?php include("../header.php") ?>
     
-    <section class="contact-appointment-section section-padding fix">
-        <div class="container">
-            <div class="row mb-5">
-                <!-- Sidebar -->
-                <div class="col-md-3">
-                    <div class="sidebar" id="sidebarMenu">
-                        <div class="text-center info-content">
-                            <img src="<?= BASE_URL . $doctor_profile_image ?>" class="userd-image">
-                            <h5>Dr. <?= htmlspecialchars($doctor_name) ?></h5>
-                            <p><?= htmlspecialchars($doctor_email) ?></p>
-                            <p>Phone: <?= htmlspecialchars($doctor_phone) ?></p>
-                            <a href="my-contact.php" class="btn btn-info btn-sm mb-3 mt-2">Edit Profile</a>
-                        </div>
-
-                        <a href="<?= BASE_URL ?>doctor/doctor-dashboard.php">Dashboard</a>
-                        <a href="<?= BASE_URL ?>doctor/my-patients.php">My Patients</a>
-                        <a href="<?= BASE_URL ?>doctor/appointments.php">Appointments</a>
-                        <a href="<?= BASE_URL ?>doctor/patient-form.pdf">Patient Form</a>
-                        <a href="<?= BASE_URL ?>doctor/my-contact.php">Contact Us</a>
-                        <a href="<?= BASE_URL ?>doctor/doctor-about.php">About Us</a>
-                        <a href="<?= BASE_URL ?>doctor/change-password.php" class="active">Change Password</a>
-                        <a href="<?= BASE_URL ?>doctor/doctor-logout.php">Logout</a>
-                    </div>
-                </div>
-                
-                <!-- Main Content -->
-                <div class="col-lg-9">
-                    <!-- Mobile Toggle Button -->
-                    <span class="menu-btn d-lg-none mb-3" onclick="toggleMenu()">☰ Menu</span>
-                    
+    <?php $sidebar_active = 'settings'; include(__DIR__ . "/inc/sidebar.php"); ?>
+    <div class="doctor-content" style="min-height:100vh; padding:24px 20px 40px;">
+    <div style="max-width:1200px; margin:0 auto;">
                     <!-- Password Change Form -->
                     <div class="profile-card shadow">
                         <h4 class="mb-4">Change Password</h4>
@@ -566,18 +535,11 @@ foreach ($create_tables_sql as $sql) {
                         </div>
                     </div>
                     <?php endif; ?>
-                </div>
-            </div>
-        </div>
-    </section>
-    
+    </div></div><!-- /.doctor-content -->
+
     <?php include("../footer.php") ?>
-    
+
     <script>
-        function toggleMenu() {
-            document.getElementById("sidebarMenu").classList.toggle("show");
-        }
-        
         // Toggle password visibility
         function togglePassword(inputId) {
             const input = document.getElementById(inputId);

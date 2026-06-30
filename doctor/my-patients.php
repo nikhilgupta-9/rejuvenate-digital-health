@@ -2,15 +2,10 @@
 include_once(__DIR__ . "/../config/connect.php");
 include_once(__DIR__ . "/../util/function.php");
 
-// Start session and check doctor login
-// session_start();
-if (!isset($_SESSION['doctor_logged_in']) || $_SESSION['doctor_logged_in'] !== true) {
-    header("Location: " . BASE_URL . "doctor-login.php");
-    exit();
-}
-
-$doctor_id = $_SESSION['doctor_id'];
-$doctor_name = $_SESSION['doctor_name'] ?? 'Doctor';
+require_once(__DIR__ . "/auth/guard.php");
+$jwt_doctor  = doctor_jwt_guard();
+$doctor_id   = (int)$jwt_doctor['sub'];
+$doctor_name = $jwt_doctor['name'] ?? 'Doctor';
 
 // Get doctor's profile image and details
 $doctor_sql = "SELECT name, email, profile_image, phone FROM doctors WHERE id = ?";
@@ -292,53 +287,25 @@ box-shadow: rgba(50, 50, 93, 0.25) 0px 2px 5px -1px, rgba(0, 0, 0, 0.3) 0px 1px 
 </head>
 
 <body>
-  <?php include("../header.php") ?>
-  
-  <section class="contact-appointment-section section-padding fix">
-    <div class="container">
-      <!-- Success/Error Messages -->
+  <?php $sidebar_active = 'patients'; include(__DIR__ . "/inc/sidebar.php"); ?>
+
+  <div class="doctor-content" style="min-height:100vh; padding:24px 20px 40px;">
+    <div style="max-width:1200px; margin:0 auto;">
+
+      <!-- Flash Messages -->
       <?php if (!empty($success_message)): ?>
         <div class="alert alert-success alert-dismissible fade show" role="alert">
           <?= $success_message ?>
-          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
       <?php endif; ?>
-      
       <?php if (!empty($error_message)): ?>
         <div class="alert alert-danger alert-dismissible fade show" role="alert">
           <?= $error_message ?>
-          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
       <?php endif; ?>
-      
-      <div class="row mb-5">
-        <!-- Sidebar -->
-        <div class="col-md-3">
-          <div class="sidebar" id="sidebarMenu">
-            <div class="text-center info-content">
-              <img src="<?= $doctor_profile_image ?>" class="userd-image">
-              <h5>Dr. <?= htmlspecialchars($doctor_name) ?></h5>
-              <p><?= htmlspecialchars($doctor_email) ?></p>
-              <p>Phone: <?= htmlspecialchars($doctor_phone) ?></p>
-              <a href="my-contact.php" class="btn btn-info btn-sm mb-3 mt-2">Edit Profile</a>
-            </div>
 
-             <a href="<?= BASE_URL ?>doctor/doctor-dashboard.php">Dashboard</a>
-                        <a href="<?= BASE_URL ?>doctor/my-patients.php"  class="active">My Patients</a>
-                        <a href="<?= BASE_URL ?>doctor/appointments.php">Appointments</a>
-                        <a href="<?= BASE_URL ?>doctor/patient-form.php">Patient Form</a>
-                        <a href="<?= BASE_URL ?>doctor/my-contact.php">Contact Us</a>
-                        <a href="<?= BASE_URL ?>doctor/doctor-about.php">About Us</a>
-                        <a href="<?= BASE_URL ?>doctor/change-password.php">Change Password</a>
-                        <a href="<?= BASE_URL ?>doctor/doctor-logout.php">Logout</a>
-          </div>
-        </div>
-        
-        <!-- Main Content -->
-        <div class="col-lg-9">
-          <!-- Mobile Toggle Button -->
-          <span class="menu-btn d-lg-none mb-3" onclick="toggleMenu()">☰ Menu</span>
-          
           <!-- Statistics Cards -->
           <div class="row mb-4">
             <div class="col-md-3 col-6">
@@ -501,12 +468,9 @@ box-shadow: rgba(50, 50, 93, 0.25) 0px 2px 5px -1px, rgba(0, 0, 0, 0.3) 0px 1px 
                 </table>
               </div>
             <?php endif; ?>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-  
+    </div><!-- /.doctor-content inner -->
+  </div><!-- /.doctor-content -->
+
   <?php include("../footer.php") ?>
   
   <!-- Modal for Document Upload -->
@@ -533,9 +497,6 @@ box-shadow: rgba(50, 50, 93, 0.25) 0px 2px 5px -1px, rgba(0, 0, 0, 0.3) 0px 1px 
   </div>
   
   <script>
-    function toggleMenu() {
-      document.getElementById("sidebarMenu").classList.toggle("show");
-    }
     
     function showUploadModal(patientId, patientName) {
       document.getElementById('modal_patient_id').value = patientId;
