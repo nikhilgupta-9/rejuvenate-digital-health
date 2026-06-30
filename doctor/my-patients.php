@@ -45,7 +45,7 @@ $sql = "
         u.blood_group,
         u.dob,
         u.abha_address,
-        u.abha_number,
+        u.abha_id,
         u.abha_linked,
         u.abha_verified,
         dp.added_via,
