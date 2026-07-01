@@ -38,7 +38,9 @@ try {
     $enrolRes = $api->enrolByAadhaar($otp, $txnId, $mobile ?: '');
 
     if (!AbdmApi::wasSuccessful($enrolRes)) {
-        echo json_encode(['success'=>false,'error'=>AbdmApi::extractError($enrolRes,'OTP verification failed')]); exit;
+        $errMsg  = AbdmApi::extractError($enrolRes, 'OTP verification failed');
+        $rawBody = $enrolRes['_raw'] ?? json_encode(array_diff_key($enrolRes, array_flip(['_raw','_http'])));
+        echo json_encode(['success'=>false,'error'=>$errMsg,'_debug'=>$rawBody,'_http'=>($enrolRes['_http']??0)]); exit;
     }
 
     $abhaProfile = $enrolRes['ABHAProfile'] ?? $enrolRes['abhaProfile'] ?? [];

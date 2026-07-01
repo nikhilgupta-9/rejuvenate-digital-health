@@ -167,7 +167,6 @@ class AbdmApi
         $token = $this->getAccessToken();
 
         $otpBlock = [
-            'txnId'    => $txnId,
             'otpValue' => $this->rsaEncrypt($otp),
         ];
         if ($mobile) {
