@@ -730,6 +730,43 @@ document.getElementById('btnBVerify').addEventListener('click',function(){
     btn.disabled=false;btn.innerHTML='<i class="fa fa-check mr-1"></i> Verify OTP';
     if(!data.success){showErr('errB2',data.error||'Failed');return;}
     bTxnId=data.txnId;bXToken=data.xToken;bProfile=data.profile;bIsNew=data.is_new_abha;
+
+    // Existing ABHA — skip address selection, go straight to confirm/save
+    if(!bIsNew){
+      goStepB(4);
+      const inner=document.getElementById('stepB4Inner');
+      const existingAddr=bProfile.abha_address||'';
+      inner.innerHTML='<div class="cp-card">'
+        +'<div class="alert alert-info" style="border-radius:8px;font-size:.84rem;"><i class="fa fa-info-circle mr-1"></i>'
+        +'<strong>This Aadhaar already has an ABHA registered.</strong> The existing profile will be linked to your panel.</div>'
+        +'<table class="table table-sm" style="font-size:.85rem;">'
+        +'<tr><th style="width:140px;">Name</th><td>'+esc(bProfile.name||'')+'</td></tr>'
+        +'<tr><th>ABHA Number</th><td style="font-family:monospace;">'+esc(bProfile.abha_number||'')+'</td></tr>'
+        +'<tr><th>ABHA Address</th><td style="font-family:monospace;">'+esc(existingAddr)+'</td></tr>'
+        +'<tr><th>Mobile</th><td>'+esc(bProfile.mobile||'')+'</td></tr>'
+        +'</table>'
+        +'<div class="d-flex mt-3" style="gap:10px;">'
+        +'<button class="btn btn-outline-secondary btn-sm" onclick="goStepB(2)"><i class="fa fa-arrow-left mr-1"></i>Back</button>'
+        +'<button class="btn btn-success" id="btnBConfirmExisting"><i class="fa fa-user-plus mr-1"></i> Link to My Panel</button>'
+        +'</div></div>';
+      document.getElementById('btnBConfirmExisting').addEventListener('click',function(){
+        const btn=this;btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin mr-1"></i> Linking…';
+        fetch(BASE+'doctor/api/abha-enrol-confirm.php',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({txnId:bTxnId,xToken:bXToken,chosen_address:existingAddr,profile:bProfile,is_new_abha:false})})
+        .then(r=>r.json()).then(d=>{
+          if(!d.success){btn.disabled=false;btn.innerHTML='<i class="fa fa-user-plus mr-1"></i> Link to My Panel';
+            inner.insertAdjacentHTML('beforeend','<div class="alert alert-danger mt-2" style="font-size:.82rem;">'+esc(d.error||'Failed')+'</div>');return;}
+          inner.innerHTML='<div class="cp-card text-center py-3">'
+            +'<i class="fa fa-check-circle fa-3x" style="color:#16a34a;"></i>'
+            +'<div class="mt-2 font-weight-bold" style="font-size:1rem;">Patient linked successfully!</div>'
+            +'<div class="text-muted mt-1" style="font-size:.82rem;">Existing ABHA profile added to your panel.</div>'
+            +'<div class="mt-3"><a href="'+BASE+'doctor/my-patients.php" class="btn btn-success"><i class="fa fa-users mr-1"></i> Go to My Patients</a></div>'
+            +'</div>';
+        }).catch(()=>{btn.disabled=false;btn.innerHTML='<i class="fa fa-user-plus mr-1"></i> Link to My Panel';});
+      });
+      return;
+    }
+
     const suggs=data.suggestions||[];
     const wrap=document.getElementById('bSuggestions');
     if(suggs.length){
