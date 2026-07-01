@@ -24,7 +24,7 @@ if (strlen($query) < 3) {
 }
 
 // Search in portal users
-$sql = "SELECT id, name, last_name, email, mobile, abha_address, abha_number, abha_linked, gender, blood_group, profile_pic
+$sql = "SELECT id, name, last_name, email, mobile, abha_address, abha_id, abha_linked, gender, blood_group, profile_pic
         FROM users
         WHERE email = ? OR mobile = ? OR abha_address = ?
         LIMIT 5";
@@ -48,7 +48,7 @@ while ($row = $result->fetch_assoc()) {
         'email'        => $row['email'],
         'mobile'       => $row['mobile'],
         'abha_address' => $row['abha_address'],
-        'abha_number'  => $row['abha_number'],
+        'abha_id'  => $row['abha_id'],
         'abha_linked'  => (bool)$row['abha_linked'],
         'gender'       => $row['gender'],
         'blood_group'  => $row['blood_group'],
