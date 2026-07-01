@@ -186,30 +186,40 @@ require_once __DIR__ . '/inc/sidebar.php';
 <!-- ════════════ PATH A — HAS ABHA ════════════ -->
 <div id="flowA" style="display:none;">
   <div class="back-btn" onclick="resetPath()"><i class="fa fa-arrow-left"></i> Choose different method</div>
-  <div style="font-size:.82rem;color:#374151;margin-bottom:14px;">
-    <i class="fa fa-info-circle mr-1" style="color:#0C74C5;"></i>
-    OTP will be sent to the mobile number registered with the patient's ABHA.
-  </div>
 
   <div class="wizard">
-    <div class="wi active" id="siA1"><div class="wc">1</div><span class="wl">Enter ABHA</span></div>
-    <div class="wi"        id="siA2"><div class="wc">2</div><span class="wl">Verify OTP</span></div>
+    <div class="wi active" id="siA1"><div class="wc">1</div><span class="wl">Verify Identity</span></div>
+    <div class="wi"        id="siA2"><div class="wc">2</div><span class="wl">Enter OTP</span></div>
     <div class="wi"        id="siA3"><div class="wc">3</div><span class="wl">Confirm</span></div>
   </div>
 
   <div class="sbody active" id="stepA1">
     <div class="cp-card">
-      <div class="cp-title"><i class="fa fa-id-card-o mr-2" style="color:#3b82f6;"></i>Patient's ABHA</div>
-      <div class="d-flex mb-3" style="gap:8px;">
-        <button class="addr-chip sel" id="typeNumBtn" onclick="setAbhaType('number',this)">ABHA Number</button>
-        <button class="addr-chip" id="typeAddrBtn" onclick="setAbhaType('address',this)">ABHA Address</button>
+      <div class="cp-title"><i class="fa fa-id-card-o mr-2" style="color:#3b82f6;"></i>How would you like to verify?</div>
+
+      <!-- Method tabs -->
+      <div class="d-flex flex-wrap mb-3" style="gap:6px;" id="aTypeTabs">
+        <button class="addr-chip sel" onclick="setAbhaType('number',this)"   data-type="number">ABHA Number</button>
+        <button class="addr-chip"     onclick="setAbhaType('address',this)"  data-type="address">ABHA Address</button>
+        <button class="addr-chip"     onclick="setAbhaType('mobile',this)"   data-type="mobile"><i class="fa fa-mobile mr-1"></i>Mobile OTP</button>
+        <button class="addr-chip"     onclick="setAbhaType('aadhaar',this)"  data-type="aadhaar"><i class="fa fa-id-card mr-1"></i>Aadhaar OTP</button>
       </div>
+
       <div class="form-group">
         <label class="form-label-sm" id="aLabel">ABHA Number</label>
-        <input type="text" id="aInput" class="form-control" placeholder="XX-XXXX-XXXX-XXXX" maxlength="17"
-               style="font-family:monospace;font-size:.98rem;letter-spacing:1px;">
+        <div class="input-group" id="aInputWrap">
+          <div class="input-group-prepend" id="aMobilePrefix" style="display:none;">
+            <span class="input-group-text">+91</span>
+          </div>
+          <input type="text" id="aInput" class="form-control" placeholder="XX-XXXX-XXXX-XXXX" maxlength="17"
+                 style="font-family:monospace;font-size:.98rem;letter-spacing:1px;">
+        </div>
         <small class="text-muted" id="aHint">14 digits — found on patient's ABHA card or app</small>
       </div>
+      <div id="aAadhaarNote" class="alert alert-info" style="display:none;font-size:.78rem;border-radius:8px;">
+        <i class="fa fa-lock mr-1"></i> Aadhaar is RSA-encrypted before sending to ABDM. It is <strong>never stored</strong>.
+      </div>
+
       <button class="btn btn-primary" id="btnASend">
         <i class="fa fa-paper-plane mr-1"></i> Send OTP
       </button>
@@ -592,19 +602,33 @@ let aTxnId='', aType='number';
 const getOtpA=wireOtp('.otp-a');
 
 window.setAbhaType=function(type,btn){
-  document.getElementById('typeNumBtn').classList.remove('sel');
-  document.getElementById('typeAddrBtn').classList.remove('sel');
+  document.querySelectorAll('#aTypeTabs .addr-chip').forEach(b=>b.classList.remove('sel'));
   btn.classList.add('sel');
   aType=type;
   const inp=document.getElementById('aInput');
+  const pfx=document.getElementById('aMobilePrefix');
+  const note=document.getElementById('aAadhaarNote');
+  note.style.display='none';
+  pfx.style.display='none';
+  inp.type='text'; inp.style.letterSpacing='';
   if(type==='number'){
     document.getElementById('aLabel').textContent='ABHA Number';
     inp.placeholder='XX-XXXX-XXXX-XXXX';inp.maxLength=17;inp.style.letterSpacing='1px';
     document.getElementById('aHint').textContent='14 digits on patient\'s ABHA card';
-  } else {
+  } else if(type==='address'){
     document.getElementById('aLabel').textContent='ABHA Address';
-    inp.placeholder='name@abdm';inp.maxLength=60;inp.style.letterSpacing='normal';
+    inp.placeholder='name@abdm';inp.maxLength=60;
     document.getElementById('aHint').textContent='e.g. john.doe@abdm';
+  } else if(type==='mobile'){
+    document.getElementById('aLabel').textContent='Registered Mobile Number';
+    pfx.style.display='flex';
+    inp.placeholder='9876543210';inp.maxLength=10;inp.inputMode='numeric';
+    document.getElementById('aHint').textContent='Mobile linked to patient\'s ABHA account';
+  } else if(type==='aadhaar'){
+    document.getElementById('aLabel').textContent='Aadhaar Number';
+    inp.placeholder='•••• •••• ••••';inp.maxLength=12;inp.type='password';
+    document.getElementById('aHint').textContent='12-digit Aadhaar — OTP sent to Aadhaar-linked mobile';
+    note.style.display='block';
   }
   inp.value='';
 };
@@ -633,7 +657,15 @@ window.goStepA=goStepA;
 
 document.getElementById('btnASend').addEventListener('click',function(){
   const val=document.getElementById('aInput').value.trim();
-  if(!val){showErr('errA1','Enter ABHA '+(aType==='number'?'number':'address'));return;}
+  if(aType==='number'){
+    if(val.replace(/\D/g,'').length!==14){showErr('errA1','Enter a valid 14-digit ABHA number');return;}
+  } else if(aType==='address'){
+    if(!val){showErr('errA1','Enter ABHA address');return;}
+  } else if(aType==='mobile'){
+    if(val.replace(/\D/g,'').length!==10){showErr('errA1','Enter a valid 10-digit mobile number');return;}
+  } else if(aType==='aadhaar'){
+    if(val.replace(/\D/g,'').length!==12){showErr('errA1','Aadhaar must be 12 digits');return;}
+  }
   hideErr('errA1');
   const btn=this;btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin mr-1"></i> Sending…';
   fetch(BASE+'doctor/api/abha-otp-send.php',{method:'POST',headers:{'Content-Type':'application/json'},

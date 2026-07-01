@@ -1,11 +1,11 @@
 <?php
 /**
- * Step 2 of ABHA link flow — send OTP to patient's ABHA-registered mobile.
- * POST { abha_input: "number|address", type: "number|address" }
+ * Send OTP to verify an existing ABHA holder.
+ * POST { abha_input, type: "number"|"address"|"mobile"|"aadhaar" }
  * Returns { success, txnId, message }
  *
- * ABDM flow used: initAuth → POST /profile/login/request/otp
- * loginHint: 'abha-number' or 'abha-address'
+ * ABDM: POST /profile/login/request/otp
+ *   loginHint: abha-number | abha-address | mobile | aadhaar
  */
 require_once dirname(__DIR__) . '/auth/guard.php';
 require_once dirname(dirname(__DIR__)) . '/config/connect.php';
@@ -21,25 +21,47 @@ if (!ABDM_CONFIGURED) {
     echo json_encode(['success'=>false,'error'=>'ABDM not configured on this server']); exit;
 }
 
-$body        = json_decode(file_get_contents('php://input'), true) ?? [];
-$abha_input  = trim($body['abha_input'] ?? '');
-$type        = trim($body['type']       ?? 'number');
+$body       = json_decode(file_get_contents('php://input'), true) ?? [];
+$abha_input = trim($body['abha_input'] ?? '');
+$type       = trim($body['type']       ?? 'number');
 
-if (!$abha_input) { echo json_encode(['success'=>false,'error'=>'ABHA input required']); exit; }
+if (!$abha_input) { echo json_encode(['success'=>false,'error'=>'Input required']); exit; }
 
 try {
     $api = new AbdmApi();
 
-    if ($type === 'address') {
-        $loginId   = strpos($abha_input,'@') !== false ? $abha_input : $abha_input.'@abdm';
-        $loginHint = 'abha-address';
-    } else {
-        $digits    = preg_replace('/\D/','',$abha_input);
-        if (strlen($digits) !== 14) {
-            echo json_encode(['success'=>false,'error'=>'ABHA number must be 14 digits']); exit;
-        }
-        $loginId   = AbdmApi::formatAbhaNumber($digits);
-        $loginHint = 'abha-number';
+    switch ($type) {
+        case 'address':
+            $loginId   = strpos($abha_input,'@') !== false ? $abha_input : $abha_input.'@abdm';
+            $loginHint = 'abha-address';
+            break;
+
+        case 'mobile':
+            $digits = preg_replace('/\D/','',$abha_input);
+            if (strlen($digits) !== 10) {
+                echo json_encode(['success'=>false,'error'=>'Enter a valid 10-digit mobile number']); exit;
+            }
+            $loginId   = $digits;
+            $loginHint = 'mobile';
+            break;
+
+        case 'aadhaar':
+            $digits = preg_replace('/\D/','',$abha_input);
+            if (strlen($digits) !== 12) {
+                echo json_encode(['success'=>false,'error'=>'Aadhaar must be 12 digits']); exit;
+            }
+            $loginId   = $digits;
+            $loginHint = 'aadhaar';
+            break;
+
+        default: // 'number'
+            $digits = preg_replace('/\D/','',$abha_input);
+            if (strlen($digits) !== 14) {
+                echo json_encode(['success'=>false,'error'=>'ABHA number must be 14 digits']); exit;
+            }
+            $loginId   = AbdmApi::formatAbhaNumber($digits);
+            $loginHint = 'abha-number';
+            break;
     }
 
     $res = $api->initAuth($loginId, $loginHint, 'abdm', ['abha-login']);
@@ -51,7 +73,7 @@ try {
     echo json_encode([
         'success' => true,
         'txnId'   => $res['txnId'],
-        'message' => $res['message'] ?? 'OTP sent to patient\'s registered mobile',
+        'message' => $res['message'] ?? 'OTP sent to patient\'s ABHA-registered mobile',
     ]);
 
 } catch (Exception $e) {
