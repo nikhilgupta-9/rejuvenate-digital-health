@@ -167,15 +167,15 @@ class AbdmApi
         $token = $this->getAccessToken();
 
         $otpBlock = [
+            'txnId'    => $txnId,
             'otpValue' => $this->rsaEncrypt($otp),
         ];
         if ($mobile) {
             $otpBlock['mobile'] = $this->rsaEncrypt($mobile);
         }
 
+        // Spec: no top-level txnId or scope — txnId lives inside authData.otp
         return $this->post('/enrollment/enrol/byAadhaar', [
-            'txnId'    => $txnId,
-            'scope'    => ['abha-enrol'],
             'authData' => [
                 'authMethods' => ['otp'],
                 'otp'         => $otpBlock,
