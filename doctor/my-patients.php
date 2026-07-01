@@ -222,7 +222,7 @@ $total = count($patients);
       <p class="section-title" style="margin:0;">Patient List</p>
       <span style="font-size:.78rem; color:#6b7280;"><?= $total ?> patient<?= $total !== 1 ? 's' : '' ?> linked to your profile</span>
     </div>
-    <a href="<?= BASE_URL ?>doctor/create-patient.php" class="btn btn-primary" style="display:flex;align-items:center;gap:6px;">
+    <a href="<?= BASE_URL ?>doctor/add-patient.php" class="btn btn-primary" style="display:flex;align-items:center;gap:6px;">
       <i class="fa fa-user-plus"></i> Add Patient
     </a>
   </div>
@@ -372,7 +372,7 @@ $total = count($patients);
                     <!-- Actions -->
                     <td>
                       <div style="display:flex;gap:4px;align-items:center;">
-                        <a href="patient-details.php?id=<?= $pid ?>"
+                        <a href="patient-profile.php?id=<?= $pid ?>"
                           class="btn btn-sm" title="View"
                           style="background:#e0f2fe;color:#0277bd;border:none;width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;">
                           <i class="fa fa-eye" style="font-size:.78rem;"></i>
@@ -392,7 +392,7 @@ $total = count($patients);
                               style="display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:.82rem;color:#374151;text-decoration:none;">
                               <i class="fa fa-file-text-o" style="color:#6b7280;width:14px;"></i> Documents
                             </a>
-                            <a href="patient-details.php?id=<?= $pid ?>"
+                            <a href="patient-profile.php?id=<?= $pid ?>"
                               style="display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:.82rem;color:#374151;text-decoration:none;">
                               <i class="fa fa-user" style="color:#6b7280;width:14px;"></i> Full Profile
                             </a>

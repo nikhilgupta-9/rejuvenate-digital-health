@@ -18,6 +18,17 @@ $doctor_id = (int)($payload['doctor_id'] ?? $payload['sub'] ?? 0);
 $raw  = json_decode(file_get_contents('php://input'), true) ?? [];
 $post = array_map('trim', $raw);
 
+// Fast path: just link an existing patient by ID (from mobile search)
+if (!empty($raw['link_existing_id'])) {
+    $pid = (int)$raw['link_existing_id'];
+    $lnk = $conn->prepare("INSERT INTO doctor_patients (doctor_id,patient_id,added_via) VALUES (?,?,'manual')
+                           ON DUPLICATE KEY UPDATE added_via='manual'");
+    $lnk->bind_param('ii', $doctor_id, $pid);
+    $lnk->execute();
+    echo json_encode(['success'=>true,'patient_id'=>$pid,'message'=>'Patient linked to your panel']);
+    exit;
+}
+
 // Required fields
 $first_name = $post['first_name'] ?? '';
 $last_name  = $post['last_name']  ?? '';
