@@ -273,11 +273,12 @@ require_once __DIR__ . '/inc/sidebar.php';
         <small class="text-muted">Patient must be present. OTP goes to their Aadhaar-linked mobile.</small>
       </div>
       <div class="form-group">
-        <label class="form-label-sm">Mobile <small class="text-muted">(if different from Aadhaar-linked mobile)</small></label>
+        <label class="form-label-sm">Patient's Mobile Number <span class="text-danger">*</span></label>
         <div class="input-group" style="max-width:240px;">
           <div class="input-group-prepend"><span class="input-group-text">+91</span></div>
-          <input type="text" id="bMobile" class="form-control" placeholder="9876543210" maxlength="10">
+          <input type="text" id="bMobile" class="form-control" placeholder="9876543210" maxlength="10" inputmode="numeric">
         </div>
+        <small class="text-muted">ABDM requires a mobile number for the ABHA account (communication mobile).</small>
       </div>
       <button class="btn btn-success" id="btnBSend">
         <i class="fa fa-paper-plane mr-1"></i> Send OTP to Aadhaar Mobile
@@ -699,6 +700,8 @@ window.goStepB=goStepB;
 document.getElementById('btnBSend').addEventListener('click',function(){
   const aadhaar=document.getElementById('bAadhaar').value.replace(/\D/g,'');
   if(aadhaar.length!==12){showErr('errB1','Aadhaar must be 12 digits');return;}
+  const mob=document.getElementById('bMobile').value.replace(/\D/g,'');
+  if(mob.length!==10){showErr('errB1','Enter a valid 10-digit mobile number');return;}
   hideErr('errB1');
   const btn=this;btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin mr-1"></i> Sending…';
   const mob=document.getElementById('bMobile').value.replace(/\D/g,'');
@@ -718,9 +721,10 @@ document.getElementById('btnBResend').addEventListener('click',()=>{goStepB(1);s
 document.getElementById('btnBVerify').addEventListener('click',function(){
   const otp=getOtpB();
   if(otp.length<6){showErr('errB2','Enter complete OTP');return;}
+  const mob=document.getElementById('bMobile').value.replace(/\D/g,'');
+  if(mob.length!==10){showErr('errB2','Go back and enter a valid 10-digit mobile number');return;}
   hideErr('errB2');
   const btn=this;btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin mr-1"></i> Verifying…';
-  const mob=document.getElementById('bMobile').value.replace(/\D/g,'');
   fetch(BASE+'doctor/api/abha-enrol-verify.php',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({txnId:bTxnId,otp:otp,mobile:mob||''})})
   .then(r=>r.json()).then(data=>{
