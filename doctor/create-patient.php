@@ -704,7 +704,6 @@ document.getElementById('btnBSend').addEventListener('click',function(){
   if(mob.length!==10){showErr('errB1','Enter a valid 10-digit mobile number');return;}
   hideErr('errB1');
   const btn=this;btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin mr-1"></i> Sending…';
-  const mob=document.getElementById('bMobile').value.replace(/\D/g,'');
   fetch(BASE+'doctor/api/abha-enrol-otp.php',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({aadhaar:aadhaar,mobile:mob||''})})
   .then(r=>r.json()).then(data=>{
