@@ -216,16 +216,16 @@ $total = count($patients);
 
   <main class="doctor-content">
 
-    <!-- ── Page header row ── -->
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
-      <div>
-        <p class="section-title" style="margin:0;">Patient List</p>
-        <span style="font-size:.78rem; color:#6b7280;"><?= $total ?> patient<?= $total !== 1 ? 's' : '' ?> linked to your profile</span>
-      </div>
-      <button class="btn btn-primary" onclick="openAddModal()" style="display:flex;align-items:center;gap:6px;">
-        <i class="fa fa-user-plus"></i> Add Patient
-      </button>
+  <!-- ── Page header row ── -->
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+    <div>
+      <p class="section-title" style="margin:0;">Patient List</p>
+      <span style="font-size:.78rem; color:#6b7280;"><?= $total ?> patient<?= $total !== 1 ? 's' : '' ?> linked to your profile</span>
     </div>
+    <button class="btn btn-primary" onclick="openAddModal()" style="display:flex;align-items:center;gap:6px;">
+      <i class="fa fa-user-plus"></i> Add Patient
+    </button>
+  </div>
 
     <!-- ── Search + filter bar ── -->
     <div class="card border-0 shadow-sm rounded-3 mb-3">
