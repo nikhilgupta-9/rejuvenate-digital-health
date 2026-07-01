@@ -145,9 +145,9 @@ $total = count($patients);
       <p class="section-title" style="margin:0;">Patient List</p>
       <span style="font-size:.78rem; color:#6b7280;"><?= $total ?> patient<?= $total !== 1 ? 's' : '' ?> linked to your profile</span>
     </div>
-    <button class="btn btn-primary" onclick="openAddModal()" style="display:flex;align-items:center;gap:6px;">
+    <a href="<?= BASE_URL ?>doctor/create-patient.php" class="btn btn-primary" style="display:flex;align-items:center;gap:6px;">
       <i class="fa fa-user-plus"></i> Add Patient
-    </button>
+    </a>
   </div>
 
   <!-- ── Search + filter bar ── -->
