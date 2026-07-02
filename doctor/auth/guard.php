@@ -54,6 +54,10 @@ function doctor_jwt_guard(bool $return_null = false): ?array
         _doctor_redirect_login('unauthorized');
     }
 
+    // Populate session so session-based helpers (abdm_*.php) can read doctor_id
+    if (session_status() === PHP_SESSION_NONE) session_start();
+    $_SESSION['doctor_id'] = $payload['sub'] ?? ($payload['doctor_id'] ?? null);
+
     return $payload;
 }
 
