@@ -1,11 +1,14 @@
 <?php
 /**
- * Step 3 — Verify OTP, fetch full ABHA profile, create/update patient in DB.
- * POST { txnId, otp, abha_input, type }
- * Returns { success, is_new, patient_id, profile }
+ * Step 2 — Verify OTP, fetch full ABHA profile, create/update patient in DB.
+ * POST { txnId, otp, type: "number"|"address"|"mobile"|"aadhaar" }
+ * Returns { success, patient_id, profile }
+ *         OR { success, needs_select, txnId, t_token, accounts } (mobile w/ multiple ABHAs)
  *
- * ABDM flow: confirmAuth → POST /profile/login/verify  → returns X-token
- *            getProfile(xToken)                         → full ABHAProfile
+ * Mobile login flow:
+ *   POST /profile/login/verify → returns T-token (jwtToken) + optional accounts[]
+ *   If multiple accounts: frontend calls abha-select-user.php to pick one
+ *   If single account:   auto-call /profile/login/verify/user → X-token → getProfile
  */
 require_once dirname(__DIR__) . '/auth/guard.php';
 require_once dirname(dirname(__DIR__)) . '/config/connect.php';
@@ -22,9 +25,10 @@ if (!ABDM_CONFIGURED) {
     echo json_encode(['success'=>false,'error'=>'ABDM not configured']); exit;
 }
 
-$body   = json_decode(file_get_contents('php://input'), true) ?? [];
-$txnId  = trim($body['txnId'] ?? '');
-$otp    = trim($body['otp']   ?? '');
+$body  = json_decode(file_get_contents('php://input'), true) ?? [];
+$txnId = trim($body['txnId'] ?? '');
+$otp   = trim($body['otp']   ?? '');
+$type  = trim($body['type']  ?? 'number'); // number|address|mobile|aadhaar
 
 if (!$txnId || !$otp) {
     echo json_encode(['success'=>false,'error'=>'txnId and OTP are required']); exit;
@@ -33,19 +37,71 @@ if (!ctype_digit($otp) || strlen($otp) < 4) {
     echo json_encode(['success'=>false,'error'=>'Invalid OTP format']); exit;
 }
 
+// Determine scope: mobile login uses mobile-verify scope
+$scopes = ($type === 'mobile') ? ['abha-login', 'mobile-verify'] : ['abha-login'];
+
 try {
     $api = new AbdmApi();
 
-    /* ── Step A: verify OTP → get X-token ── */
-    $authRes = $api->confirmAuth($otp, $txnId, ['abha-login']);
+    /* ── Step A: verify OTP ── */
+    $authRes = $api->confirmAuth($otp, $txnId, $scopes);
 
     if (!AbdmApi::wasSuccessful($authRes)) {
         echo json_encode(['success'=>false,'error'=>AbdmApi::extractError($authRes,'OTP verification failed')]); exit;
     }
 
-    // X-token can be in token or tokens.token
-    $xToken = $authRes['token']
-           ?? ($authRes['tokens']['token'] ?? '');
+    // Mobile login: response returns a T-token (jwtToken) + possible accounts[]
+    // Other logins: response returns X-token directly
+    $tToken    = $authRes['token']   ?? ($authRes['jwtToken'] ?? '');
+    $accounts  = $authRes['accounts'] ?? [];
+    $txnIdNew  = $authRes['txnId']   ?? $txnId;
+
+    /* ── Mobile login: handle multiple ABHAs linked to same mobile ── */
+    if ($type === 'mobile') {
+        if (!$tToken) {
+            echo json_encode(['success'=>false,'error'=>'ABDM did not return a session token. OTP may have expired.']); exit;
+        }
+
+        if (count($accounts) > 1) {
+            // More than one ABHA on this mobile — let doctor pick
+            $cleaned = [];
+            foreach ($accounts as $acc) {
+                $cleaned[] = [
+                    'ABHANumber' => AbdmApi::formatAbhaNumber($acc['ABHANumber'] ?? ''),
+                    'name'       => trim(($acc['firstName']??'').' '.($acc['lastName']??'')),
+                    'preferredAbhaAddress' => $acc['preferredAbhaAddress'] ?? ($acc['ABHAAddress'] ?? ''),
+                ];
+            }
+            echo json_encode([
+                'success'      => true,
+                'needs_select' => true,
+                'txnId'        => $txnIdNew,
+                't_token'      => $tToken,
+                'accounts'     => $cleaned,
+            ]);
+            exit;
+        }
+
+        // Single ABHA (or ABHANumber in response directly) — auto-select
+        $abhaNum = !empty($accounts[0]['ABHANumber'])
+                   ? $accounts[0]['ABHANumber']
+                   : ($authRes['ABHANumber'] ?? '');
+
+        if (!$abhaNum) {
+            echo json_encode(['success'=>false,'error'=>'No ABHA number returned by ABDM. Cannot complete login.']); exit;
+        }
+
+        // Step 3: exchange T-token + ABHANumber → X-token
+        $selectRes = $api->verifyUserLogin($txnIdNew, AbdmApi::formatAbhaNumber($abhaNum), $tToken);
+        if (!AbdmApi::wasSuccessful($selectRes)) {
+            echo json_encode(['success'=>false,'error'=>AbdmApi::extractError($selectRes,'Could not finalise ABHA login')]); exit;
+        }
+        $xToken = $selectRes['token'] ?? ($selectRes['tokens']['token'] ?? '');
+
+    } else {
+        // ABHA number / address / Aadhaar login: token is X-token directly
+        $xToken = $tToken ?: ($authRes['tokens']['token'] ?? '');
+    }
 
     if (!$xToken) {
         echo json_encode(['success'=>false,'error'=>'ABDM did not return a profile token. OTP may have expired — resend and try again.']); exit;
@@ -60,21 +116,19 @@ try {
 
     /* ── Normalise profile fields ── */
     $abha_number  = AbdmApi::formatAbhaNumber($profileRes['ABHANumber'] ?? '');
-    $abha_address = $profileRes['preferredAbhaAddress']
-                 ?? ($profileRes['ABHAAddress'] ?? '');
+    $abha_address = $profileRes['preferredAbhaAddress'] ?? ($profileRes['ABHAAddress'] ?? '');
     $first_name   = trim($profileRes['firstName']  ?? '');
     $middle_name  = trim($profileRes['middleName'] ?? '');
     $last_name    = trim($profileRes['lastName']   ?? '');
     $full_name    = trim($first_name.' '.$middle_name.' '.$last_name);
     $mobile       = preg_replace('/\D/', '', $profileRes['mobile'] ?? '');
-    $email        = $profileRes['email']       ?? '';
-    $gender       = $profileRes['gender']      ?? '';
-    $dob_raw      = $profileRes['dob']         ?? ($profileRes['birthdate'] ?? '');
-    $state        = $profileRes['stateName']   ?? ($profileRes['state']     ?? '');
-    $district     = $profileRes['districtName']?? ($profileRes['district']  ?? '');
-    $pincode      = $profileRes['pinCode']     ?? '';
-    $address      = $profileRes['address']     ?? '';
-    $photo_b64    = $profileRes['profilePhoto']?? ($profileRes['photo']     ?? '');
+    $email        = $profileRes['email']        ?? '';
+    $gender       = $profileRes['gender']       ?? '';
+    $dob_raw      = $profileRes['dob']          ?? ($profileRes['birthdate'] ?? '');
+    $state        = $profileRes['stateName']    ?? ($profileRes['state']     ?? '');
+    $district     = $profileRes['districtName'] ?? ($profileRes['district']  ?? '');
+    $pincode      = $profileRes['pinCode']      ?? '';
+    $address      = $profileRes['address']      ?? '';
 
     // Normalise DOB: ABDM may return DD-MM-YYYY or YYYY-MM-DD
     $dob_db = null;
@@ -86,16 +140,15 @@ try {
         }
     }
 
-    // Normalise gender: M→Male, F→Female
+    // Normalise gender
     if ($gender === 'M') $gender = 'Male';
     elseif ($gender === 'F') $gender = 'Female';
 
     /* ── Step C: find or create user in DB ── */
     $is_new     = false;
     $patient_id = 0;
+    $existing   = null;
 
-    // Try to match existing user by ABHA number first, then mobile, then email
-    $existing = null;
     if ($abha_number) {
         $s = $conn->prepare("SELECT id FROM users WHERE abha_id=? LIMIT 1");
         $s->bind_param('s', $abha_number);
@@ -116,7 +169,6 @@ try {
     }
 
     if ($existing) {
-        /* UPDATE existing user with ABHA data from ABDM */
         $patient_id = (int)$existing['id'];
         $upd = $conn->prepare("
             UPDATE users SET
@@ -133,10 +185,8 @@ try {
         $upd->execute();
 
     } else {
-        /* CREATE new user */
         $is_new = true;
         if (!$mobile) {
-            // Should not happen — getProfile should return mobile
             echo json_encode(['success'=>false,'error'=>'ABDM profile does not include mobile number. Cannot create patient.']); exit;
         }
         $temp_pass = bin2hex(random_bytes(8));
@@ -182,7 +232,7 @@ try {
         'success'    => true,
         'is_new'     => $is_new,
         'patient_id' => $patient_id,
-        'message'    => $is_new ? 'Patient created from ABDM and linked to your panel' : 'Existing patient updated with ABHA data and linked',
+        'message'    => $is_new ? 'Patient created from ABDM and linked to your panel' : 'Patient linked with verified ABHA data',
         'profile'    => [
             'name'         => $full_name,
             'abha_number'  => $abha_number,

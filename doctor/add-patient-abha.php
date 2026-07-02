@@ -62,7 +62,7 @@ require_once __DIR__ . '/inc/sidebar.php';
 <div class="wizard">
   <div class="wi active" id="si1"><div class="wc">1</div><span class="wl">Verify Identity</span></div>
   <div class="wi"        id="si2"><div class="wc">2</div><span class="wl">Enter OTP</span></div>
-  <div class="wi"        id="si3"><div class="wc">3</div><span class="wl">Profile</span></div>
+  <div class="wi"        id="si3"><div class="wc">3</div><span class="wl">Done</span></div>
 </div>
 
 <!-- Step 1: choose method + enter value -->
@@ -123,6 +123,16 @@ require_once __DIR__ . '/inc/sidebar.php';
   </div>
 </div>
 
+<!-- Step 2b: ABHA selection (mobile with multiple ABHAs) -->
+<div class="sbody" id="step2b">
+  <div class="cp-card">
+    <div class="cp-title"><i class="fa fa-id-card-o mr-2" style="color:#0C74C5;"></i>Select Patient's ABHA Account</div>
+    <p class="text-muted" style="font-size:.84rem;">Multiple ABHA accounts are linked to this mobile. Please select the correct patient.</p>
+    <div id="abhaAccountList"></div>
+    <div id="err2b" class="alert alert-danger mt-3" style="display:none;border-radius:8px;font-size:.84rem;"></div>
+  </div>
+</div>
+
 <!-- Step 3: result -->
 <div class="sbody" id="step3">
   <div id="step3Inner">
@@ -137,7 +147,7 @@ require_once __DIR__ . '/inc/sidebar.php';
 
 <script>
 const BASE='<?= BASE_URL ?>';
-let txnId='', vType='aadhaar';
+let txnId='', vType='aadhaar', pendingTToken='';
 
 /* ── OTP box wiring ── */
 document.querySelectorAll('.otp-box').forEach((el,i,all)=>{
@@ -153,8 +163,7 @@ function getOtp(){return [...document.querySelectorAll('.otp-box')].map(e=>e.val
 /* ── Timer ── */
 function startTimer(secs){
   document.getElementById('btnResend').disabled=true;
-  const el=document.getElementById('timerEl');
-  let t=secs;
+  const el=document.getElementById('timerEl');let t=secs;
   const iv=setInterval(()=>{
     el.textContent='Resend in '+t+'s';
     if(--t<0){clearInterval(iv);el.textContent='';document.getElementById('btnResend').disabled=false;}
@@ -164,13 +173,12 @@ function startTimer(secs){
 /* ── Method switcher ── */
 function setType(type,btn){
   document.querySelectorAll('.method-tab').forEach(b=>b.classList.remove('sel'));
-  btn.classList.add('sel');
-  vType=type;
+  btn.classList.add('sel');vType=type;
   const inp=document.getElementById('mainInput');
   const pfx=document.getElementById('mobilePrefix');
   const note=document.getElementById('aadhaarNote');
-  inp.value=''; inp.type='text'; inp.style.letterSpacing='';
-  pfx.style.display='none'; note.style.display='none';
+  inp.value='';inp.type='text';inp.style.letterSpacing='';
+  pfx.style.display='none';note.style.display='none';
   if(type==='aadhaar'){
     document.getElementById('inputLabel').textContent='Aadhaar Number (12 digits)';
     inp.placeholder='•••• •••• ••••';inp.maxLength=12;inp.type='password';inp.style.letterSpacing='2px';
@@ -179,7 +187,7 @@ function setType(type,btn){
   } else if(type==='mobile'){
     document.getElementById('inputLabel').textContent='Mobile Number';
     pfx.style.display='flex';inp.placeholder='9876543210';inp.maxLength=10;inp.inputMode='numeric';
-    document.getElementById('inputHint').textContent='Mobile registered with patient\'s ABHA account';
+    document.getElementById('inputHint').textContent='OTP sent to this mobile number';
   } else if(type==='number'){
     document.getElementById('inputLabel').textContent='ABHA Number';
     inp.placeholder='XX-XXXX-XXXX-XXXX';inp.maxLength=17;inp.style.letterSpacing='1px';
@@ -201,10 +209,13 @@ document.getElementById('mainInput').addEventListener('input',function(){
   this.value=o;
 });
 
+function showStep(id){
+  ['step1','step2','step2b','step3'].forEach(s=>document.getElementById(s).classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
 function goStep(n){
-  ['step1','step2','step3'].forEach((id,i)=>{
-    document.getElementById(id).classList.toggle('active',i===n-1);
-  });
+  const steps=['step1','step2','step3'];
+  showStep(steps[n-1]||'step1');
   ['si1','si2','si3'].forEach((id,i)=>{
     const el=document.getElementById(id);
     if(i<n-1) el.className='wi done'; else if(i===n-1) el.className='wi active'; else el.className='wi';
@@ -213,6 +224,7 @@ function goStep(n){
 
 function showErr(id,msg){const el=document.getElementById(id);el.style.display='block';el.textContent=msg;}
 function hideErr(id){document.getElementById(id).style.display='none';}
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 
 /* ── Send OTP ── */
 document.getElementById('btnSend').addEventListener('click',function(){
@@ -245,15 +257,65 @@ document.getElementById('btnVerify').addEventListener('click',function(){
   hideErr('err2');
   const btn=this;btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin mr-1"></i> Verifying…';
   fetch(BASE+'doctor/api/abha-otp-verify.php',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({txnId:txnId,otp:otp})})
+    body:JSON.stringify({txnId:txnId,otp:otp,type:vType})})
   .then(r=>r.json()).then(data=>{
     btn.disabled=false;btn.innerHTML='<i class="fa fa-check mr-1"></i> Verify OTP';
     if(!data.success){showErr('err2',data.error||'OTP verification failed');return;}
+
+    // Mobile login: multiple ABHAs linked to this mobile — show picker
+    if(data.needs_select){
+      txnId=data.txnId;
+      pendingTToken=data.t_token;
+      renderAccountPicker(data.accounts);
+      showStep('step2b');
+      document.getElementById('si2').className='wi done';
+      return;
+    }
+
+    // All other paths: redirect to patient profile
     goStep(3);
-    // Redirect straight to patient profile
     window.location=BASE+'doctor/patient-profile.php?id='+data.patient_id;
   }).catch(()=>{btn.disabled=false;btn.innerHTML='<i class="fa fa-check mr-1"></i> Verify OTP';showErr('err2','Network error');});
 });
+
+/* ── ABHA account picker (mobile login, multiple ABHAs) ── */
+function renderAccountPicker(accounts){
+  const list=document.getElementById('abhaAccountList');
+  list.innerHTML='';
+  accounts.forEach(acc=>{
+    const div=document.createElement('div');
+    div.style.cssText='border:2px solid #e5e7eb;border-radius:12px;padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:.15s;';
+    div.innerHTML=
+      '<div style="font-weight:700;font-size:.92rem;">'+esc(acc.name||'—')+'</div>'
+      +'<div style="font-size:.78rem;color:#0C74C5;font-family:monospace;"><i class="fa fa-id-card-o mr-1"></i>'+esc(acc.ABHANumber)+'</div>'
+      +(acc.preferredAbhaAddress?'<div style="font-size:.76rem;color:#6b7280;">'+esc(acc.preferredAbhaAddress)+'</div>':'');
+    div.addEventListener('mouseenter',()=>div.style.borderColor='#0C74C5');
+    div.addEventListener('mouseleave',()=>div.style.borderColor='#e5e7eb');
+    div.addEventListener('click',()=>selectAbha(acc.ABHANumber,div));
+    list.appendChild(div);
+  });
+}
+
+function selectAbha(abhaNumber,card){
+  hideErr('err2b');
+  document.querySelectorAll('#abhaAccountList > div').forEach(d=>d.style.pointerEvents='none');
+  card.style.cssText='border:2px solid #0C74C5;border-radius:12px;padding:14px 16px;margin-bottom:10px;background:#eff6ff;';
+  card.innerHTML+='<div class="mt-1"><i class="fa fa-spinner fa-spin" style="color:#0C74C5;"></i> Selecting…</div>';
+  fetch(BASE+'doctor/api/abha-select-user.php',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({txnId:txnId,t_token:pendingTToken,abha_number:abhaNumber})})
+  .then(r=>r.json()).then(data=>{
+    if(!data.success){
+      showErr('err2b',data.error||'Could not select account');
+      document.querySelectorAll('#abhaAccountList > div').forEach(d=>d.style.pointerEvents='');
+      return;
+    }
+    goStep(3);
+    window.location=BASE+'doctor/patient-profile.php?id='+data.patient_id;
+  }).catch(()=>{
+    showErr('err2b','Network error — please try again');
+    document.querySelectorAll('#abhaAccountList > div').forEach(d=>d.style.pointerEvents='');
+  });
+}
 </script>
 </body>
 </html>

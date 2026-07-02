@@ -349,14 +349,17 @@ class AbdmApi
     {
         $token = $this->getAccessToken();
 
-        // abha-login scope → profile login endpoint (correct path for existing ABHA holders)
-        // NOTE: /profile/login/request/otp does NOT accept scope or otpSystem fields.
-        // Only loginId + loginHint are valid for this endpoint.
         if (in_array('abha-login', $scopes, true)) {
-            return $this->post('/profile/login/request/otp', [
+            // Mobile login requires scope + otpSystem per ABDM spec
+            $body = [
+                'scope'     => ($loginHint === 'mobile')
+                                  ? ['abha-login', 'mobile-verify']
+                                  : ['abha-login'],
                 'loginHint' => $loginHint,
                 'loginId'   => $this->rsaEncrypt($loginId),
-            ], $token);
+                'otpSystem' => $otpSystem,
+            ];
+            return $this->post('/profile/login/request/otp', $body, $token);
         }
 
         // Enrollment scopes (abha-enrol, dl-flow, mobile-verify) → enrollment endpoint
@@ -381,9 +384,7 @@ class AbdmApi
         $token = $this->getAccessToken();
 
         if (in_array('abha-login', $scopes, true)) {
-            // Production profile login verify
             return $this->post('/profile/login/verify', [
-                'txnId'    => $txnId,
                 'scope'    => $scopes,
                 'authData' => [
                     'authMethods' => ['otp'],
@@ -410,17 +411,26 @@ class AbdmApi
     }
 
     /**
-     * (Production only) Select ABHA from multiple mobile-linked accounts.
+     * Step 3 (mobile login) — Select ABHA when multiple ABHAs are linked to one mobile.
      * POST /profile/login/verify/user
+     * $tToken : T-token (jwtToken) returned by /profile/login/verify (Step 2)
+     * Returns { token } — X-token for getProfile calls
      */
-    public function verifyUserLogin(string $txnId, string $abhaNumber): array
+    public function verifyUserLogin(string $txnId, string $abhaNumber, string $tToken = ''): array
     {
-        $token = $this->getAccessToken();
-        return $this->post('/profile/login/verify/user', [
-            'txnId'      => $txnId,
-            'scope'      => ['abha-login'],
-            'ABHANumber' => $abhaNumber,
-        ], $token);
+        $token        = $this->getAccessToken();
+        $extraHeaders = $tToken ? ['T-Token' => 'Bearer ' . $tToken] : [];
+        return $this->rawPost(
+            $this->base . '/profile/login/verify/user',
+            [
+                'txnId'      => $txnId,
+                'scope'      => ['abha-login', 'mobile-verify'],
+                'ABHANumber' => $abhaNumber,
+            ],
+            $token,
+            true,
+            $extraHeaders
+        );
     }
 
     /* ── Backward-compat aliases ── */
