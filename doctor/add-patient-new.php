@@ -191,7 +191,7 @@ function goStep(n){
 function showErr(id,msg){const el=document.getElementById(id);el.style.display='block';el.textContent=msg;}
 function hideErr(id){document.getElementById(id).style.display='none';}
 
-/* Send OTP */
+/* ── Step 1: Send OTP ── */
 document.getElementById('btnSendOtp').addEventListener('click',function(){
   const aad=document.getElementById('aadhaarInput').value.replace(/\D/g,'');
   if(aad.length!==12){showErr('err1','Aadhaar must be 12 digits');return;}
@@ -199,77 +199,114 @@ document.getElementById('btnSendOtp').addEventListener('click',function(){
   const mob=document.getElementById('mobileInput').value.replace(/\D/g,'');
   if(mob) document.getElementById('mobileStep2').value=mob;
   const btn=this;btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin mr-1"></i> Sending…';
-  fetch(BASE+'doctor/api/abha-enrol-otp.php',{method:'POST',headers:{'Content-Type':'application/json'},
+  fetch(BASE+'doctor/api/abdm_send_otp.php',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({aadhaar:aad,mobile:mob||''})})
   .then(r=>r.json()).then(data=>{
     btn.disabled=false;btn.innerHTML='<i class="fa fa-paper-plane mr-1"></i> Send OTP';
-    if(!data.success){showErr('err1',data.error||'Failed');return;}
+    if(!data.success){showErr('err1',data.error||'Failed to send OTP');return;}
     txnId=data.txnId;
     document.getElementById('sentMsg').textContent=data.message||'OTP sent to Aadhaar-linked mobile.';
     document.querySelectorAll('.otp-box').forEach(i=>i.value='');
     goStep(2);startTimer(300);
-  }).catch(()=>{btn.disabled=false;btn.innerHTML='<i class="fa fa-paper-plane mr-1"></i> Send OTP';showErr('err1','Network error');});
+  }).catch(()=>{btn.disabled=false;btn.innerHTML='<i class="fa fa-paper-plane mr-1"></i> Send OTP';showErr('err1','Network error — please retry');});
 });
 document.getElementById('btnResend').addEventListener('click',()=>document.getElementById('btnSendOtp').click());
 
-/* Verify OTP */
+/* ── Step 2: Verify OTP ── */
 document.getElementById('btnVerify').addEventListener('click',function(){
   const otp=getOtp();
-  if(otp.length<6){showErr('err2','Enter complete OTP');return;}
+  if(otp.length<6){showErr('err2','Enter the complete 6-digit OTP');return;}
   const mob=document.getElementById('mobileStep2').value.replace(/\D/g,'');
   if(mob.length!==10){showErr('err2','Enter a valid 10-digit mobile number');return;}
   hideErr('err2');
   const btn=this;btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin mr-1"></i> Verifying…';
-  fetch(BASE+'doctor/api/abha-enrol-verify.php',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({txnId:txnId,otp:otp,mobile:mob})})
+  fetch(BASE+'doctor/api/abdm_verify_otp.php',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({otp:otp,mobile:mob})})
   .then(r=>r.json()).then(data=>{
     btn.disabled=false;btn.innerHTML='<i class="fa fa-check mr-1"></i> Verify OTP';
-    if(!data.success){showErr('err2',data.error||'Failed');return;}
-    txnId=data.txnId;xToken=data.xToken;profile=data.profile;isNew=data.is_new_abha;
+    if(!data.success){showErr('err2',data.error||'OTP verification failed');return;}
+
+    txnId=data.txnId; xToken=data.token; profile=data.ABHAProfile||{}; isNew=data.isNew!==false;
+
     if(!isNew){
-      // Already has ABHA — skip address selection, go confirm directly
+      // ABHA already exists for this Aadhaar — save directly, skip address step
       goStep(4);
-      fetch(BASE+'doctor/api/abha-enrol-confirm.php',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({txnId:txnId,xToken:xToken,chosen_address:profile.abha_address||'',profile:profile,is_new_abha:false})})
+      fetch(BASE+'doctor/api/abdm_set_address.php',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({abhaAddress:profile.preferredAbhaAddress||profile.phrAddress||''})})
       .then(r=>r.json()).then(d=>{
-        if(d.success) window.location=BASE+'doctor/patient-profile.php?id='+d.patient_id+'&new=1';
-        else document.getElementById('step4Inner').innerHTML='<div class="cp-card text-center py-4 text-danger"><i class="fa fa-times-circle fa-2x"></i><div class="mt-2">'+esc(d.error||'Failed')+'</div></div>';
+        if(d.success){
+          document.getElementById('step4Inner').innerHTML=
+            '<div class="cp-card text-center py-4">'
+            +'<i class="fa fa-check-circle fa-3x" style="color:#16a34a;"></i>'
+            +'<div class="mt-2 font-weight-bold">ABHA Already Exists!</div>'
+            +'<div class="text-muted mt-1" style="font-size:.84rem;">'+esc(d.abhaAddress||'')+'</div>'
+            +'<a href="'+BASE+'doctor/patient-profile.php?id='+d.patient_id+'&new=1" class="btn btn-success mt-3">View Patient Profile</a>'
+            +'</div>';
+        } else {
+          document.getElementById('step4Inner').innerHTML=
+            '<div class="cp-card text-center py-4 text-danger">'
+            +'<i class="fa fa-times-circle fa-2x"></i>'
+            +'<div class="mt-2">'+esc(d.error||'Failed to save patient')+'</div>'
+            +'<button class="btn btn-sm btn-outline-secondary mt-3" onclick="goStep(2)">Back</button>'
+            +'</div>';
+        }
+      }).catch(()=>{
+        document.getElementById('step4Inner').innerHTML='<div class="cp-card text-center py-4 text-danger">Network error saving patient.</div>';
       });
       return;
     }
-    const suggs=data.suggestions||[];
-    const wrap=document.getElementById('suggestions');
-    wrap.innerHTML=suggs.length
-      ? '<div style="font-size:.76rem;font-weight:600;color:#374151;margin-bottom:6px;">Suggested addresses:</div>'
-        +suggs.map(a=>'<span class="addr-chip" onclick="selAddr(this,\''+esc(a)+'\')">'+esc(a)+'</span>').join('')
-      : '<div style="font-size:.76rem;color:#9ca3af;">Enter a custom address below.</div>';
-    goStep(3);
-  }).catch(()=>{btn.disabled=false;btn.innerHTML='<i class="fa fa-check mr-1"></i> Verify OTP';showErr('err2','Network error');});
+
+    // New ABHA — fetch address suggestions then show step 3
+    fetch(BASE+'doctor/api/abdm_suggestions.php',{headers:{'Content-Type':'application/json'}})
+    .then(r=>r.json()).then(sData=>{
+      const suggs=sData.suggestions||[];
+      const wrap=document.getElementById('suggestions');
+      wrap.innerHTML=suggs.length
+        ?'<div style="font-size:.76rem;font-weight:600;color:#374151;margin-bottom:6px;">Suggested addresses:</div>'
+          +suggs.map(a=>'<span class="addr-chip" onclick="pickAddr(this,\''+esc(a)+'\')">'+esc(a)+'</span>').join('')
+        :'<div style="font-size:.76rem;color:#9ca3af;margin-bottom:8px;">No suggestions returned. Enter an address below.</div>';
+      if(sData.warning) showErr('err3','Note: '+sData.warning);
+      goStep(3);
+    }).catch(()=>{
+      document.getElementById('suggestions').innerHTML='<div style="font-size:.76rem;color:#9ca3af;">Could not load suggestions. Enter address manually.</div>';
+      goStep(3);
+    });
+
+  }).catch(()=>{btn.disabled=false;btn.innerHTML='<i class="fa fa-check mr-1"></i> Verify OTP';showErr('err2','Network error — please retry');});
 });
 
-window.selAddr=function(el,a){
+window.pickAddr=function(el,a){
   document.querySelectorAll('.addr-chip').forEach(c=>c.classList.remove('sel'));
   el.classList.add('sel');selAddr=a;
   document.getElementById('customAddr').value=a;
 };
 
-/* Confirm address */
+/* ── Step 3: Confirm address ── */
 document.getElementById('btnConfirm').addEventListener('click',function(){
   const chosen=(document.getElementById('customAddr').value.trim()||selAddr||'').trim();
   if(!chosen){showErr('err3','Choose or enter an ABHA address');return;}
+  if(!/^[a-zA-Z0-9._-]{3,}@(sbx|abdm)$/.test(chosen)){
+    showErr('err3','Address must be like firstname.lastname@sbx (sandbox) or @abdm (production)');return;
+  }
   hideErr('err3');
   const btn=this;btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin mr-1"></i> Saving…';
   goStep(4);
-  fetch(BASE+'doctor/api/abha-enrol-confirm.php',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({txnId:txnId,xToken:xToken,chosen_address:chosen,profile:profile,is_new_abha:isNew})})
+  fetch(BASE+'doctor/api/abdm_set_address.php',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({abhaAddress:chosen})})
   .then(r=>r.json()).then(data=>{
     btn.disabled=false;btn.innerHTML='<i class="fa fa-check mr-1"></i> Confirm & Save';
     if(!data.success){
-      document.getElementById('step4Inner').innerHTML='<div class="cp-card text-center py-4 text-danger"><i class="fa fa-times-circle fa-2x"></i><div class="mt-2">'+esc(data.error||'Failed')+'</div><button class="btn btn-sm btn-outline-secondary mt-3" onclick="goStep(3)">Back</button></div>';
-      return;
+      goStep(3);showErr('err3',data.error||'Failed to set ABHA address');return;
     }
-    window.location=BASE+'doctor/patient-profile.php?id='+data.patient_id+'&new=1';
-  }).catch(()=>{goStep(3);showErr('err3','Network error');});
+    document.getElementById('step4Inner').innerHTML=
+      '<div class="cp-card text-center py-4">'
+      +'<i class="fa fa-check-circle fa-3x" style="color:#16a34a;"></i>'
+      +'<div class="mt-2 font-weight-bold">ABHA Created Successfully!</div>'
+      +'<div class="text-muted mt-1" style="font-size:.84rem;">'+esc(data.abhaAddress||chosen)+'</div>'
+      +(data.abhaNumber?'<div style="font-size:.78rem;color:#0C74C5;font-family:monospace;margin-top:4px;">'+esc(data.abhaNumber)+'</div>':'')
+      +(data.patient_id?'<a href="'+BASE+'doctor/patient-profile.php?id='+data.patient_id+'&new=1" class="btn btn-success mt-3"><i class="fa fa-user mr-1"></i>View Patient Profile</a>':'')
+      +'</div>';
+  }).catch(()=>{goStep(3);showErr('err3','Network error — please retry');});
 });
 
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
