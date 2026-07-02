@@ -2,7 +2,7 @@
 /**
  * AbdmApi — ABDM / ABHA API v3 client (spec v1.3, July 2025)
  *
- * OAuth Gateway:    POST https://dev.abdm.gov.in/gateway/v0.5/sessions
+ * OAuth Gateway:    POST https://dev.abdm.gov.in/api/hiecm/gateway/v3/sessions
  * ABHA v3 Sandbox: https://abhasbx.abdm.gov.in/abha/api/v3
  * ABHA v3 Prod:    https://abha.abdm.gov.in/abha/api/v3
  *
@@ -52,7 +52,8 @@ class AbdmApi
             return $_SESSION['abdm_token'];
         }
 
-        $res = $this->rawPost($this->gateway . '/v0.5/sessions', [
+        // ABDM_GATEWAY_URL is already the full endpoint URL (v3)
+        $res = $this->rawPost($this->gateway, [
             'clientId'     => $this->clientId,
             'clientSecret' => $this->clientSecret,
             'grantType'    => 'client_credentials',
@@ -87,7 +88,7 @@ class AbdmApi
         }
 
         $token = $this->getAccessToken();
-        $res   = $this->rawGet($this->base . '/profile/public/certificate', $token);
+        $res   = $this->rawGet($this->base . '/certs', $token);
 
         $raw = $res['publicKey'] ?? '';
         if (!$raw) {
@@ -122,8 +123,8 @@ class AbdmApi
         }
 
         $encrypted = '';
-        // OPENSSL_PKCS1_OAEP_PADDING = RSA/ECB/OAEPWithSHA-1AndMGF1Padding
-        if (!openssl_public_encrypt($plaintext, $encrypted, $key, OPENSSL_PKCS1_OAEP_PADDING)) {
+        // RSA/ECB/PKCS1Padding — as required by ABDM v3 spec
+        if (!openssl_public_encrypt($plaintext, $encrypted, $key, OPENSSL_PKCS1_PADDING)) {
             throw new RuntimeException('ABDM RSA encryption failed: ' . openssl_error_string());
         }
 
@@ -534,13 +535,14 @@ class AbdmApi
      * $txnId  : transaction ID from enrolByAadhaar response.
      * $xToken : tokens.token from enrolByAadhaar response.
      */
-    public function getEnrollmentAbhaAddressSuggestions(string $txnId, string $xToken): array
+    public function getEnrollmentAbhaAddressSuggestions(string $txnId, string $xToken = ''): array
     {
         $gToken = $this->getAccessToken();
+        // Spec: txnId goes in Transaction_Id header, not as a query param
         return $this->rawGet(
-            $this->base . '/enrollment/enrol/suggestion?txnId=' . urlencode($txnId),
+            $this->base . '/enrollment/enrol/suggestion',
             $gToken,
-            ['X-token' => 'Bearer ' . $xToken]
+            ['Transaction_Id' => $txnId]
         );
     }
 
@@ -550,17 +552,17 @@ class AbdmApi
      * $abhaAddress  : chosen address WITHOUT @abdm suffix (e.g. "john.doe")
      * $xToken       : tokens.token from enrolByAadhaar response.
      */
-    public function setEnrollmentAbhaAddress(string $txnId, string $abhaAddress, string $xToken): array
+    public function setEnrollmentAbhaAddress(string $txnId, string $abhaAddress, string $xToken = ''): array
     {
         $gToken = $this->getAccessToken();
-        // Strip @abdm suffix — API adds it in the response
-        $addr = preg_replace('/@abdm$/', '', trim($abhaAddress));
+        // Spec body: { txnId, abhaAddress, preferred: 1 }
+        // Keep the @sbx / @abdm suffix as-is if already present
+        $addr = trim($abhaAddress);
         return $this->rawPost(
             $this->base . '/enrollment/enrol/abha-address',
-            ['txnId' => $txnId, 'preferredAbhaAddress' => $addr],
+            ['txnId' => $txnId, 'abhaAddress' => $addr, 'preferred' => 1],
             $gToken,
-            true,
-            ['X-token' => 'Bearer ' . $xToken]
+            true
         );
     }
 

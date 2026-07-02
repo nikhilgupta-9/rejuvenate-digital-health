@@ -134,11 +134,9 @@ require_once __DIR__ . '/inc/sidebar.php';
     <p style="font-size:.84rem;color:#374151;">ABHA created! Pick a preferred address for this patient:</p>
     <div id="suggestions" class="mb-3"></div>
     <div class="form-group">
-      <label class="form-label-sm">Custom address</label>
-      <div class="input-group" style="max-width:280px;">
-        <input type="text" id="customAddr" class="form-control form-control-sm" placeholder="firstname.lastname">
-        <div class="input-group-append"><span class="input-group-text">@abdm</span></div>
-      </div>
+      <label class="form-label-sm">Or type a custom address</label>
+      <input type="text" id="customAddr" class="form-control form-control-sm" placeholder="e.g. firstname.lastname@sbx" style="max-width:280px;">
+      <small class="text-muted">Sandbox uses @sbx suffix. Production uses @abdm.</small>
     </div>
     <div id="err3" class="alert alert-danger mt-2" style="display:none;border-radius:8px;font-size:.84rem;"></div>
     <div class="d-flex mt-3" style="gap:10px;">
@@ -252,12 +250,12 @@ document.getElementById('btnVerify').addEventListener('click',function(){
 window.selAddr=function(el,a){
   document.querySelectorAll('.addr-chip').forEach(c=>c.classList.remove('sel'));
   el.classList.add('sel');selAddr=a;
-  document.getElementById('customAddr').value=a.replace(/@abdm$/,'');
+  document.getElementById('customAddr').value=a;
 };
 
 /* Confirm address */
 document.getElementById('btnConfirm').addEventListener('click',function(){
-  const chosen=document.getElementById('customAddr').value.trim()||selAddr;
+  const chosen=(document.getElementById('customAddr').value.trim()||selAddr||'').trim();
   if(!chosen){showErr('err3','Choose or enter an ABHA address');return;}
   hideErr('err3');
   const btn=this;btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin mr-1"></i> Saving…';
