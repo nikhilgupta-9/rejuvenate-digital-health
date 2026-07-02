@@ -9,23 +9,24 @@
  */
 
 if (session_status() === PHP_SESSION_NONE) session_start();
-require_once __DIR__ . '/abdm_rsa.php';
+require_once __DIR__ . '/abdm_rsa.php'; // also loads config/connect.php + config/abdm.php
 
-// Credentials — read from environment variables set in your .env / php.ini / XAMPP config.
-// Set these in C:/xampp/php/php.ini as:
-//   variables_order = "EGPCS"
-//   [Environment]
-//   ABDM_CLIENT_ID=YOUR_ID
-//   ABDM_CLIENT_SECRET=YOUR_SECRET
-// Or set them in .htaccess / config.php before including this file.
-define('ABDM_GATEWAY_ENDPOINT', 'https://dev.abdm.gov.in/api/hiecm/gateway/v3/sessions');
-define('ABDM_X_CM_ID_VALUE',    'sbx');
+// Alias the constants defined in config/abdm.php for use in this file.
+// ABDM_GATEWAY_URL, ABDM_CLIENT_ID, ABDM_CLIENT_SECRET, ABDM_X_CM_ID are
+// all set by config/abdm.php which reads them from .env via dotenv.
+if (!defined('ABDM_GATEWAY_ENDPOINT')) {
+    define('ABDM_GATEWAY_ENDPOINT', defined('ABDM_GATEWAY_URL') ? ABDM_GATEWAY_URL
+        : 'https://dev.abdm.gov.in/api/hiecm/gateway/v3/sessions');
+}
+if (!defined('ABDM_X_CM_ID_VALUE')) {
+    define('ABDM_X_CM_ID_VALUE', defined('ABDM_X_CM_ID') ? ABDM_X_CM_ID : 'sbx');
+}
 
-// Pull credentials: env → PHP constant fallbacks
 function abdm_credentials(): array
 {
-    $id     = getenv('ABDM_CLIENT_ID')     ?: (defined('ABDM_CLIENT_ID')     ? ABDM_CLIENT_ID     : '');
-    $secret = getenv('ABDM_CLIENT_SECRET') ?: (defined('ABDM_CLIENT_SECRET') ? ABDM_CLIENT_SECRET : '');
+    // config/abdm.php defines these constants from .env (loaded by dotenv in connect.php)
+    $id     = defined('ABDM_CLIENT_ID')     ? ABDM_CLIENT_ID     : ($_ENV['ABDM_CLIENT_ID']     ?? '');
+    $secret = defined('ABDM_CLIENT_SECRET') ? ABDM_CLIENT_SECRET : ($_ENV['ABDM_CLIENT_SECRET'] ?? '');
     return [$id, $secret];
 }
 
@@ -67,7 +68,7 @@ function abdm_get_access_token(): string
 
     abdm_log('Requesting gateway token', ['endpoint' => ABDM_GATEWAY_ENDPOINT]);
 
-    [$res, $http] = abdm_curl('POST', ABDM_GATEWAY_ENDPOINT, $headers, $body, true);
+    [$res, $http] = abdm_curl('POST', ABDM_GATEWAY_ENDPOINT, $headers, $body, defined('ABDM_SSL_VERIFY') ? ABDM_SSL_VERIFY : true);
 
     if ($http < 200 || $http >= 300 || empty($res['accessToken'])) {
         $err = abdm_extract_error($res, $http, 'Failed to get ABDM gateway token');

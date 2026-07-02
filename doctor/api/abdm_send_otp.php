@@ -75,7 +75,7 @@ try {
     ];
 
     abdm_log('Sending Aadhaar OTP request', ['doctor_id' => $_SESSION['doctor_id']]);
-    [$res, $http] = abdm_curl('POST', $url, $headers, $body, true);
+    [$res, $http] = abdm_curl('POST', $url, $headers, $body, defined('ABDM_SSL_VERIFY') ? ABDM_SSL_VERIFY : true);
 
     /* ── Handle response ── */
     if ($http < 200 || $http >= 300 || empty($res['txnId'])) {

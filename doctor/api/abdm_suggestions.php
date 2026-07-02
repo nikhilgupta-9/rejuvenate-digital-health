@@ -47,7 +47,7 @@ try {
     ];
 
     abdm_log('Fetching ABHA address suggestions', ['txnId' => $txnId]);
-    [$res, $http] = abdm_curl('GET', $url, $headers, null, true);
+    [$res, $http] = abdm_curl('GET', $url, $headers, null, defined('ABDM_SSL_VERIFY') ? ABDM_SSL_VERIFY : true);
 
     if ($http < 200 || $http >= 300) {
         $err = abdm_extract_error($res, $http, 'Failed to fetch address suggestions');

@@ -9,6 +9,16 @@
 
 if (session_status() === PHP_SESSION_NONE) session_start();
 
+// Load project config (dotenv + DB + BASE_URL + JWT_SECRET)
+$_abdmConfigPath = dirname(dirname(dirname(__FILE__))) . '/config/connect.php';
+if (file_exists($_abdmConfigPath) && !defined('BASE_URL')) require_once $_abdmConfigPath;
+unset($_abdmConfigPath);
+
+// Load ABDM constants (ABDM_CLIENT_ID, ABDM_CLIENT_SECRET, ABDM_GATEWAY_URL, etc.)
+$_abdmCfgPath = dirname(dirname(dirname(__FILE__))) . '/config/abdm.php';
+if (file_exists($_abdmCfgPath) && !defined('ABDM_CONFIGURED')) require_once $_abdmCfgPath;
+unset($_abdmCfgPath);
+
 /* ── Verhoeff algorithm for Aadhaar validation ── */
 
 function abdm_verhoeff_validate(string $num): bool

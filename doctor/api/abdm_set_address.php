@@ -13,9 +13,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 header('Content-Type: application/json');
 
-// Pull in DB connection (connect.php sets $conn)
-$configPath = dirname(dirname(dirname(__FILE__))) . '/config/connect.php';
-if (file_exists($configPath)) require_once $configPath;
+// $conn is set by config/connect.php, which abdm_rsa.php loads automatically
 
 require_once __DIR__ . '/abdm_rsa.php';
 require_once __DIR__ . '/abdm_session.php';
@@ -75,7 +73,7 @@ try {
     ];
 
     abdm_log('Setting ABHA address', ['txnId' => $txnId, 'address' => $abhaAddress]);
-    [$res, $http] = abdm_curl('POST', $url, $headers, $body, true);
+    [$res, $http] = abdm_curl('POST', $url, $headers, $body, defined('ABDM_SSL_VERIFY') ? ABDM_SSL_VERIFY : true);
 
     if ($http < 200 || $http >= 300) {
         $err = abdm_extract_error($res, $http, 'Failed to set ABHA address');

@@ -43,7 +43,7 @@ function abdm_get_public_key(): string
 
     abdm_log('Fetching ABDM public cert', ['url' => ABDM_CERT_URL]);
 
-    [$res, $http] = abdm_curl('GET', ABDM_CERT_URL, $headers, null, true);
+    [$res, $http] = abdm_curl('GET', ABDM_CERT_URL, $headers, null, defined('ABDM_SSL_VERIFY') ? ABDM_SSL_VERIFY : true);
 
     // Response may be a plain PEM string or { publicKey: "..." }
     $raw = null;
