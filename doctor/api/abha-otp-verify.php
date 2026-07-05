@@ -1,172 +1,92 @@
 <?php
-/**
- * Step 2 — Verify OTP, fetch full ABHA profile, create/update patient in DB.
- * POST { txnId, otp, type: "number"|"address"|"mobile"|"aadhaar" }
- * Returns { success, patient_id, profile }
- *         OR { success, needs_select, txnId, t_token, accounts } (mobile w/ multiple ABHAs)
- *
- * Mobile login flow:
- *   POST /profile/login/verify → returns T-token (jwtToken) + optional accounts[]
- *   If multiple accounts: frontend calls abha-select-user.php to pick one
- *   If single account:   auto-call /profile/login/verify/user → X-token → getProfile
- */
-require_once dirname(__DIR__) . '/auth/guard.php';
-require_once dirname(dirname(__DIR__)) . '/config/connect.php';
-require_once dirname(dirname(__DIR__)) . '/config/abdm.php';
-require_once dirname(dirname(__DIR__)) . '/lib/AbdmApi.php';
+// doctor/api/abha-otp-verify.php - FIXED WITH PLAIN TEXT MOBILE
 
+if (session_status() === PHP_SESSION_NONE) session_start();
 header('Content-Type: application/json');
 
-$payload = doctor_jwt_guard(true);
-if (!$payload) { echo json_encode(['success'=>false,'error'=>'Unauthorized']); exit; }
-$doctor_id = (int)($payload['doctor_id'] ?? $payload['sub'] ?? 0);
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 
-if (!ABDM_CONFIGURED) {
-    echo json_encode(['success'=>false,'error'=>'ABDM not configured']); exit;
-}
+require_once __DIR__ . '/abdm_rsa.php';
+require_once __DIR__ . '/abdm_session.php';
+require_once __DIR__ . '/abdm_get_cert.php';
+require_once dirname(dirname(__DIR__)) . '/config/connect.php';
 
-$body  = json_decode(file_get_contents('php://input'), true) ?? [];
-$txnId = trim($body['txnId'] ?? '');
-$otp   = trim($body['otp']   ?? '');
-$type  = trim($body['type']  ?? 'number'); // number|address|mobile|aadhaar
+/**
+ * Normalise an ABDM profile (either the full /profile/account response,
+ * or the ABHAProfile block from enrol/byAadhaar) into a flat field set.
+ */
+function abdm_normalise_profile(array $p): array
+{
+    $first  = trim($p['firstName']  ?? '');
+    $middle = trim($p['middleName'] ?? '');
+    $last   = trim($p['lastName']   ?? '');
+    $name   = trim($first . ' ' . $middle . ' ' . $last);
 
-if (!$txnId || !$otp) {
-    echo json_encode(['success'=>false,'error'=>'txnId and OTP are required']); exit;
-}
-if (!ctype_digit($otp) || strlen($otp) < 4) {
-    echo json_encode(['success'=>false,'error'=>'Invalid OTP format']); exit;
-}
-
-// Determine scope: mobile login uses mobile-verify scope
-$scopes = ($type === 'mobile') ? ['abha-login', 'mobile-verify'] : ['abha-login'];
-
-try {
-    $api = new AbdmApi();
-
-    /* ── Step A: verify OTP ── */
-    $authRes = $api->confirmAuth($otp, $txnId, $scopes);
-
-    if (!AbdmApi::wasSuccessful($authRes)) {
-        echo json_encode(['success'=>false,'error'=>AbdmApi::extractError($authRes,'OTP verification failed')]); exit;
+    $abhaAddress = $p['preferredAbhaAddress'] ?? '';
+    if (!$abhaAddress && !empty($p['phrAddress'][0])) {
+        $abhaAddress = $p['phrAddress'][0];
     }
 
-    // Mobile login: response returns a T-token (jwtToken) + possible accounts[]
-    // Other logins: response returns X-token directly
-    $tToken    = $authRes['token']   ?? ($authRes['jwtToken'] ?? '');
-    $accounts  = $authRes['accounts'] ?? [];
-    $txnIdNew  = $authRes['txnId']   ?? $txnId;
-
-    /* ── Mobile login: handle multiple ABHAs linked to same mobile ── */
-    if ($type === 'mobile') {
-        if (!$tToken) {
-            echo json_encode(['success'=>false,'error'=>'ABDM did not return a session token. OTP may have expired.']); exit;
-        }
-
-        if (count($accounts) > 1) {
-            // More than one ABHA on this mobile — let doctor pick
-            $cleaned = [];
-            foreach ($accounts as $acc) {
-                $cleaned[] = [
-                    'ABHANumber' => AbdmApi::formatAbhaNumber($acc['ABHANumber'] ?? ''),
-                    'name'       => trim(($acc['firstName']??'').' '.($acc['lastName']??'')),
-                    'preferredAbhaAddress' => $acc['preferredAbhaAddress'] ?? ($acc['ABHAAddress'] ?? ''),
-                ];
-            }
-            echo json_encode([
-                'success'      => true,
-                'needs_select' => true,
-                'txnId'        => $txnIdNew,
-                't_token'      => $tToken,
-                'accounts'     => $cleaned,
-            ]);
-            exit;
-        }
-
-        // Single ABHA (or ABHANumber in response directly) — auto-select
-        $abhaNum = !empty($accounts[0]['ABHANumber'])
-                   ? $accounts[0]['ABHANumber']
-                   : ($authRes['ABHANumber'] ?? '');
-
-        if (!$abhaNum) {
-            echo json_encode(['success'=>false,'error'=>'No ABHA number returned by ABDM. Cannot complete login.']); exit;
-        }
-
-        // Step 3: exchange T-token + ABHANumber → X-token
-        $selectRes = $api->verifyUserLogin($txnIdNew, AbdmApi::formatAbhaNumber($abhaNum), $tToken);
-        if (!AbdmApi::wasSuccessful($selectRes)) {
-            echo json_encode(['success'=>false,'error'=>AbdmApi::extractError($selectRes,'Could not finalise ABHA login')]); exit;
-        }
-        $xToken = $selectRes['token'] ?? ($selectRes['tokens']['token'] ?? '');
-
-    } else {
-        // ABHA number / address / Aadhaar login: token is X-token directly
-        $xToken = $tToken ?: ($authRes['tokens']['token'] ?? '');
-    }
-
-    if (!$xToken) {
-        echo json_encode(['success'=>false,'error'=>'ABDM did not return a profile token. OTP may have expired — resend and try again.']); exit;
-    }
-
-    /* ── Step B: fetch full profile ── */
-    $profileRes = $api->getProfile($xToken);
-
-    if (!AbdmApi::wasSuccessful($profileRes)) {
-        echo json_encode(['success'=>false,'error'=>AbdmApi::extractError($profileRes,'Could not fetch profile')]); exit;
-    }
-
-    /* ── Normalise profile fields ── */
-    $abha_number  = AbdmApi::formatAbhaNumber($profileRes['ABHANumber'] ?? '');
-    $abha_address = $profileRes['preferredAbhaAddress'] ?? ($profileRes['ABHAAddress'] ?? '');
-    $first_name   = trim($profileRes['firstName']  ?? '');
-    $middle_name  = trim($profileRes['middleName'] ?? '');
-    $last_name    = trim($profileRes['lastName']   ?? '');
-    $full_name    = trim($first_name.' '.$middle_name.' '.$last_name);
-    $mobile       = preg_replace('/\D/', '', $profileRes['mobile'] ?? '');
-    $email        = $profileRes['email']        ?? '';
-    $gender       = $profileRes['gender']       ?? '';
-    $dob_raw      = $profileRes['dob']          ?? ($profileRes['birthdate'] ?? '');
-    $state        = $profileRes['stateName']    ?? ($profileRes['state']     ?? '');
-    $district     = $profileRes['districtName'] ?? ($profileRes['district']  ?? '');
-    $pincode      = $profileRes['pinCode']      ?? '';
-    $address      = $profileRes['address']      ?? '';
-
-    // Normalise DOB: ABDM may return DD-MM-YYYY or YYYY-MM-DD
-    $dob_db = null;
-    if ($dob_raw) {
-        if (preg_match('/^(\d{2})-(\d{2})-(\d{4})$/', $dob_raw, $m)) {
-            $dob_db = $m[3].'-'.$m[2].'-'.$m[1];
-        } elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob_raw)) {
-            $dob_db = $dob_raw;
-        }
-    }
-
-    // Normalise gender
+    $gender = $p['gender'] ?? '';
     if ($gender === 'M') $gender = 'Male';
     elseif ($gender === 'F') $gender = 'Female';
 
-    /* ── Step C: find or create user in DB ── */
-    $is_new     = false;
-    $patient_id = 0;
-    $existing   = null;
+    $dobRaw = $p['dob'] ?? ($p['birthdate'] ?? '');
+    $dobDb  = null;
+    if ($dobRaw) {
+        if (preg_match('/^(\d{2})-(\d{2})-(\d{4})$/', $dobRaw, $m)) {
+            $dobDb = $m[3] . '-' . $m[2] . '-' . $m[1];
+        } elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dobRaw)) {
+            $dobDb = $dobRaw;
+        }
+    }
 
-    if ($abha_number) {
+    return [
+        'abha_number'  => $p['ABHANumber'] ?? '',
+        'abha_address' => $abhaAddress,
+        'name'         => $name,
+        'mobile'       => preg_replace('/\D/', '', $p['mobile'] ?? ''),
+        'email'        => $p['email'] ?? '',
+        'gender'       => $gender,
+        'dob'          => $dobDb,
+        'dob_raw'      => $dobRaw,
+        'address'      => $p['address'] ?? '',
+        'state'        => $p['stateName']    ?? ($p['state']    ?? ''),
+        'district'     => $p['districtName'] ?? ($p['district'] ?? ''),
+        'pincode'      => $p['pinCode'] ?? '',
+    ];
+}
+
+/**
+ * Upsert a patient row from a normalised ABDM profile and link it to the doctor.
+ * Mirrors the logic in doctor/api/abha-select-user.php.
+ */
+function abdm_upsert_patient(mysqli $conn, int $doctor_id, array $pr): array
+{
+    $existing = null;
+
+    if ($pr['abha_number']) {
         $s = $conn->prepare("SELECT id FROM users WHERE abha_id=? LIMIT 1");
-        $s->bind_param('s', $abha_number);
+        $s->bind_param('s', $pr['abha_number']);
         $s->execute();
         $existing = $s->get_result()->fetch_assoc();
     }
-    if (!$existing && $mobile) {
+    if (!$existing && $pr['mobile']) {
         $s = $conn->prepare("SELECT id FROM users WHERE mobile=? LIMIT 1");
-        $s->bind_param('s', $mobile);
+        $s->bind_param('s', $pr['mobile']);
         $s->execute();
         $existing = $s->get_result()->fetch_assoc();
     }
-    if (!$existing && $email) {
+    if (!$existing && $pr['email']) {
         $s = $conn->prepare("SELECT id FROM users WHERE email=? LIMIT 1");
-        $s->bind_param('s', $email);
+        $s->bind_param('s', $pr['email']);
         $s->execute();
         $existing = $s->get_result()->fetch_assoc();
     }
+
+    $is_new = false;
 
     if ($existing) {
         $patient_id = (int)$existing['id'];
@@ -181,17 +101,15 @@ try {
               dob           = CASE WHEN dob IS NULL THEN ? ELSE dob END
             WHERE id = ?
         ");
-        $upd->bind_param('sssssi', $abha_number, $abha_address, $full_name, $gender, $dob_db, $patient_id);
+        $upd->bind_param('sssssi', $pr['abha_number'], $pr['abha_address'], $pr['name'], $pr['gender'], $pr['dob'], $patient_id);
         $upd->execute();
-
     } else {
         $is_new = true;
-        if (!$mobile) {
-            echo json_encode(['success'=>false,'error'=>'ABDM profile does not include mobile number. Cannot create patient.']); exit;
+        if (!$pr['mobile']) {
+            throw new RuntimeException('ABDM profile has no mobile number.');
         }
         $temp_pass = bin2hex(random_bytes(8));
-        $hash      = password_hash($temp_pass, PASSWORD_BCRYPT, ['cost'=>12]);
-
+        $hash      = password_hash($temp_pass, PASSWORD_BCRYPT, ['cost' => 12]);
         $ins = $conn->prepare("
             INSERT INTO users
               (name, email, mobile, password, gender, dob,
@@ -200,50 +118,384 @@ try {
             VALUES (?,?,?,?,?,?,?,?,1,1,?,?,?,?,NOW())
         ");
         $ins->bind_param('ssssssssssss',
-            $full_name, $email, $mobile, $hash,
-            $gender, $dob_db,
-            $abha_number, $abha_address,
-            $pincode, $district, $state, $address
+            $pr['name'], $pr['email'], $pr['mobile'], $hash,
+            $pr['gender'], $pr['dob'], $pr['abha_number'], $pr['abha_address'],
+            $pr['pincode'], $pr['district'], $pr['state'], $pr['address']
         );
         if (!$ins->execute()) {
-            echo json_encode(['success'=>false,'error'=>'DB error: '.$conn->error]); exit;
+            throw new RuntimeException('DB error: ' . $conn->error);
         }
         $patient_id = (int)$conn->insert_id;
     }
-
-    /* ── Step D: link to this doctor ── */
-    $conn->query("CREATE TABLE IF NOT EXISTS `doctor_patients` (
-      `id`          INT UNSIGNED NOT NULL AUTO_INCREMENT,
-      `doctor_id`   INT UNSIGNED NOT NULL,
-      `patient_id`  INT UNSIGNED NOT NULL,
-      `added_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      `added_via`   ENUM('appointment','manual','abha') NOT NULL DEFAULT 'manual',
-      `abha_fetched` TINYINT(1) NOT NULL DEFAULT 0,
-      PRIMARY KEY (`id`),
-      UNIQUE KEY `unique_link` (`doctor_id`,`patient_id`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
     $lnk = $conn->prepare("INSERT INTO doctor_patients (doctor_id,patient_id,added_via,abha_fetched) VALUES (?,?,'abha',1)
                            ON DUPLICATE KEY UPDATE added_via='abha', abha_fetched=1");
     $lnk->bind_param('ii', $doctor_id, $patient_id);
     $lnk->execute();
 
-    echo json_encode([
-        'success'    => true,
-        'is_new'     => $is_new,
-        'patient_id' => $patient_id,
-        'message'    => $is_new ? 'Patient created from ABDM and linked to your panel' : 'Patient linked with verified ABHA data',
-        'profile'    => [
-            'name'         => $full_name,
-            'abha_number'  => $abha_number,
-            'abha_address' => $abha_address,
-            'mobile'       => $mobile,
-            'email'        => $email,
-            'gender'       => $gender,
-            'dob'          => $dob_raw,
-        ],
+    return ['patient_id' => $patient_id, 'is_new' => $is_new];
+}
+
+$logDir = dirname(dirname(dirname(__FILE__))) . '/logs';
+if (!is_dir($logDir)) @mkdir($logDir, 0755, true);
+
+function debug_log($msg, $data = null) {
+    global $logDir;
+    $logFile = $logDir . '/abha_debug_' . date('Y-m-d') . '.log';
+    $timestamp = date('Y-m-d H:i:s');
+    $logLine = "[{$timestamp}] {$msg}";
+    if ($data !== null) {
+        $logLine .= " " . (is_array($data) ? json_encode($data) : $data);
+    }
+    error_log($logLine . PHP_EOL, 3, $logFile);
+    error_log($logLine);
+}
+
+debug_log("=== START ABHA OTP VERIFY ===");
+
+if (empty($_SESSION['doctor_id'])) {
+    debug_log("ERROR: Doctor not authenticated");
+    http_response_code(401);
+    echo json_encode(['success' => false, 'error' => 'Not authenticated']);
+    exit;
+}
+$doctor_id = (int)$_SESSION['doctor_id'];
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    debug_log("ERROR: Method not allowed");
+    http_response_code(405);
+    echo json_encode(['success' => false, 'error' => 'Method not allowed']);
+    exit;
+}
+
+$input = json_decode(file_get_contents('php://input'), true) ?? [];
+debug_log("Parsed Input", $input);
+
+$txnId = trim($input['txnId'] ?? $_SESSION['abdm_txnId'] ?? '');
+$otp = trim($input['otp'] ?? '');
+$type = trim($input['type'] ?? $_SESSION['abdm_login_type'] ?? 'aadhaar');
+$mobile = trim($input['mobile'] ?? '');
+
+if (empty($txnId) || empty($otp)) {
+    debug_log("ERROR: Missing txnId or OTP");
+    echo json_encode(['success' => false, 'error' => 'Transaction ID and OTP are required']);
+    exit;
+}
+
+if (!ctype_digit($otp) || strlen($otp) !== 6) {
+    debug_log("ERROR: Invalid OTP format", ['otp_length' => strlen($otp)]);
+    echo json_encode(['success' => false, 'error' => 'OTP must be 6 digits']);
+    exit;
+}
+
+// ABDM's enrol/byAadhaar rejects the request with "Invalid Mobile Number"
+// if this field is missing, so it's required for the aadhaar flow.
+if ($type === 'aadhaar' && (!ctype_digit($mobile) || strlen($mobile) !== 10)) {
+    debug_log("ERROR: Invalid or missing communication mobile", ['mobile' => $mobile]);
+    echo json_encode(['success' => false, 'error' => 'A valid 10-digit mobile number is required for ABHA communication']);
+    exit;
+}
+
+debug_log("Verifying OTP", [
+    'txnId' => $txnId,
+    'type' => $type
+]);
+
+try {
+    debug_log("Getting Access Token...");
+    $accessToken = abdm_get_access_token();
+    debug_log("Access Token Retrieved: " . substr($accessToken, 0, 30) . '...');
+    
+    debug_log("Getting Public Key...");
+    $publicKeyPem = abdm_get_public_key();
+    debug_log("Public Key Retrieved");
+    
+    debug_log("Encrypting OTP...");
+    $encryptedOtp = abdm_rsa_encrypt($otp, $publicKeyPem);
+    debug_log("Encrypted OTP Length: " . strlen($encryptedOtp));
+
+    // For Aadhaar verification - use the enrollment/enrol/byAadhaar endpoint
+    if ($type === 'aadhaar') {
+        $url = 'https://abhasbx.abdm.gov.in/abha/api/v3/enrollment/enrol/byAadhaar';
+        
+        $headers = [
+            'Authorization' => 'Bearer ' . $accessToken,
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
+            'REQUEST-ID' => abdm_uuid(),
+            'TIMESTAMP' => abdm_timestamp(),
+            'X-CM-ID' => defined('ABDM_X_CM_ID_VALUE') ? ABDM_X_CM_ID_VALUE : 'sbx',
+        ];
+        
+        // ABDM v3 sandbox requires 'mobile' here (plain text, not encrypted) —
+        // confirmed empirically: omitting it returns 400 {"mobile":"Invalid Mobile Number"}.
+        $body = [
+            'authData' => [
+                'authMethods' => ['otp'],
+                'otp' => [
+                    'txnId' => $txnId,
+                    'otpValue' => $encryptedOtp,
+                    'mobile' => $mobile,
+                ]
+            ],
+            'consent' => [
+                'code' => 'abha-enrollment',
+                'version' => '1.4'
+            ]
+        ];
+
+        debug_log("Aadhaar Verification Body", [
+            'otp' => substr($encryptedOtp, 0, 30) . '...',
+            'mobile' => $mobile,
+            'txnId' => $txnId
+        ]);
+        
+    } else {
+        // For Mobile verification - use the enrollment/auth/byAbdm endpoint
+        $url = 'https://abhasbx.abdm.gov.in/abha/api/v3/enrollment/auth/byAbdm';
+        
+        $headers = [
+            'Authorization' => 'Bearer ' . $accessToken,
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
+            'REQUEST-ID' => abdm_uuid(),
+            'TIMESTAMP' => abdm_timestamp(),
+            'X-CM-ID' => defined('ABDM_X_CM_ID_VALUE') ? ABDM_X_CM_ID_VALUE : 'sbx',
+        ];
+        
+        $body = [
+            'scope' => ['abha-enrol', 'mobile-verify'],
+            'authData' => [
+                'authMethods' => ['otp'],
+                'otp' => [
+                    'timeStamp' => abdm_timestamp(),
+                    'txnId' => $txnId,
+                    'otpValue' => $encryptedOtp,
+                ]
+            ]
+        ];
+    }
+
+    debug_log("Sending Verification Request", [
+        'url' => $url,
+        'type' => $type
     ]);
 
+    // Add retry logic for 504 errors
+    $maxRetries = 3;
+    $retryDelay = 3;
+    $lastResponse = null;
+    $lastHttp = 0;
+    $success = false;
+    $sawTimeout = false;
+
+    for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+        if ($attempt > 1) {
+            debug_log("Retry attempt $attempt of $maxRetries");
+            sleep($retryDelay);
+        }
+
+        // Every attempt needs its own REQUEST-ID + TIMESTAMP — ABDM's gateway
+        // requires a fresh crypto-random REQUEST-ID per call and validates
+        // TIMESTAMP freshness, so replaying the first attempt's headers on
+        // retry can get rejected outright (observed as an empty-body 401).
+        $headers['REQUEST-ID'] = abdm_uuid();
+        $headers['TIMESTAMP'] = abdm_timestamp();
+
+        [$res, $http] = abdm_curl('POST', $url, $headers, $body);
+        $lastResponse = $res;
+        $lastHttp = $http;
+        
+        debug_log("Attempt $attempt Response", [
+            'http_code' => $http,
+            'is_504' => ($http == 504)
+        ]);
+        
+        if ($http >= 200 && $http < 300) {
+            $success = true;
+            break;
+        }
+
+        if ($http == 504) {
+            $sawTimeout = true;
+        } else {
+            // Only retry on 504 (gateway timeout)
+            break;
+        }
+    }
+
+    if (!$success) {
+        $err = abdm_extract_error($lastResponse, $lastHttp, 'OTP verification failed');
+        debug_log("ERROR: All attempts failed", [
+            'http' => $lastHttp,
+            'error' => $err,
+            'response' => $lastResponse
+        ]);
+        
+        // Check for 504 timeout
+        if ($lastHttp == 504) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'ABDM gateway timeout. Your OTP was authenticated but the service is temporarily unavailable. Please try again in a few minutes.'
+            ]);
+        } elseif ($sawTimeout && $lastHttp == 401 && empty($lastResponse)) {
+            // A 504 followed by an empty-body 401 on retry is an ABDM gateway
+            // hiccup, not a real auth failure (the access token was just fetched
+            // moments earlier). The original OTP may already be consumed server-side.
+            echo json_encode([
+                'success' => false,
+                'error' => 'ABDM gateway timed out and the retry was rejected. Your OTP may already have been used — please click "Resend OTP" and try again with a new code.'
+            ]);
+        } else {
+            echo json_encode(['success' => false, 'error' => $err]);
+        }
+        exit;
+    }
+
+    // Process successful response
+    $res = $lastResponse;
+    
+    // For Aadhaar verification response
+    if ($type === 'aadhaar') {
+        if (isset($res['ABHAProfile']) || isset($res['ABHANumber'])) {
+            debug_log("SUCCESS: Aadhaar OTP Verified and ABHA Created");
+            
+            $xToken = $res['tokens']['token'] ?? '';
+            $abhaNumber = $res['ABHAProfile']['ABHANumber'] ?? $res['ABHANumber'] ?? '';
+            $abhaProfile = $res['ABHAProfile'] ?? [];
+            
+            // If we have an X-token, fetch the full profile
+            if (!empty($xToken)) {
+                debug_log("Fetching profile with X-token...");
+                
+                $profileUrl = 'https://abhasbx.abdm.gov.in/abha/api/v3/profile/account';
+                $profileHeaders = [
+                    'Authorization' => 'Bearer ' . $accessToken,
+                    'X-token' => 'Bearer ' . $xToken,
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                    'REQUEST-ID' => abdm_uuid(),
+                    'TIMESTAMP' => abdm_timestamp(),
+                    'X-CM-ID' => defined('ABDM_X_CM_ID_VALUE') ? ABDM_X_CM_ID_VALUE : 'sbx',
+                ];
+
+                [$profileRes, $profileHttp] = abdm_curl('GET', $profileUrl, $profileHeaders);
+
+                if ($profileHttp >= 200 && $profileHttp < 300 && !empty($profileRes)) {
+                    $pr = abdm_normalise_profile($profileRes);
+                    // ABDM sometimes masks mobile (e.g. "******0903"); fall back
+                    // to the mobile number the doctor entered on this request.
+                    if (strlen($pr['mobile']) !== 10) $pr['mobile'] = $mobile;
+
+                    $saved = abdm_upsert_patient($conn, $doctor_id, $pr);
+                    debug_log("Patient saved", $saved);
+
+                    echo json_encode([
+                        'success' => true,
+                        'profile' => $profileRes,
+                        'abha_number' => $profileRes['ABHANumber'] ?? $abhaNumber,
+                        'patient_id' => $saved['patient_id'],
+                        'is_new' => $saved['is_new'],
+                        'message' => 'ABHA verified and created successfully'
+                    ]);
+                    exit;
+                }
+            }
+
+            $pr = abdm_normalise_profile($abhaProfile);
+            if (strlen($pr['mobile']) !== 10) $pr['mobile'] = $mobile;
+
+            $saved = abdm_upsert_patient($conn, $doctor_id, $pr);
+            debug_log("Patient saved (fallback profile)", $saved);
+
+            echo json_encode([
+                'success' => true,
+                'profile' => $abhaProfile,
+                'abha_number' => $abhaNumber,
+                'patient_id' => $saved['patient_id'],
+                'is_new' => $saved['is_new'],
+                'message' => 'ABHA verified successfully'
+            ]);
+            exit;
+        } else {
+            $errorMsg = $res['message'] ?? 'OTP verification failed';
+            debug_log("ERROR: Auth failed", ['message' => $errorMsg, 'response' => $res]);
+            echo json_encode(['success' => false, 'error' => $errorMsg]);
+            exit;
+        }
+    } else {
+        // For Mobile verification response
+        if (isset($res['authResult']) && $res['authResult'] === 'success') {
+            debug_log("SUCCESS: Mobile OTP Verified");
+            
+            $xToken = $res['token'] ?? $res['tokens']['token'] ?? '';
+            $accounts = $res['accounts'] ?? [];
+
+            if (count($accounts) > 1) {
+                $cleanedAccounts = array_map(function($acc) {
+                    return [
+                        'ABHANumber' => $acc['ABHANumber'] ?? '',
+                        'name' => trim(($acc['firstName'] ?? '') . ' ' . ($acc['lastName'] ?? '')),
+                        'preferredAbhaAddress' => $acc['preferredAbhaAddress'] ?? ''
+                    ];
+                }, $accounts);
+                
+                echo json_encode([
+                    'success' => true,
+                    'needs_select' => true,
+                    'txnId' => $txnId,
+                    't_token' => $xToken,
+                    'accounts' => $cleanedAccounts
+                ]);
+                exit;
+            }
+
+            if (!empty($xToken)) {
+                debug_log("Fetching profile with X-token...");
+                
+                $profileUrl = 'https://abhasbx.abdm.gov.in/abha/api/v3/profile/account';
+                $profileHeaders = [
+                    'Authorization' => 'Bearer ' . $accessToken,
+                    'X-token' => 'Bearer ' . $xToken,
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                    'REQUEST-ID' => abdm_uuid(),
+                    'TIMESTAMP' => abdm_timestamp(),
+                    'X-CM-ID' => defined('ABDM_X_CM_ID_VALUE') ? ABDM_X_CM_ID_VALUE : 'sbx',
+                ];
+
+                [$profileRes, $profileHttp] = abdm_curl('GET', $profileUrl, $profileHeaders);
+
+                if ($profileHttp >= 200 && $profileHttp < 300 && !empty($profileRes)) {
+                    echo json_encode([
+                        'success' => true,
+                        'profile' => $profileRes,
+                        'message' => 'ABHA verified successfully'
+                    ]);
+                    exit;
+                }
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'OTP verified successfully'
+            ]);
+            exit;
+        } else {
+            $errorMsg = $res['message'] ?? 'OTP verification failed';
+            debug_log("ERROR: Auth failed", ['message' => $errorMsg]);
+            echo json_encode(['success' => false, 'error' => $errorMsg]);
+            exit;
+        }
+    }
+
 } catch (Exception $e) {
-    echo json_encode(['success'=>false,'error'=>$e->getMessage()]);
+    debug_log("EXCEPTION", [
+        'message' => $e->getMessage(),
+        'trace' => $e->getTraceAsString()
+    ]);
+    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
+
+debug_log("=== END ABHA OTP VERIFY ===");
+?>

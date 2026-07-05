@@ -13,7 +13,7 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/abdm_rsa.php';
 require_once __DIR__ . '/abdm_session.php';
 
-define('ABDM_CERT_URL', 'https://healthidsbx.abdm.gov.in/api/v1/auth/cert');
+define('ABDM_CERT_URL', 'https://abhasbx.abdm.gov.in/abha/api/v3/profile/public/certificate');
 
 /**
  * Fetch (or return cached) ABDM RSA public key as a PEM string.

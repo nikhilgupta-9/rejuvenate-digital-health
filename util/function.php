@@ -673,7 +673,7 @@ function faq_home()
 {
     global $conn;
 
-    $sql_test = "SELECT * FROM `faqs` WHERE `page_name` = 'home' AND `status` = 1";
+    $sql_test = "SELECT * FROM `faqs` WHERE `page_name` = 'home' AND `status` = 1 ORDER BY `id` DESC";
     $res_test = mysqli_query($conn, $sql_test);
 
     $test = [];
@@ -928,6 +928,8 @@ function insert_appointment($data) {
 
     return $result;
 }
+
+
 
 
 ?>

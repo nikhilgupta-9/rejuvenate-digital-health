@@ -53,3 +53,18 @@ CREATE TABLE IF NOT EXISTS `doctor_patients` (
   INDEX `idx_doctor` (`doctor_id`),
   INDEX `idx_patient` (`patient_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Step 6: Doctor account deletion requests (self-service request, admin-reviewed)
+CREATE TABLE IF NOT EXISTS `doctor_deletion_requests` (
+  `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `doctor_id`     INT UNSIGNED NOT NULL,
+  `reason`        TEXT         DEFAULT NULL,
+  `status`        ENUM('Pending','Approved','Rejected') NOT NULL DEFAULT 'Pending',
+  `requested_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `reviewed_at`   DATETIME     DEFAULT NULL,
+  `reviewed_by`   INT UNSIGNED DEFAULT NULL,
+  `notes`         TEXT         DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  INDEX `idx_doctor` (`doctor_id`),
+  INDEX `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

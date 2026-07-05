@@ -1,102 +1,290 @@
 <?php
-/**
- * ABDM Enrollment Step 1 — Send OTP to Aadhaar-linked mobile.
- *
- * POST body (JSON): { "aadhaar": "123456789012", "mobile": "9876543210" }
- * Returns:          { "success": true, "txnId": "...", "message": "..." }
- *            or:    { "success": false, "error": "..." }
- *
- * ABDM: POST https://abhasbx.abdm.gov.in/abha/api/v3/enrollment/request/otp
- */
+// doctor/api/abha-otp-send.php - FIXED VERSION
 
 if (session_status() === PHP_SESSION_NONE) session_start();
 header('Content-Type: application/json');
+
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 
 require_once __DIR__ . '/abdm_rsa.php';
 require_once __DIR__ . '/abdm_session.php';
 require_once __DIR__ . '/abdm_get_cert.php';
 
-/* ── Auth check ── */
+$logDir = dirname(dirname(dirname(__FILE__))) . '/logs';
+if (!is_dir($logDir)) @mkdir($logDir, 0755, true);
+
+function debug_log($msg, $data = null) {
+    global $logDir;
+    $logFile = $logDir . '/abha_debug_' . date('Y-m-d') . '.log';
+    $timestamp = date('Y-m-d H:i:s');
+    $logLine = "[{$timestamp}] {$msg}";
+    if ($data !== null) {
+        $logLine .= " " . (is_array($data) ? json_encode($data) : $data);
+    }
+    error_log($logLine . PHP_EOL, 3, $logFile);
+    error_log($logLine);
+}
+
+debug_log("=== START ABHA OTP REQUEST ===");
+
+// Authentication check
 if (empty($_SESSION['doctor_id'])) {
+    debug_log("ERROR: Doctor not authenticated");
     http_response_code(401);
-    echo json_encode(['success' => false, 'error' => 'Not authenticated. Please log in again.']);
+    echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
 }
 
-/* ── Accept only POST ── */
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    debug_log("ERROR: Method not allowed");
     http_response_code(405);
     echo json_encode(['success' => false, 'error' => 'Method not allowed']);
     exit;
 }
 
-/* ── Parse input ── */
-$input   = json_decode(file_get_contents('php://input'), true) ?? [];
-$aadhaar = preg_replace('/\D/', '', trim($input['aadhaar'] ?? ''));
-$mobile  = preg_replace('/\D/', '', trim($input['mobile']  ?? ''));
+$input = json_decode(file_get_contents('php://input'), true) ?? [];
+debug_log("Parsed Input", $input);
 
-/* ── Validate Aadhaar ── */
-$aadhaarCheck = abdm_validate_aadhaar($aadhaar);
-if ($aadhaarCheck !== true) {
-    echo json_encode(['success' => false, 'error' => $aadhaarCheck]);
-    exit;
+$inputValue = trim($input['abha_input'] ?? '');
+$type = $input['type'] ?? 'aadhaar';
+$existingTxnId = $input['txnId'] ?? ''; // For mobile verification flow
+
+debug_log("Type: {$type}, Input Value: " . substr($inputValue, 0, 4) . '...');
+
+// ============================================
+// FIX: Mobile verification requires existing txnId
+// ============================================
+if ($type === 'mobile') {
+    // Check if we have a txnId from Aadhaar verification
+    $aadhaarTxnId = $_SESSION['abdm_aadhaar_txnId'] ?? $existingTxnId ?? '';
+    
+    if (empty($aadhaarTxnId)) {
+        debug_log("ERROR: No Aadhaar txnId found for mobile verification");
+        echo json_encode([
+            'success' => false, 
+            'error' => 'Please verify Aadhaar first before mobile verification. Click "Aadhaar OTP" tab first.'
+        ]);
+        exit;
+    }
+    
+    debug_log("Using Aadhaar txnId for mobile: " . substr($aadhaarTxnId, 0, 8) . '...');
+    $txnIdToUse = $aadhaarTxnId;
+} else {
+    $txnIdToUse = '';
 }
 
-/* ── Validate mobile (optional at step 1 — can be entered at step 2) ── */
-if ($mobile && strlen($mobile) !== 10) {
-    echo json_encode(['success' => false, 'error' => 'Mobile must be 10 digits']);
-    exit;
+// Build request based on type
+$loginId = '';
+$loginHint = '';
+$otpSystem = '';
+$scopes = [];
+
+switch($type) {
+    case 'aadhaar':
+        debug_log("Processing Aadhaar");
+        $clean = preg_replace('/\D/', '', $inputValue);
+        $validate = abdm_validate_aadhaar($clean);
+        if ($validate !== true) {
+            debug_log("Aadhaar Validation Failed", $validate);
+            echo json_encode(['success' => false, 'error' => $validate]);
+            exit;
+        }
+        $loginId = $clean;
+        $loginHint = 'aadhaar';
+        $otpSystem = 'aadhaar';
+        $scopes = ['abha-enrol'];
+        break;
+        
+    case 'mobile':
+        debug_log("Processing Mobile (requires Aadhaar first)");
+        $clean = preg_replace('/\D/', '', $inputValue);
+        if (strlen($clean) !== 10) {
+            debug_log("Mobile Validation Failed - Invalid length: " . strlen($clean));
+            echo json_encode(['success' => false, 'error' => 'Mobile must be 10 digits']);
+            exit;
+        }
+        $loginId = $clean;
+        $loginHint = 'mobile';
+        $otpSystem = 'abdm';
+        $scopes = ['abha-enrol', 'mobile-verify'];
+        break;
+        
+    case 'number':
+        debug_log("Processing ABHA Number");
+        $clean = preg_replace('/\D/', '', $inputValue);
+        if (strlen($clean) !== 14) {
+            debug_log("ABHA Number Validation Failed - Invalid length: " . strlen($clean));
+            echo json_encode(['success' => false, 'error' => 'ABHA number must be 14 digits']);
+            exit;
+        }
+        $loginId = $clean;
+        $loginHint = 'abha-number';
+        $otpSystem = 'abdm';
+        $scopes = ['abha-enrol'];
+        break;
+        
+    case 'address':
+        debug_log("Processing ABHA Address");
+        if (empty($inputValue) || !strpos($inputValue, '@')) {
+            debug_log("ABHA Address Validation Failed - Invalid format");
+            echo json_encode(['success' => false, 'error' => 'Invalid ABHA address format']);
+            exit;
+        }
+        $loginId = $inputValue;
+        $loginHint = 'abha-address';
+        $otpSystem = 'abdm';
+        $scopes = ['abha-enrol'];
+        break;
+        
+    default:
+        debug_log("Invalid Type", $type);
+        echo json_encode(['success' => false, 'error' => 'Invalid verification type']);
+        exit;
 }
+
+debug_log("Login Details", [
+    'loginId' => substr($loginId, 0, 4) . '...',
+    'loginHint' => $loginHint,
+    'otpSystem' => $otpSystem,
+    'scopes' => $scopes,
+    'txnIdToUse' => $txnIdToUse ? substr($txnIdToUse, 0, 8) . '...' : 'empty'
+]);
 
 try {
-    /* ── Get access token + public key ── */
-    $accessToken  = abdm_get_access_token();
+    debug_log("Getting Access Token...");
+    $accessToken = abdm_get_access_token();
+    debug_log("Access Token Retrieved: " . substr($accessToken, 0, 30) . '...');
+    
+    debug_log("Getting Public Key...");
     $publicKeyPem = abdm_get_public_key();
+    debug_log("Public Key Retrieved: " . substr($publicKeyPem, 0, 50) . '...');
+    
+    debug_log("Encrypting Login ID...");
+    $finalLoginId = abdm_rsa_encrypt($loginId, $publicKeyPem);
+    debug_log("Encrypted Login ID Length: " . strlen($finalLoginId));
 
-    /* ── RSA-encrypt Aadhaar (OAEP) ── */
-    $encryptedAadhaar = abdm_rsa_encrypt($aadhaar, $publicKeyPem);
-
-    /* ── Call ABDM ── */
-    $url     = 'https://abhasbx.abdm.gov.in/abha/api/v3/enrollment/request/otp';
+    $url = 'https://abhasbx.abdm.gov.in/abha/api/v3/enrollment/request/otp';
+    
     $headers = [
         'Authorization' => 'Bearer ' . $accessToken,
-        'Content-Type'  => 'application/json',
-        'Accept'        => 'application/json',
-        'REQUEST-ID'    => abdm_uuid(),
-        'TIMESTAMP'     => abdm_timestamp(),
-        'X-CM-ID'       => ABDM_X_CM_ID_VALUE,
+        'Content-Type' => 'application/json',
+        'Accept' => 'application/json',
+        'REQUEST-ID' => abdm_uuid(),
+        'TIMESTAMP' => abdm_timestamp(),
+        'X-CM-ID' => defined('ABDM_X_CM_ID_VALUE') ? ABDM_X_CM_ID_VALUE : 'sbx',
     ];
+    
+    // ============================================
+    // FIX: Build body with correct txnId
+    // ============================================
     $body = [
-        'txnId'     => '',
-        'scope'     => ['abha-enrol'],
-        'loginHint' => 'aadhaar',
-        'loginId'   => $encryptedAadhaar,
-        'otpSystem' => 'aadhaar',
+        'scope' => $scopes,
+        'loginHint' => $loginHint,
+        'loginId' => $finalLoginId,
+        'otpSystem' => $otpSystem,
     ];
+    
+    // For mobile, use the Aadhaar txnId
+    if ($type === 'mobile' && !empty($txnIdToUse)) {
+        $body['txnId'] = $txnIdToUse;
+        debug_log("Using Aadhaar txnId for mobile request: " . substr($txnIdToUse, 0, 8) . '...');
+    } else {
+        $body['txnId'] = ''; // Empty for new request
+    }
 
-    abdm_log('Sending Aadhaar OTP request', ['doctor_id' => $_SESSION['doctor_id']]);
-    [$res, $http] = abdm_curl('POST', $url, $headers, $body, defined('ABDM_SSL_VERIFY') ? ABDM_SSL_VERIFY : true);
+    debug_log("Sending Request", [
+        'url' => $url,
+        'headers' => array_keys($headers),
+        'body' => [
+            'txnId' => $body['txnId'] ? substr($body['txnId'], 0, 8) . '...' : 'empty',
+            'scope' => $body['scope'],
+            'loginHint' => $body['loginHint'],
+            'loginId' => substr($body['loginId'], 0, 50) . '...',
+            'otpSystem' => $body['otpSystem']
+        ]
+    ]);
 
-    /* ── Handle response ── */
-    if ($http < 200 || $http >= 300 || empty($res['txnId'])) {
-        $err = abdm_extract_error($res, $http, 'Failed to send OTP');
-        abdm_log('Send OTP failed', ['http' => $http, 'response' => $res]);
-        echo json_encode(['success' => false, 'error' => $err]);
+    [$res, $http] = abdm_curl('POST', $url, $headers, $body);
+
+    debug_log("Response Received", [
+        'http_code' => $http,
+        'response' => $res
+    ]);
+
+    if ($http < 200 || $http >= 300) {
+        $errorMsg = 'Failed to send OTP';
+        if (isset($res['error'])) {
+            $errorMsg = is_array($res['error']) ? ($res['error']['message'] ?? $errorMsg) : $res['error'];
+        } elseif (isset($res['message'])) {
+            $errorMsg = $res['message'];
+        } elseif (isset($res['code'])) {
+            $errorMsg = $res['code'] . ': ' . ($res['message'] ?? 'Unknown error');
+        }
+        
+        debug_log("ERROR: Failed to send OTP", [
+            'http' => $http,
+            'error' => $errorMsg,
+            'full_response' => $res
+        ]);
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
         exit;
     }
 
-    /* ── Store session state ── */
-    $_SESSION['abdm_txnId']  = $res['txnId'];
-    $_SESSION['abdm_mobile'] = $mobile; // pre-fill for step 2
+    if (empty($res['txnId'])) {
+        debug_log("ERROR: No txnId in response", $res);
+        echo json_encode([
+            'success' => false, 
+            'error' => 'No transaction ID received from ABDM'
+        ]);
+        exit;
+    }
 
-    abdm_log('OTP sent successfully', ['txnId' => $res['txnId']]);
-    echo json_encode([
-        'success' => true,
-        'txnId'   => $res['txnId'],
-        'message' => $res['message'] ?? 'OTP sent to Aadhaar-linked mobile number',
+    debug_log("SUCCESS: OTP Sent", [
+        'txnId' => $res['txnId'],
+        'message' => $res['message'] ?? 'OTP sent successfully'
     ]);
 
+    // ============================================
+    // FIX: Store appropriate txnId in session
+    // ============================================
+    if ($type === 'aadhaar') {
+        // Store Aadhaar txnId for potential mobile verification later
+        $_SESSION['abdm_aadhaar_txnId'] = $res['txnId'];
+        $_SESSION['abdm_aadhaar_txn_timestamp'] = time();
+        debug_log("Stored Aadhaar txnId: " . substr($res['txnId'], 0, 8) . '...');
+    }
+    
+    $_SESSION['abdm_txnId'] = $res['txnId'];
+    $_SESSION['abdm_login_type'] = $type;
+    $_SESSION['abdm_login_id'] = $loginId;
+    $_SESSION['abdm_mobile'] = ($type === 'mobile') ? $loginId : ($_SESSION['abdm_mobile'] ?? '');
+
+    $response = [
+        'success' => true,
+        'txnId' => $res['txnId'],
+        'message' => $res['message'] ?? 'OTP sent successfully',
+    ];
+    
+    if ($type === 'mobile') {
+        $response['isMobileVerification'] = true;
+        $response['message'] = 'OTP sent to mobile number for ABHA verification';
+    }
+    
+    echo json_encode($response);
+    
 } catch (Exception $e) {
-    abdm_log('abdm_send_otp exception: ' . $e->getMessage());
-    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    debug_log("EXCEPTION", [
+        'message' => $e->getMessage(),
+        'trace' => $e->getTraceAsString()
+    ]);
+    echo json_encode([
+        'success' => false, 
+        'error' => $e->getMessage(),
+        'code' => 'EXCEPTION'
+    ]);
 }
+
+debug_log("=== END ABHA OTP REQUEST ===");
+?>

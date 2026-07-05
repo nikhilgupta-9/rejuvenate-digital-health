@@ -148,10 +148,25 @@ $contact = contact_us();
                         <div class="about-content">
                             <div class="section-title text-start mb-0">
                                 <span class="subtitle tz-sub-tilte tz-sub-anim  text-uppercase tx-subTitle">ABOUT US</span>
-                                <h2 class="tx-title sec_title  tz-itm-title tz-itm-anim">Welcome to REJUVINATE DIGITAL HEALTH – Your Trusted Online Healthcare Partner.</h2>
+                                <h2 class="tx-title sec_title tz-itm-title tz-itm-anim">
+                                    Transforming Healthcare Through Digital Innovation
+                                </h2>
                             </div>
-                            <p class="about-text"><b>REJUVINATE DIGITAL HEALTH</b> welcomes you to tech Era of Digital Online Health support for you and your precious family members.</p>
-                            <p class="about-text">At <b>REJUVINATE DIGITAL HEALTH</b>, we bring quality healthcare to your fingertips — anytime, anywhere. Our Online Telemedicine Consultation Platform connects you directly with experienced doctors from the comfort of your home.</p>
+                            <p class="about-text">
+                                <strong>Rejuvenate Digital Health</strong> is dedicated to transforming healthcare through innovative digital solutions that make medical services more accessible, secure, and convenient. Our mission is to empower individuals, families, healthcare providers, and institutions with technology-driven healthcare services that improve overall well-being.
+                            </p>
+
+                            <p class="about-text">
+                                Our platform offers a comprehensive range of digital health services, including online doctor consultations, digital health records, preventive healthcare programs, wellness monitoring, and continuous patient support. We are committed to delivering a seamless healthcare experience with a strong focus on quality, privacy, and patient care.
+                            </p>
+
+                            <p class="about-text">
+                                As part of India's Digital Health Mission, our platform is integrated with the <strong>Ayushman Bharat Health Account (ABHA)</strong> ecosystem, enabling users to create and link their ABHA ID, securely manage digital health records, and experience interoperable healthcare services across participating healthcare providers.
+                            </p>
+
+                            <p class="about-text">
+                                We also proudly conduct our <strong>School Digital Health Program</strong>, helping educational institutions promote preventive healthcare through digital health screening, health awareness initiatives, wellness monitoring, and timely medical guidance for students and staff.
+                            </p>
 
                             <div class="why-text">
                                 <h3>💡 Why Choose Us?</h3>
@@ -163,61 +178,68 @@ $contact = contact_us();
                     <div class="col-md-4">
                         <div class="about-box-items">
                             <div class="number-content">
-                                <img src="assets/img/icon1.png">
-                                <h2>Convenient & Time-Saving</h2>
-                                <p>No more waiting rooms or long travel times. Consult your doctor online through secure video or chat consultations.</p>
+                                <img src="assets/img/icon1.png" alt="Digital Health Services">
+                                <h2>Comprehensive Digital Health Services</h2>
+                                <p>Access a wide range of digital healthcare solutions, including online consultations, preventive care, health monitoring, and patient support—all from one secure platform.</p>
                             </div>
                         </div>
                     </div>
+
                     <div class="col-md-4">
                         <div class="about-box-items">
                             <div class="number-content">
-                                <img src="assets/img/icon2.png">
-                                <h2>Affordable Healthcare</h2>
-                                <p>Enjoy discounted online consultations, special prices on lab investigations, and exclusive discounts on medicines.</p>
+                                <img src="assets/img/icon2.png" alt="ABHA Integration">
+                                <h2>ABHA Integrated Platform</h2>
+                                <p>Seamlessly create, link, and manage your ABHA account for secure digital health records and a connected healthcare experience.</p>
                             </div>
                         </div>
                     </div>
+
                     <div class="col-md-4">
                         <div class="about-box-items">
                             <div class="number-content">
-                                <img src="assets/img/icon3.png">
-                                <h2>Trusted Medical Experts</h2>
-                                <p>Get advice from qualified and experienced doctors across various specialties.</p>
+                                <img src="assets/img/icon3.png" alt="Expert Healthcare Professionals">
+                                <h2>Qualified Healthcare Professionals</h2>
+                                <p>Connect with experienced doctors and healthcare experts across multiple specialties for trusted medical guidance.</p>
                             </div>
                         </div>
                     </div>
+
                     <div class="col-md-4">
                         <div class="about-box-items">
                             <div class="number-content">
-                                <img src="assets/img/icon4.png">
-                                <h2>Easy Access to Diagnostics</h2>
-                                <p>Book lab tests online at partner diagnostic centers and get reports directly on your dashboard.</p>
+                                <img src="assets/img/icon4.png" alt="School Digital Health Program">
+                                <h2>School Digital Health Program</h2>
+                                <p>Empowering educational institutions with digital health screening, wellness monitoring, health awareness, and preventive healthcare initiatives.</p>
                             </div>
                         </div>
                     </div>
+
                     <div class="col-md-4">
                         <div class="about-box-items">
                             <div class="number-content">
-                                <img src="assets/img/icon5.png">
-                                <h2>Hassle-Free Medicine Delivery</h2>
-                                <p>Order prescribed medicines at discounted rates — delivered right to your doorstep.</p>
+                                <img src="assets/img/icon5.png" alt="Secure Health Records">
+                                <h2>Secure Digital Health Records</h2>
+                                <p>Maintain and access your health records securely with advanced encryption and privacy standards whenever you need them.</p>
                             </div>
                         </div>
                     </div>
+
                     <div class="col-md-4">
                         <div class="about-box-items">
                             <div class="number-content">
-                                <img src="assets/img/icon6.png">
-                                <h2> Safe, Secure & Confidential</h2>
-                                <p>Your health data and medical records are fully encrypted and protected.</p>
+                                <img src="assets/img/icon6.png" alt="Secure Platform">
+                                <h2>Trusted, Secure & Patient-Centric</h2>
+                                <p>Built with industry-standard security and designed around patient privacy, reliability, and a seamless digital healthcare experience.</p>
                             </div>
                         </div>
                     </div>
-                    <div class="why-text">
-                        <h3>🩺 Get Started Today</h3>
-                        <p>Your health deserves convenience, quality, and care — all in one place.
-                            Sign up now and experience the future of healthcare with REJUVINATE DIGITAL HEALTH </p>
+
+                    <div class="why-text mt-4">
+                        <h3>Transforming Healthcare with Technology</h3>
+                        <p>
+                            At <strong>Rejuvenate Digital Health</strong>, we are committed to making quality healthcare accessible through innovative digital solutions. Whether you're an individual, a family, a healthcare provider, or an educational institution, our platform delivers secure, efficient, and technology-driven healthcare services that support better health outcomes for everyone.
+                        </p>
                     </div>
                 </div>
             </div>
@@ -309,40 +331,48 @@ $contact = contact_us();
 
         <div class="container">
             <div class="section-title text-center">
-
-                <h2 class="tx-title sec_title  tz-itm-title tz-itm-anim">We Are Specialize in Medical <br> Care For Yor Treatment</h2>
+                <span class="subtitle text-uppercase">OUR SERVICES</span>
+                <h2 class="tx-title sec_title tz-itm-title tz-itm-anim">
+                    Empowering Healthcare Through Digital Innovation
+                </h2>
+                <p>
+                    Delivering secure, accessible, and technology-driven healthcare solutions for individuals, families, educational institutions, and healthcare providers.
+                </p>
             </div>
+
             <div class="row">
                 <div class="col-xl-4 col-lg-6 col-md-6">
                     <div class="feature-treatment-items item_right_1">
                         <div class="feature-icon-box">
-                            <h3>Your Wellness Is Our Mission</h3>
+                            <h3>Digital Health Services</h3>
                             <i class="flaticon-heartbeat"></i>
                         </div>
                         <p>
-                            A brief statement outlining the purpose and mission of the clinic. This can include the commitment
+                            Access online healthcare services, teleconsultations, digital health records, preventive care, and wellness support from a single, secure platform.
                         </p>
                     </div>
                 </div>
+
                 <div class="col-xl-4 col-lg-6 col-md-6">
                     <div class="feature-treatment-items">
                         <div class="feature-icon-box">
-                            <h3>Trusted Care for <br> Every Life</h3>
+                            <h3>ABHA Integrated Healthcare</h3>
                             <i class="flaticon-social-care"></i>
                         </div>
                         <p>
-                            A brief statement outlining the purpose and mission of the clinic. This can include the commitment
+                            Create, link, and manage your ABHA account to securely access digital health records and enable seamless healthcare across participating providers.
                         </p>
                     </div>
                 </div>
+
                 <div class="col-xl-4 col-lg-6 col-md-6">
                     <div class="feature-treatment-items item_left_1">
                         <div class="feature-icon-box">
-                            <h3>Health Solutions You <br> Can Trust</h3>
+                            <h3>School Digital Health Program</h3>
                             <i class="flaticon-health-insurance-1"></i>
                         </div>
                         <p>
-                            A brief statement outlining the purpose and mission of the clinic. This can include the commitment
+                            Promote student wellness through digital health screening, health awareness programs, preventive care, and continuous health monitoring in schools.
                         </p>
                     </div>
                 </div>
@@ -413,10 +443,10 @@ $contact = contact_us();
 
                                     <div class="col-xl-12">
                                         <div class="form-clt">
-                                        <button type="submit" class="theme-btn">
-                                            <span class="btn-text">Make an Appointment</span>
-                                            <span class="loader d-none"></span>
-                                        </button>
+                                            <button type="submit" class="theme-btn">
+                                                <span class="btn-text">Make an Appointment</span>
+                                                <span class="loader d-none"></span>
+                                            </button>
                                         </div>
                                     </div>
 
@@ -508,38 +538,67 @@ $contact = contact_us();
                                     <?php
                                     $testimonial = testimonial();
                                     foreach ($testimonial as $testi) {
+                                        // Calculate star rating
+                                        $rating = isset($testi['rating']) ? intval($testi['rating']) : 5;
+                                        $hasImage = !empty($testi['client_photo']) && file_exists($testi['client_photo']);
+$firstLetter = strtoupper(substr(trim($testi['client_name']), 0, 1));
                                     ?>
                                         <div class="swiper-slide">
-                                            <div class="testimonial-box-item-1">
-                                                <div class="client-image">
-                                                    <img src="assets/img/dummy.png" alt="img">
-                                                    <div class="star">
-                                                        <i class="fas fa-star"></i>
-                                                        <i class="fas fa-star"></i>
-                                                        <i class="fas fa-star"></i>
-                                                        <i class="fas fa-star"></i>
-                                                        <i class="fas fa-star"></i>
-                                                    </div>
+                                            <div class="google-review-card">
+                                                <!-- Header with avatar, name, and Google icon -->
+                                                <div class="reviewer-info">
+    <?php if ($hasImage): ?>
+        <img src="<?= htmlspecialchars($testi['client_photo']) ?>"
+             alt="<?= htmlspecialchars($testi['client_name']) ?>"
+             class="reviewer-avatar">
+    <?php else: ?>
+        <div class="reviewer-avatar avatar-placeholder">
+            <?= htmlspecialchars($firstLetter) ?>
+        </div>
+    <?php endif; ?>
+
+    <div class="reviewer-details">
+        <h5 class="reviewer-name"><?= htmlspecialchars($testi['client_name']) ?></h5>
+        <span class="reviewer-title">
+            <?= htmlspecialchars($testi['client_title'] ?? 'Verified Patient') ?>
+            <?php if (!empty($testi['client_company'])): ?>
+                <span class="company-separator">•</span>
+                <?= htmlspecialchars($testi['client_company']) ?>
+            <?php endif; ?>
+        </span>
+    </div>
+</div>
+
+                                                <!-- Rating Stars -->
+                                                <div class="rating-stars" aria-label="Rating: <?= $rating ?> out of 5 stars">
+                                                    <?php for ($i = 1; $i <= 5; $i++): ?>
+                                                        <i class="fas fa-star <?= $i <= $rating ? 'active' : 'inactive' ?>"></i>
+                                                    <?php endfor; ?>
+                                                    <span class="rating-text"><?= number_format($rating, 1) ?></span>
                                                 </div>
-                                                <div class="testimonial-content">
-                                                    <p>
-                                                        “<?= $testi['testimonial_text'] ?>”
-                                                    </p>
-                                                    <div class="info-item">
-                                                        <div class="info-content">
-                                                            <h5><?= $testi['client_name'] ?></h5>
-                                                            <span>Happy Patient</span>
-                                                        </div>
-                                                        <div class="icon">
-                                                            <img src="assets/img/home-5/testimonial/01.svg" alt="img">
-                                                        </div>
+
+                                                <!-- Review Content -->
+                                                <p class="review-content">
+                                                    “<?= htmlspecialchars($testi['testimonial_text']) ?>”
+                                                </p>
+
+                                                <!-- Project Info (Optional) -->
+                                                <?php if (!empty($testi['project_name'])): ?>
+                                                    <div class="project-info">
+                                                        <i class="fas fa-tag"></i>
+                                                        <span><?= htmlspecialchars($testi['project_name']) ?></span>
                                                     </div>
-                                                </div>
+                                                <?php endif; ?>
+
+                                                <!-- Footer with date -->
+                                                
                                             </div>
                                         </div>
                                     <?php } ?>
-
                                 </div>
+                                <!-- Slider navigation (if needed) -->
+                                <div class="swiper-button-next"><i class="fas fa-chevron-right"></i></div>
+                                <div class="swiper-button-prev"><i class="fas fa-chevron-left"></i></div>
                             </div>
                         </div>
                     </div>
@@ -622,44 +681,80 @@ $contact = contact_us();
 
     <?php include("footer.php") ?>
     <script>
-document.getElementById("appointmentForm").addEventListener("submit", function (e) {
-    e.preventDefault();
+        document.getElementById("appointmentForm").addEventListener("submit", function(e) {
+            e.preventDefault();
 
-    const form = this;
-    const formData = new FormData(form);
-    const messageBox = document.getElementById("formMessage");
-    const loader = document.querySelector(".loader");
-    const btnText = document.querySelector(".btn-text");
+            const form = this;
+            const formData = new FormData(form);
+            const messageBox = document.getElementById("formMessage");
+            const loader = document.querySelector(".loader");
+            const btnText = document.querySelector(".btn-text");
 
-    loader.classList.remove("d-none");
-    btnText.textContent = "Sending...";
+            loader.classList.remove("d-none");
+            btnText.textContent = "Sending...";
 
-    fetch("util/appointment-handler.php", {
-        method: "POST",
-        body: formData
-    })
-    .then(res => res.json())
-    .then(data => {
-        loader.classList.add("d-none");
-        btnText.textContent = "Make an Appointment";
+            fetch("util/appointment-handler.php", {
+                    method: "POST",
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(data => {
+                    loader.classList.add("d-none");
+                    btnText.textContent = "Make an Appointment";
 
-        if (data.status === "success") {
-            messageBox.innerHTML =
-                `<div class="alert alert-success">${data.message}</div>`;
-            form.reset();
-        } else {
-            messageBox.innerHTML =
-                `<div class="alert alert-danger">${data.message}</div>`;
-        }
-    })
-    .catch(() => {
-        loader.classList.add("d-none");
-        btnText.textContent = "Make an Appointment";
-        messageBox.innerHTML =
-            `<div class="alert alert-danger">Something went wrong.</div>`;
-    });
-});
-</script>
+                    if (data.status === "success") {
+                        messageBox.innerHTML =
+                            `<div class="alert alert-success">${data.message}</div>`;
+                        form.reset();
+                    } else {
+                        messageBox.innerHTML =
+                            `<div class="alert alert-danger">${data.message}</div>`;
+                    }
+                })
+                .catch(() => {
+                    loader.classList.add("d-none");
+                    btnText.textContent = "Make an Appointment";
+                    messageBox.innerHTML =
+                        `<div class="alert alert-danger">Something went wrong.</div>`;
+                });
+        });
+
+
+        // Initialize Swiper
+        document.addEventListener('DOMContentLoaded', function() {
+            const swiper = new Swiper('.testimonial-slider-1', {
+                slidesPerView: 1,
+                spaceBetween: 20,
+                loop: true,
+                autoplay: {
+                    delay: 5000,
+                    disableOnInteraction: true,
+                },
+                navigation: {
+                    nextEl: '.swiper-button-next',
+                    prevEl: '.swiper-button-prev',
+                },
+                breakpoints: {
+                    640: {
+                        slidesPerView: 1,
+                        spaceBetween: 20,
+                    },
+                    768: {
+                        slidesPerView: 2,
+                        spaceBetween: 25,
+                    },
+                    1024: {
+                        slidesPerView: 3,
+                        spaceBetween: 30,
+                    },
+                },
+                pagination: {
+                    el: '.swiper-pagination',
+                    clickable: true,
+                },
+            });
+        });
+    </script>
 
 </body>
 

@@ -4,8 +4,8 @@ include "db-conn.php";
 include_once "auth/login-sessions.php";
 
 // Core stats
-$total_revenue   = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(order_total),0) as t FROM orders_new WHERE status='completed'"))['t'];
-$total_orders    = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM orders_new"))['c'];
+// $total_revenue   = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(order_total),0) as t FROM orders_new WHERE status='completed'"))['t'];
+// $total_orders    = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM orders_new"))['c'];
 $total_customers = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM users"))['c'];
 $total_doctors   = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM doctors WHERE status='Active'"))['c'];
 $total_schools   = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM schools WHERE status='Active'"))['c'];
@@ -81,7 +81,7 @@ $pending_appts = (int)(mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) a
                         <div class="col-xl-3 col-md-4 col-sm-6">
                             <div class="dash-stat-card card-blue">
                                 <i class="fas fa-rupee-sign icon-bg"></i>
-                                <div class="stat-num">₹<?= number_format($total_revenue) ?></div>
+                                <div class="stat-num">₹</div>
                                 <div class="stat-lbl">Total Revenue</div>
                                 <div class="stat-sub"><a href="orders.php" class="text-white opacity-75">View orders →</a></div>
                             </div>
@@ -89,7 +89,7 @@ $pending_appts = (int)(mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) a
                         <div class="col-xl-3 col-md-4 col-sm-6">
                             <div class="dash-stat-card card-green">
                                 <i class="fas fa-shopping-cart icon-bg"></i>
-                                <div class="stat-num"><?= $total_orders ?></div>
+                                <div class="stat-num"></div>
                                 <div class="stat-lbl">Total Orders</div>
                             </div>
                         </div>
@@ -246,47 +246,7 @@ $pending_appts = (int)(mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) a
                     <!-- ── Recent Orders + Recent Schools ── -->
                     <div class="row g-3 mt-1">
                         <!-- Recent Orders -->
-                        <div class="col-lg-7">
-                            <div class="card shadow-sm border-0 rounded-3 h-100">
-                                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3">
-                                    <h6 class="fw-bold mb-0"><i class="fas fa-shopping-cart text-primary me-2"></i>Recent Orders</h6>
-                                    <a href="orders.php" class="btn btn-sm btn-outline-primary">View All</a>
-                                </div>
-                                <div class="card-body p-0">
-                                    <div class="table-responsive">
-                                        <table class="table table-hover align-middle mb-0">
-                                            <thead class="table-light">
-                                                <tr>
-                                                    <th>#</th>
-                                                    <th>Customer</th>
-                                                    <th>Amount</th>
-                                                    <th>Status</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php
-                                                $r = mysqli_query($conn, "SELECT * FROM orders_new ORDER BY created_at DESC LIMIT 6");
-                                                if (mysqli_num_rows($r) === 0): ?>
-                                                    <tr>
-                                                        <td colspan="4" class="text-center text-muted py-3">No orders yet</td>
-                                                    </tr>
-                                                <?php endif;
-                                                while ($o = mysqli_fetch_assoc($r)):
-                                                    $sc = ['completed' => 'success', 'pending' => 'warning', 'cancelled' => 'danger'][$o['status']] ?? 'secondary';
-                                                ?>
-                                                    <tr>
-                                                        <td><small class="text-muted">#<?= $o['order_id'] ?? $o['id'] ?></small></td>
-                                                        <td><?= htmlspecialchars(($o['first_name'] ?? '') . ' ' . ($o['last_name'] ?? '')) ?></td>
-                                                        <td class="fw-semibold">₹<?= number_format($o['order_total'], 2) ?></td>
-                                                        <td><span class="badge bg-<?= $sc ?>"><?= ucfirst($o['status']) ?></span></td>
-                                                    </tr>
-                                                <?php endwhile; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        
 
                         <!-- Recent Schools -->
                         <div class="col-lg-5">

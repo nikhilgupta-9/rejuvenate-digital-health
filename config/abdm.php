@@ -1,23 +1,26 @@
 <?php
-$abdm_env = $_ENV['ABDM_ENV'] ?? 'sandbox';
+// config/abdm.php
 
-define('ABDM_ENV',           $abdm_env);
-define('ABDM_CLIENT_ID',     $_ENV['ABDM_CLIENT_ID']     ?? '');
-define('ABDM_CLIENT_SECRET', $_ENV['ABDM_CLIENT_SECRET'] ?? '');
-define('ABDM_CONFIGURED',    !empty($_ENV['ABDM_CLIENT_ID']) && $_ENV['ABDM_CLIENT_ID'] !== 'your-sandbox-client-id');
+// Environment
+define('ABDM_ENV', 'sandbox');
 
-// Gateway — full OAuth token URL (v3)
-define('ABDM_GATEWAY_URL', $abdm_env === 'production'
-    ? 'https://live.abdm.gov.in/api/hiecm/gateway/v3/sessions'
-    : 'https://dev.abdm.gov.in/api/hiecm/gateway/v3/sessions');
+// ABDM API Endpoints
+if (ABDM_ENV === 'sandbox') {
+    define('ABDM_GATEWAY_URL', 'https://dev.abdm.gov.in/api/hiecm/gateway/v3/sessions');
+    define('ABDM_HEALTH_ID_URL', 'https://abhasbx.abdm.gov.in/abha/api/v3');
+    define('ABDM_X_CM_ID', 'sbx');
+} else {
+    define('ABDM_GATEWAY_URL', 'https://dev.abdm.gov.in/api/hiecm/gateway/v3/sessions');
+    define('ABDM_HEALTH_ID_URL', 'https://abha.abdm.gov.in/abha/api/v3');
+    define('ABDM_X_CM_ID', 'abdm');
+}
 
-// ABHA v3 API base (old healthidsbx.abdm.gov.in is decommissioned; new host is abhasbx)
-define('ABDM_HEALTH_ID_URL', $abdm_env === 'production'
-    ? 'https://abha.abdm.gov.in/abha/api/v3'
-    : 'https://abhasbx.abdm.gov.in/abha/api/v3');
+// Your ABDM credentials (HARDCODED - from your .env)
+define('ABDM_CLIENT_ID', 'SBXID_038789');
+define('ABDM_CLIENT_SECRET', '2a019e04-798c-449e-8aef-c0d2f7a22a93');
 
-// X-CM-ID header value required by v3 APIs
-define('ABDM_X_CM_ID', $abdm_env === 'production' ? 'abdm' : 'sbx');
+// SSL Verification
+define('ABDM_SSL_VERIFY', true);
 
-// Skip SSL peer verification on sandbox (XAMPP/localhost has no CA bundle)
-define('ABDM_SSL_VERIFY', $abdm_env === 'production');
+// Flag
+define('ABDM_CONFIGURED', !empty(ABDM_CLIENT_ID) && !empty(ABDM_CLIENT_SECRET));

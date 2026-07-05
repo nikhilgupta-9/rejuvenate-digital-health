@@ -244,28 +244,62 @@ require_once __DIR__ . '/inc/sidebar.php';
 
 <!-- ── TAB: Documents & Notes ── -->
 <div class="tab-pane" id="tab-docs">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div style="font-size:.84rem;color:#374151;font-weight:600;" id="docCountLabel"><?= count($docs) ?> document(s)</div>
+    <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleUploadForm()">
+      <i class="fa fa-upload mr-1"></i> Upload Document
+    </button>
+  </div>
+
+  <div class="info-section" id="uploadForm" style="display:none;">
+    <div id="uploadError" class="alert alert-danger" style="display:none;font-size:.82rem;"></div>
+    <div class="form-row">
+      <div class="col-md-6 mb-2">
+        <label class="info-label d-block mb-1">Document Type</label>
+        <select id="docType" class="form-control form-control-sm">
+          <option value="Prescription">Prescription</option>
+          <option value="Lab Report">Lab Report</option>
+          <option value="X-Ray">X-Ray</option>
+          <option value="MRI Scan">MRI Scan</option>
+          <option value="CT Scan">CT Scan</option>
+          <option value="Medical Certificate">Medical Certificate</option>
+          <option value="Discharge Summary">Discharge Summary</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="col-md-6 mb-2">
+        <label class="info-label d-block mb-1">File</label>
+        <input type="file" id="docFile" class="form-control form-control-sm" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+        <div style="font-size:.72rem;color:#9ca3af;margin-top:2px;">Max 10MB — PDF, DOC, DOCX, JPG, PNG</div>
+      </div>
+      <div class="col-md-12 mb-2">
+        <label class="info-label d-block mb-1">Description (optional)</label>
+        <textarea id="docDescription" class="form-control form-control-sm" rows="2"></textarea>
+      </div>
+      <div class="col-md-12">
+        <button type="button" class="btn btn-sm btn-primary-custom" id="btnUploadDoc" onclick="uploadDocument()">
+          <i class="fa fa-upload mr-1"></i> Upload
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleUploadForm()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="docsList">
   <?php if (empty($docs)): ?>
-    <div class="info-section text-center py-4">
+    <div class="info-section text-center py-4" id="noDocsMsg">
       <i class="fa fa-folder-open-o fa-2x text-muted mb-2"></i>
       <div class="text-muted" style="font-size:.86rem;">No documents uploaded yet.</div>
-      <a href="<?= BASE_URL ?>doctor/patient-documents.php?patient_id=<?= $patient_id ?>"
-         class="btn btn-sm btn-outline-primary mt-3">
-        <i class="fa fa-upload mr-1"></i> Upload Document
-      </a>
     </div>
   <?php else: ?>
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <div style="font-size:.84rem;color:#374151;font-weight:600;"><?= count($docs) ?> document(s)</div>
-      <a href="<?= BASE_URL ?>doctor/patient-documents.php?patient_id=<?= $patient_id ?>"
-         class="btn btn-sm btn-outline-primary">
-        <i class="fa fa-upload mr-1"></i> Upload
-      </a>
-    </div>
     <?php foreach ($docs as $doc): ?>
     <div class="doc-item">
       <div class="doc-icon"><i class="fa fa-file-text-o"></i></div>
       <div style="flex:1;min-width:0;">
-        <div style="font-weight:600;font-size:.88rem;color:#1f2937;"><?= htmlspecialchars($doc['title']??$doc['file_name']??'Document') ?></div>
+        <div style="font-weight:600;font-size:.88rem;color:#1f2937;"><?= htmlspecialchars($doc['document_name'] ?? 'Document') ?></div>
+        <?php if (!empty($doc['description'])): ?>
+        <div style="font-size:.78rem;color:#6b7280;"><?= htmlspecialchars($doc['description']) ?></div>
+        <?php endif; ?>
         <div style="font-size:.76rem;color:#9ca3af;"><?= date('d M Y', strtotime($doc['uploaded_at']??'now')) ?></div>
       </div>
       <?php if (!empty($doc['file_path'])): ?>
@@ -276,6 +310,7 @@ require_once __DIR__ . '/inc/sidebar.php';
     </div>
     <?php endforeach; ?>
   <?php endif; ?>
+  </div>
 </div>
 
 <!-- ── TAB: Medical Information ── -->
@@ -375,6 +410,88 @@ function showTab(name,el){
 // Auto-open tab from URL hash
 const hash=location.hash.replace('#','');
 if(hash){const btn=document.querySelector('[onclick*="\''+hash+'\'"]');if(btn)btn.click();}
+
+// ── Document upload ──
+function toggleUploadForm(){
+  const form = document.getElementById('uploadForm');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  document.getElementById('uploadError').style.display = 'none';
+}
+
+function uploadDocument(){
+  const fileInput = document.getElementById('docFile');
+  const errEl = document.getElementById('uploadError');
+  errEl.style.display = 'none';
+
+  if (!fileInput.files.length) {
+    errEl.textContent = 'Please select a file to upload.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append('patient_id', <?= (int)$patient_id ?>);
+  fd.append('document_type', document.getElementById('docType').value);
+  fd.append('description', document.getElementById('docDescription').value);
+  fd.append('document_file', fileInput.files[0]);
+
+  const btn = document.getElementById('btnUploadDoc');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i> Uploading...';
+
+  fetch('<?= BASE_URL ?>doctor/api/patient-document-upload.php', {
+    method: 'POST',
+    body: fd
+  })
+    .then(r => r.json())
+    .then(data => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa fa-upload mr-1"></i> Upload';
+
+      if (!data.success) {
+        errEl.textContent = data.error || 'Upload failed';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      const noDocsMsg = document.getElementById('noDocsMsg');
+      if (noDocsMsg) noDocsMsg.remove();
+
+      const doc = data.doc;
+      const item = document.createElement('div');
+      item.className = 'doc-item';
+      item.innerHTML = `
+        <div class="doc-icon"><i class="fa fa-file-text-o"></i></div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:.88rem;color:#1f2937;">${escapeHtml(doc.document_name)}</div>
+          ${doc.description ? `<div style="font-size:.78rem;color:#6b7280;">${escapeHtml(doc.description)}</div>` : ''}
+          <div style="font-size:.76rem;color:#9ca3af;">${new Date(doc.uploaded_at).toLocaleDateString()}</div>
+        </div>
+        <a href="<?= BASE_URL ?>${doc.file_path}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fa fa-eye"></i></a>
+      `;
+      document.getElementById('docsList').prepend(item);
+
+      const countLabel = document.getElementById('docCountLabel');
+      const n = document.querySelectorAll('#docsList .doc-item').length;
+      countLabel.textContent = n + ' document(s)';
+
+      fileInput.value = '';
+      document.getElementById('docDescription').value = '';
+      toggleUploadForm();
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa fa-upload mr-1"></i> Upload';
+      errEl.textContent = 'Network error: ' + err.message;
+      errEl.style.display = 'block';
+    });
+}
+
+function escapeHtml(text){
+  const div = document.createElement('div');
+  div.textContent = text ?? '';
+  return div.innerHTML;
+}
 </script>
 </body>
 </html>

@@ -40,7 +40,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $short_bio = trim($_POST['short_bio'] ?? $doctor['short_bio']);
         $long_bio = trim($_POST['long_bio'] ?? $doctor['long_bio']);
         $area_of_expertise = trim($_POST['area_of_expertise'] ?? $doctor['area_of_expertise']);
-        
+        $hpr_id = trim($_POST['hpr_id'] ?? $doctor['hpr_id']);
+        $nmc_reg_number = trim($_POST['nmc_reg_number'] ?? $doctor['nmc_reg_number']);
+        $council_name = trim($_POST['council_name'] ?? $doctor['council_name']);
+        $year_of_registration = !empty($_POST['year_of_registration']) ? (int)$_POST['year_of_registration'] : null;
+        $qualification_year = !empty($_POST['qualification_year']) ? (int)$_POST['qualification_year'] : null;
+
         // Handle profile image upload
         $profile_image = $doctor['profile_image'];
         if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] == 0) {
@@ -53,21 +58,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if (in_array($file_type, $allowed_types) && $file_size <= 2097152) { // 2MB max
                 $file_ext = pathinfo($file_name, PATHINFO_EXTENSION);
                 $new_file_name = 'doctor_' . $doctor_id . '_' . time() . '.' . $file_ext;
-                $upload_path = '../uploads/doctor_profile/' . $new_file_name;
-                
-                // Create directory if it doesn't exist
-                if (!file_exists('../uploads/doctor_profile/')) {
-                    mkdir('../uploads/doctor_profile/', 0777, true);
+                // Filesystem path (absolute) for writing the file...
+                $upload_dir = dirname(__DIR__) . '/uploads/doctor_profile/';
+                if (!is_dir($upload_dir)) {
+                    mkdir($upload_dir, 0755, true);
                 }
-                
-                if (move_uploaded_file($file_tmp, $upload_path)) {
+                $dest_path = $upload_dir . $new_file_name;
+                // ...but store a project-root-relative path in the DB, since it's
+                // rendered elsewhere as BASE_URL . $profile_image.
+                $db_path = 'uploads/doctor_profile/' . $new_file_name;
+
+                if (move_uploaded_file($file_tmp, $dest_path)) {
                     // Delete old profile image if exists and not default
-                    if (!empty($doctor['profile_image']) && 
-                        $doctor['profile_image'] != 'assets/img/dummy.png' &&
-                        file_exists($doctor['profile_image'])) {
-                        unlink($doctor['profile_image']);
+                    if (!empty($doctor['profile_image']) &&
+                        $doctor['profile_image'] != 'assets/img/dummy.png') {
+                        $old_path = dirname(__DIR__) . '/' . ltrim($doctor['profile_image'], '/.');
+                        if (file_exists($old_path)) unlink($old_path);
                     }
-                    $profile_image = $upload_path;
+                    $profile_image = $db_path;
                 }
             }
         }
@@ -117,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         
         // Update doctor information
         $update_sql = "
-            UPDATE doctors SET 
+            UPDATE doctors SET
                 name = ?,
                 phone = ?,
                 email = ?,
@@ -132,17 +140,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 short_bio = ?,
                 long_bio = ?,
                 area_of_expertise = ?,
-                profile_image = ?
+                profile_image = ?,
+                hpr_id = ?,
+                nmc_reg_number = ?,
+                council_name = ?,
+                year_of_registration = ?,
+                qualification_year = ?
             WHERE id = ?
         ";
-        
+
         $update_stmt = $conn->prepare($update_sql);
         $update_stmt->bind_param(
-            'ssssdisssssssssi',
+            'sssssissidssssssssiii',
             $name, $phone, $email, $gender, $dob, $age,
             $degrees, $specialization, $experience_years, $consultation_fee,
             $languages, $short_bio, $long_bio, $area_of_expertise,
-            $profile_image, $doctor_id
+            $profile_image, $hpr_id, $nmc_reg_number, $council_name,
+            $year_of_registration, $qualification_year, $doctor_id
         );
         
         if ($update_stmt->execute()) {
@@ -198,10 +212,12 @@ $formatted_dob = $doctor['dob'] ? date('Y-m-d', strtotime($doctor['dob'])) : '';
 $doctor_age = $doctor['age'] ?? '';
 
 // Get doctor's profile image or default
-$doctor_profile_image = !empty($doctor['profile_image']) ? 
+$doctor_profile_image = !empty($doctor['profile_image']) ?
     $doctor['profile_image'] : 'assets/img/dummy.png';
-?>
 
+$sidebar_active = 'contact';
+require_once __DIR__ . '/inc/sidebar.php';
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -221,24 +237,6 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
             color: #000;
             margin-bottom: 5px;
         }
-        .sidebar {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            height: fit-content;
-        }
-        .sidebar a {
-            display: block;
-            padding: 10px 15px;
-            margin: 5px 0;
-            color: #333;
-            text-decoration: none;
-            border-radius: 5px;
-        }
-        .sidebar a:hover, .sidebar a.active {
-            background: #02c9b8;
-            color: white;
-        }
         .userd-image {
             width: 100px;
             height: 100px;
@@ -252,15 +250,6 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
             padding: 25px;
             border-radius: 10px;
             border: 1px solid #dee2e6;
-        }
-        .menu-btn {
-            display: none;
-            background: #02c9b8;
-            color: white;
-            padding: 10px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-bottom: 15px;
         }
         .profile-image-container {
             position: relative;
@@ -290,23 +279,10 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
             max-height: 200px;
             margin-top: 10px;
         }
-        @media (max-width: 768px) {
-            .sidebar { display: none; }
-            .sidebar.show { display: block;         display: block;
-        width: 280px;
-        height: 100vh; }
-            .menu-btn { display: block; }
-        }
     </style>
 </head>
 <body>
-     <?php
-         $doctor_name = $doctor['name'];
-      ?>
-    <?php include("../header.php") ?>
-    
-    <section class="contact-appointment-section section-padding fix">
-        <div class="container">
+    <main class="doctor-content">
             <!-- Success/Error Messages -->
             <?php if (!empty($success_message)): ?>
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -314,17 +290,14 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             <?php endif; ?>
-            
+
             <?php if (!empty($error_message)): ?>
                 <div class="alert alert-danger alert-dismissible fade show" role="alert">
                     <?= $error_message ?>
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             <?php endif; ?>
-            
-          <?php $sidebar_active = 'contact'; include(__DIR__ . "/inc/sidebar.php"); ?>
-          <main class="doctor-content">
-          
+
 
                     <!-- Profile Form -->
                     <div class="profile-card shadow">
@@ -415,11 +388,54 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
                                 </div>
                                 <div class="col-md-6 mt-3">
                                     <label>Area of Expertise</label>
-                                    <input type="text" class="form-control" name="area_of_expertise" 
+                                    <input type="text" class="form-control" name="area_of_expertise"
                                            placeholder="Specific expertise areas"
                                            value="<?= htmlspecialchars($doctor['area_of_expertise']) ?>">
                                 </div>
-                                
+
+                                <!-- ABDM / HPR Compliance -->
+                                <div class="col-md-12 mt-4">
+                                    <h5 class="mb-1" style="color:#0C74C5;">ABDM / HPR Compliance</h5>
+                                    <small class="text-muted d-block mb-2">
+                                        Required for the Health Professional Registry (HPR). These fields are self-reported —
+                                        <?php if ($doctor['hpr_verified']): ?>
+                                            <span class="badge bg-success"><i class="fa fa-check-circle"></i> HPR Verified</span>
+                                        <?php else: ?>
+                                            <span class="badge bg-warning text-dark"><i class="fa fa-clock"></i> Verification Pending</span>
+                                        <?php endif; ?>
+                                    </small>
+                                </div>
+                                <div class="col-md-6 mt-2">
+                                    <label>HPR ID</label>
+                                    <input type="text" class="form-control" name="hpr_id"
+                                           placeholder="XX-XXXX-XXXX-XXXX"
+                                           value="<?= htmlspecialchars($doctor['hpr_id'] ?? '') ?>">
+                                </div>
+                                <div class="col-md-6 mt-2">
+                                    <label>NMC Registration Number</label>
+                                    <input type="text" class="form-control" name="nmc_reg_number"
+                                           placeholder="National Medical Commission reg. no."
+                                           value="<?= htmlspecialchars($doctor['nmc_reg_number'] ?? '') ?>">
+                                </div>
+                                <div class="col-md-6 mt-3">
+                                    <label>State Medical Council</label>
+                                    <input type="text" class="form-control" name="council_name"
+                                           placeholder="e.g. Delhi Medical Council"
+                                           value="<?= htmlspecialchars($doctor['council_name'] ?? '') ?>">
+                                </div>
+                                <div class="col-md-3 mt-3">
+                                    <label>Year of NMC Registration</label>
+                                    <input type="number" class="form-control" name="year_of_registration"
+                                           min="1950" max="<?= date('Y') ?>"
+                                           value="<?= htmlspecialchars($doctor['year_of_registration'] ?? '') ?>">
+                                </div>
+                                <div class="col-md-3 mt-3">
+                                    <label>Qualification Year</label>
+                                    <input type="number" class="form-control" name="qualification_year"
+                                           min="1950" max="<?= date('Y') ?>"
+                                           value="<?= htmlspecialchars($doctor['qualification_year'] ?? '') ?>">
+                                </div>
+
                                 <!-- Bio Sections -->
                                 <div class="col-md-12 mt-3">
                                     <label>Short Bio (for listings)</label>
@@ -523,8 +539,7 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
                         </div>
                     </div>
     </main>
-    <?php include("../footer.php") ?>
-    
+
     <script>
         
         // Preview profile image before upload

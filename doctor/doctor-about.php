@@ -9,7 +9,7 @@ $doctor_name = $jwt_doctor['name'] ?? 'Doctor';
 
 // Get doctor's complete profile details
 $doctor_sql = "
-    SELECT 
+    SELECT
         d.*,
         a.username as verified_by_admin,
         COUNT(DISTINCT ap.id) as total_appointments,
@@ -42,7 +42,7 @@ $gallery_result = $gallery_stmt->get_result();
 
 // Get doctor's reviews/ratings (if you have a reviews table)
 $reviews_sql = "
-    SELECT 
+    SELECT
         r.*,
         u.name as patient_name,
         u.profile_pic as patient_image
@@ -67,8 +67,8 @@ try {
 
 // Get doctor's documents/certificates
 $certificates_sql = "
-    SELECT * FROM doctor_documents 
-    WHERE doctor_id = ? 
+    SELECT * FROM doctor_documents
+    WHERE doctor_id = ?
     AND (document_type LIKE '%certificate%' OR document_type LIKE '%degree%' OR document_type LIKE '%license%')
     ORDER BY uploaded_at DESC
 ";
@@ -115,10 +115,12 @@ if ($doctor['experience_years'] >= 20) {
 }
 
 // Get doctor's profile image or default
-$doctor_profile_image = !empty($doctor['profile_image']) ? 
+$doctor_profile_image = !empty($doctor['profile_image']) ?
     $doctor['profile_image'] : 'assets/img/dummy.png';
-?>
 
+$sidebar_active = 'about';
+require_once __DIR__ . '/inc/sidebar.php';
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -132,435 +134,288 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/swiper-bundle.min.css">
     <style>
-        label {
-            display: inline-block;
-            font-size: 14px;
-            font-weight: 600;
-            color: #000;
-        }
-        .sidebar {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            height: fit-content;
-        }
-        .sidebar a {
-            display: block;
-            padding: 10px 15px;
-            margin: 5px 0;
-            color: #333;
-            text-decoration: none;
-            border-radius: 5px;
-        }
-        .sidebar a:hover, .sidebar a.active {
-            background: #02c9b8;
-            color: white;
-        }
-        .userd-image {
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 3px solid #02c9b8;
-        }
-        .profile-card {
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            border: 1px solid #dee2e6;
-        }
-        .menu-btn {
-            display: none;
-            background: #02c9b8;
-            color: white;
-            padding: 10px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-bottom: 15px;
-        }
-        .doctor-des {
-            font-size: 16px;
-            font-weight: 600;
-            color: #02c9b8;
-            margin-bottom: 5px;
-            border-bottom: 2px solid #f0f0f0;
-            padding-bottom: 5px;
-        }
-        .doctor-title {
-            font-size: 22px;
-            padding: 13px 13px;
-            color: #02c9b8;
-            border-bottom: 2px solid #02c9b8;
-            margin-bottom: 20px;
-        }
-        .info-box {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            border-left: 4px solid #02c9b8;
-        }
-        .badge-verified {
-            background-color: #28a745;
-            color: white;
-            padding: 3px 8px;
-            border-radius: 10px;
-            font-size: 12px;
-        }
-        .badge-experience {
-            background-color: #007bff;
-            color: white;
-            padding: 3px 8px;
-            border-radius: 10px;
-            font-size: 12px;
-        }
-        .language-tag {
-            display: inline-block;
-            background: #e9ecef;
-            padding: 4px 10px;
-            border-radius: 15px;
-            margin: 2px;
-            font-size: 13px;
-        }
-        .gallery-image {
-            width: 100%;
-            height: 150px;
-            object-fit: cover;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: transform 0.3s;
-        }
-        .gallery-image:hover {
-            transform: scale(1.05);
-        }
-        .rating-stars {
-            color: #ffc107;
-            font-size: 18px;
-        }
-        .certificate-badge {
-            background: #17a2b8;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 11px;
-        }
-        .stat-box {
-            text-align: center;
-            padding: 15px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            margin-bottom: 15px;
-        }
-        .stat-number {
-            font-size: 24px;
-            font-weight: bold;
-            color: #02c9b8;
-        }
-        .stat-label {
-            font-size: 12px;
-            color: #666;
-            text-transform: uppercase;
-        }
-        @media (max-width: 768px) {
-            .sidebar { display: none; }
-            .sidebar.show { display: block;          
-                display: block;
-                width: 280px;
-                height: 100vh;}
-            .menu-btn { display: block; }
-        }
+        /* ── Profile header ── */
+        .profile-header{background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.07);padding:24px 26px;margin-bottom:18px;}
+        .p-avatar-img{width:88px;height:88px;border-radius:50%;object-fit:cover;border:3px solid var(--accent);flex-shrink:0;}
+        .p-avatar-fallback{width:88px;height:88px;border-radius:50%;background:var(--primary);color:#fff;
+          display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;flex-shrink:0;}
+        .p-name{font-size:1.35rem;font-weight:700;color:#1f2937;margin-bottom:2px;}
+        .p-sub{font-size:.86rem;color:#6b7280;}
+        .p-fee{font-size:.86rem;color:#374151;margin-top:6px;}
+        .badge-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:20px;
+          font-size:.72rem;font-weight:700;letter-spacing:.2px;}
+        .badge-ok{background:#dcfce7;color:#166534;}
+        .badge-pending{background:#fef3c7;color:#92400e;}
+        .badge-info{background:#eff6ff;color:#1d4ed8;}
+        .badge-star{background:#fef9c3;color:#854d0e;}
+
+        /* ── Tabs (matches patient-profile.php) ── */
+        .profile-tabs{display:flex;gap:0;border-bottom:2px solid #e5e7eb;margin-bottom:18px;background:#fff;
+          border-radius:12px 12px 0 0;box-shadow:0 2px 8px rgba(0,0,0,.05);overflow-x:auto;}
+        .p-tab{padding:13px 20px;font-size:.84rem;font-weight:600;color:#6b7280;cursor:pointer;
+          border-bottom:3px solid transparent;white-space:nowrap;transition:.15s;flex-shrink:0;}
+        .p-tab:hover{color:var(--primary);}
+        .p-tab.active{color:var(--primary);border-bottom-color:var(--primary);}
+        .tab-pane{display:none;} .tab-pane.active{display:block;}
+
+        /* ── Info cards ── */
+        .info-section{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.05);padding:18px 20px;margin-bottom:14px;}
+        .section-title{font-size:.8rem;font-weight:700;color:#374151;margin-bottom:12px;}
+        .section-title i{color:var(--primary);margin-right:5px;}
+        .info-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#9ca3af;margin-bottom:2px;}
+        .info-value{font-size:.9rem;color:#1f2937;font-weight:500;}
+        .info-row{padding:9px 0;border-bottom:1px solid #f3f4f6;} .info-row:last-child{border-bottom:none;}
+        .bio-box{background:#f9fafb;border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:12px 14px;font-size:.86rem;color:#374151;line-height:1.6;}
+
+        .language-tag{display:inline-block;background:#f0f9ff;color:#0369a1;padding:5px 13px;border-radius:20px;margin:2px;font-size:.78rem;font-weight:600;}
+
+        .gallery-image{width:100%;height:150px;object-fit:cover;border-radius:10px;cursor:pointer;transition:.2s;}
+        .gallery-image:hover{transform:scale(1.03);box-shadow:0 4px 14px rgba(0,0,0,.15);}
+
+        .review-card{padding:14px 16px;border-radius:10px;background:#f9fafb;margin-bottom:10px;}
+        .rating-stars{color:#f59e0b;font-size:.86rem;}
+
+        .cert-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;
+          border-radius:10px;background:#fff;border:1px solid #e5e7eb;margin-bottom:8px;}
+        .cert-badge{background:#e0f2fe;color:#0369a1;padding:2px 9px;border-radius:20px;font-size:.68rem;font-weight:700;}
+
+        .empty-note{text-align:center;padding:28px 0;color:#9ca3af;font-size:.86rem;}
+        .empty-note i{font-size:1.8rem;display:block;margin-bottom:8px;opacity:.5;}
     </style>
 </head>
 <body>
-  <?php
-                            $doctor_name = $doctor['name'];
-                            ?>
-    <?php include("../header.php") ?>
-    
-    <section class="contact-appointment-section section-padding fix">
-        <div class="container">
-          <?php $sidebar_active = 'about'; include(__DIR__ . "/inc/sidebar.php"); ?>
-          <main class="doctor-content">
-          
+    <main class="doctor-content">
 
-                    <!-- Doctor Profile Header -->
-                    <div class="profile-card shadow mb-4">
-                        <div class="row align-items-center">
-                            <div class="col-md-3 text-center">
-                                <img src="<?= $doctor_profile_image ?>" 
-                                     class="userd-image" 
-                                     style="width: 120px; height: 120px;">
-                            </div>
-                            <div class="col-md-9">
-                                <h2 class="doctor-title mb-2">Dr. <?= htmlspecialchars($doctor['name']) ?></h2>
-                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                                    <span class="badge-verified">
-                                        <i class="fa fa-check-circle"></i> 
-                                        <?= $doctor['is_verified'] == 1 ? 'Verified Doctor' : 'Verification Pending' ?>
-                                    </span>
-                                    <span class="badge-experience">
-                                        <i class="fa fa-briefcase"></i> 
-                                        <?= $doctor['experience_years'] ?>+ Years Experience
-                                    </span>
-                                    <?php if ($doctor['rating'] > 0): ?>
-                                    <span class="badge bg-warning text-dark">
-                                        <i class="fa fa-star"></i> <?= number_format($doctor['rating'], 1) ?>/5.0
-                                    </span>
-                                    <?php endif; ?>
-                                </div>
-                                <p class="mb-1"><strong>Specialization:</strong> <?= htmlspecialchars($doctor['specialization']) ?></p>
-                                <p class="mb-1"><strong>Consultation Fee:</strong> ₹<?= number_format($doctor['consultation_fee'], 2) ?></p>
-                            </div>
-                        </div>
+      <!-- Profile Header -->
+      <div class="profile-header">
+        <div class="d-flex align-items-start flex-wrap" style="gap:18px;">
+          <?php if (!empty($doctor['profile_image'])): ?>
+            <img src="<?= htmlspecialchars($doctor_profile_image) ?>" class="p-avatar-img">
+          <?php else: ?>
+            <div class="p-avatar-fallback"><?= strtoupper(substr($doctor['name'], 0, 1)) ?></div>
+          <?php endif; ?>
+          <div style="flex:1;min-width:200px;">
+            <div class="p-name">Dr. <?= htmlspecialchars($doctor['name']) ?></div>
+            <div class="p-sub"><?= htmlspecialchars($doctor['specialization']) ?> &nbsp;·&nbsp; <?= (int)$doctor['experience_years'] ?>+ yrs experience</div>
+            <div class="mt-2 d-flex flex-wrap" style="gap:6px;">
+              <?php if ($doctor['is_verified'] == 1): ?>
+                <span class="badge-pill badge-ok"><i class="fa fa-check-circle"></i> Verified Doctor</span>
+              <?php else: ?>
+                <span class="badge-pill badge-pending"><i class="fa fa-clock-o"></i> Verification Pending</span>
+              <?php endif; ?>
+              <span class="badge-pill badge-info"><i class="fa fa-briefcase"></i> <?= $experience_level ?></span>
+              <?php if ($doctor['rating'] > 0): ?>
+                <span class="badge-pill badge-star"><i class="fa fa-star"></i> <?= number_format($doctor['rating'], 1) ?>/5.0</span>
+              <?php endif; ?>
+            </div>
+            <div class="p-fee"><i class="fa fa-money-bill-wave mr-1" style="color:var(--primary);"></i> Consultation Fee: <strong>₹<?= number_format($doctor['consultation_fee'], 2) ?></strong></div>
+          </div>
+          <div>
+            <a href="my-contact.php" class="btn btn-sm btn-outline-primary"><i class="fa fa-edit mr-1"></i> Edit Profile</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="row mb-3">
+        <div class="col-6 col-md-3">
+          <div class="stat-card card-primary">
+            <i class="fa fa-briefcase bg-icon"></i>
+            <div class="num"><?= (int)$doctor['experience_years'] ?>+</div>
+            <div class="lbl">Years Experience</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="stat-card card-green">
+            <i class="fa fa-calendar bg-icon"></i>
+            <div class="num"><?= $doctor['total_appointments'] ?? 0 ?></div>
+            <div class="lbl">Total Appointments</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="stat-card card-accent">
+            <i class="fa fa-check-circle bg-icon"></i>
+            <div class="num"><?= $doctor['completed_appointments'] ?? 0 ?></div>
+            <div class="lbl">Completed</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="stat-card card-purple">
+            <i class="fa fa-star bg-icon"></i>
+            <div class="num"><?= $doctor['rating'] > 0 ? number_format($doctor['rating'], 1) : 'N/A' ?></div>
+            <div class="lbl">Average Rating</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <!-- Left Column -->
+        <div class="col-md-8">
+          <!-- Tabs -->
+          <div class="profile-tabs">
+            <div class="p-tab active" onclick="showAboutTab('overview',this)"><i class="fa fa-user mr-1"></i> Overview</div>
+            <div class="p-tab" onclick="showAboutTab('gallery',this)"><i class="fa fa-image mr-1"></i> Gallery</div>
+            <div class="p-tab" onclick="showAboutTab('reviews',this)"><i class="fa fa-star mr-1"></i> Reviews</div>
+            <div class="p-tab" onclick="showAboutTab('certs',this)"><i class="fa fa-certificate mr-1"></i> Certificates</div>
+          </div>
+
+          <!-- Tab: Overview -->
+          <div class="tab-pane active" id="abouttab-overview">
+            <div class="info-section">
+              <div class="section-title"><i class="fa fa-graduation-cap"></i> Degrees & Qualifications</div>
+              <div class="info-value mb-2"><?= htmlspecialchars($doctor['degrees']) ?></div>
+              <?php if (!empty($education_data) && is_array($education_data)): ?>
+                <ul class="list-unstyled mb-0">
+                  <?php foreach ($education_data as $education): ?>
+                    <li style="font-size:.86rem;color:#374151;padding:3px 0;"><i class="fa fa-graduation-cap mr-2" style="color:var(--accent);"></i><?= htmlspecialchars($education) ?></li>
+                  <?php endforeach; ?>
+                </ul>
+              <?php endif; ?>
+            </div>
+
+            <div class="info-section">
+              <div class="section-title"><i class="fa fa-stethoscope"></i> Area of Expertise</div>
+              <div class="info-value"><?= htmlspecialchars($doctor['area_of_expertise']) ?: '—' ?></div>
+            </div>
+
+            <?php if (!empty($doctor['short_bio']) || !empty($doctor['long_bio'])): ?>
+            <div class="info-section">
+              <div class="section-title"><i class="fa fa-file-text-o"></i> Professional Summary</div>
+              <?php if (!empty($doctor['short_bio'])): ?>
+                <div class="info-value mb-2"><?= htmlspecialchars($doctor['short_bio']) ?></div>
+              <?php endif; ?>
+              <?php if (!empty($doctor['long_bio'])): ?>
+                <div class="bio-box"><?= nl2br(htmlspecialchars($doctor['long_bio'])) ?></div>
+              <?php endif; ?>
+            </div>
+            <?php endif; ?>
+
+            <?php if (!empty($languages_list)): ?>
+            <div class="info-section">
+              <div class="section-title"><i class="fa fa-language"></i> Languages Known</div>
+              <div>
+                <?php foreach ($languages_list as $language): ?>
+                  <span class="language-tag"><?= htmlspecialchars($language) ?></span>
+                <?php endforeach; ?>
+              </div>
+            </div>
+            <?php endif; ?>
+          </div>
+
+          <!-- Tab: Gallery -->
+          <div class="tab-pane" id="abouttab-gallery">
+            <div class="info-section">
+              <?php if ($gallery_result->num_rows > 0 || !empty($gallery_images)): ?>
+                <div class="row">
+                  <?php if ($gallery_result->num_rows > 0): ?>
+                    <?php while ($gallery = $gallery_result->fetch_assoc()): ?>
+                      <div class="col-md-4 mb-3">
+                        <img src="<?= BASE_URL . $gallery['image_path'] ?>" class="gallery-image"
+                             onclick="openImageModal('<?= BASE_URL . $gallery['image_path'] ?>')">
+                      </div>
+                    <?php endwhile; ?>
+                  <?php else: ?>
+                    <?php foreach ($gallery_images as $image): ?>
+                      <div class="col-md-4 mb-3">
+                        <img src="<?= BASE_URL . $image ?>" class="gallery-image"
+                             onclick="openImageModal('<?= BASE_URL . $image ?>')">
+                      </div>
+                    <?php endforeach; ?>
+                  <?php endif; ?>
+                </div>
+              <?php else: ?>
+                <div class="empty-note"><i class="fa fa-image"></i>No gallery images uploaded yet.</div>
+              <?php endif; ?>
+            </div>
+          </div>
+
+          <!-- Tab: Reviews -->
+          <div class="tab-pane" id="abouttab-reviews">
+            <div class="info-section">
+              <?php if ($reviews_result && $reviews_result->num_rows > 0): ?>
+                <?php while ($review = $reviews_result->fetch_assoc()): ?>
+                <div class="review-card">
+                  <div class="d-flex align-items-center mb-2">
+                    <?php if (!empty($review['patient_image'])): ?>
+                      <img src="<?= BASE_URL . $review['patient_image'] ?>" class="rounded-circle mr-2" width="36" height="36">
+                    <?php endif; ?>
+                    <div>
+                      <strong style="font-size:.86rem;"><?= htmlspecialchars($review['patient_name']) ?></strong>
+                      <div class="rating-stars">
+                        <?php for ($i = 1; $i <= 5; $i++): ?>
+                          <i class="fa fa-star<?= $i <= $review['rating'] ? '' : '-o' ?>"></i>
+                        <?php endfor; ?>
+                      </div>
                     </div>
-                    
-                    <!-- Statistics -->
-                    <div class="row mb-4">
-                        <div class="col-md-3 col-6">
-                            <div class="stat-box">
-                                <div class="stat-number"><?= $doctor['experience_years'] ?>+</div>
-                                <div class="stat-label">Years Experience</div>
-                            </div>
-                        </div>
-                        <div class="col-md-3 col-6">
-                            <div class="stat-box">
-                                <div class="stat-number"><?= $doctor['total_appointments'] ?? 0 ?></div>
-                                <div class="stat-label">Total Appointments</div>
-                            </div>
-                        </div>
-                        <div class="col-md-3 col-6">
-                            <div class="stat-box">
-                                <div class="stat-number"><?= $doctor['completed_appointments'] ?? 0 ?></div>
-                                <div class="stat-label">Completed</div>
-                            </div>
-                        </div>
-                        <div class="col-md-3 col-6">
-                            <div class="stat-box">
-                                <div class="stat-number">
-                                    <?php if ($doctor['rating'] > 0): ?>
-                                        <?= number_format($doctor['rating'], 1) ?>
-                                    <?php else: ?>
-                                        N/A
-                                    <?php endif; ?>
-                                </div>
-                                <div class="stat-label">Average Rating</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Main Profile Content -->
-                    <div class="row">
-                        <!-- Left Column - Professional Info -->
-                        <div class="col-md-8">
-                            <div class="profile-card shadow mb-4">
-                                <h4 class="mb-4">Professional Information</h4>
-                                
-                                <!-- Degrees & Qualifications -->
-                                <div class="mb-3">
-                                    <div class="doctor-des">Degrees & Qualifications</div>
-                                    <p class="mb-2"><?= htmlspecialchars($doctor['degrees']) ?></p>
-                                    <?php if (!empty($education_data) && is_array($education_data)): ?>
-                                        <ul class="list-unstyled">
-                                            <?php foreach ($education_data as $education): ?>
-                                                <li><i class="fa fa-graduation-cap text-primary me-2"></i> <?= htmlspecialchars($education) ?></li>
-                                            <?php endforeach; ?>
-                                        </ul>
-                                    <?php endif; ?>
-                                </div>
-                                
-                                <!-- Area of Expertise -->
-                                <div class="mb-3">
-                                    <div class="doctor-des">Area of Expertise</div>
-                                    <p><?= htmlspecialchars($doctor['area_of_expertise']) ?></p>
-                                </div>
-                                
-                                <!-- Experience -->
-                                <div class="mb-3">
-                                    <div class="doctor-des">Professional Experience</div>
-                                    <p>
-                                        <strong><?= $experience_level ?></strong> with <?= $doctor['experience_years'] ?>+ years of experience in <?= htmlspecialchars($doctor['specialization']) ?>.
-                                    </p>
-                                    <?php if (!empty($doctor['long_bio'])): ?>
-                                        <div class="info-box">
-                                            <?= nl2br(htmlspecialchars($doctor['long_bio'])) ?>
-                                        </div>
-                                    <?php endif; ?>
-                                </div>
-                                
-                                <!-- Short Bio -->
-                                <?php if (!empty($doctor['short_bio'])): ?>
-                                <div class="mb-3">
-                                    <div class="doctor-des">Professional Summary</div>
-                                    <p><?= htmlspecialchars($doctor['short_bio']) ?></p>
-                                </div>
-                                <?php endif; ?>
-                                
-                                <!-- Languages -->
-                                <?php if (!empty($languages_list)): ?>
-                                <div class="mb-3">
-                                    <div class="doctor-des">Languages Known</div>
-                                    <div class="d-flex flex-wrap">
-                                        <?php foreach ($languages_list as $language): ?>
-                                            <span class="language-tag"><?= htmlspecialchars($language) ?></span>
-                                        <?php endforeach; ?>
-                                    </div>
-                                </div>
-                                <?php endif; ?>
-                                
-                                <!-- Certificates & Documents -->
-                                <?php if ($certificates_result->num_rows > 0): ?>
-                                <div class="mb-3">
-                                    <div class="doctor-des">Certificates & Licenses</div>
-                                    <div class="row">
-                                        <?php while ($cert = $certificates_result->fetch_assoc()): ?>
-                                        <div class="col-md-6 mb-2">
-                                            <div class="info-box">
-                                                <div class="d-flex justify-content-between align-items-start">
-                                                    <div>
-                                                        <strong><?= htmlspecialchars($cert['document_name']) ?></strong>
-                                                        <div class="certificate-badge d-inline-block ms-2"><?= $cert['document_type'] ?></div>
-                                                    </div>
-                                                    <a href="<?= BASE_URL . $cert['file_path'] ?>" target="_blank" 
-                                                       class="btn btn-sm btn-outline-primary">
-                                                        <i class="fa fa-download"></i>
-                                                    </a>
-                                                </div>
-                                                <small class="text-muted">Uploaded: <?= date('d/m/Y', strtotime($cert['uploaded_at'])) ?></small>
-                                            </div>
-                                        </div>
-                                        <?php endwhile; ?>
-                                    </div>
-                                </div>
-                                <?php endif; ?>
-                            </div>
-                            
-                            <!-- Gallery Section -->
-                            <?php if (!empty($gallery_images) || $gallery_result->num_rows > 0): ?>
-                            <div class="profile-card shadow mb-4">
-                                <h4 class="mb-4">Gallery</h4>
-                                <div class="row">
-                                    <?php 
-                                    // Display gallery from database table
-                                    if ($gallery_result->num_rows > 0): 
-                                        while ($gallery = $gallery_result->fetch_assoc()): 
-                                    ?>
-                                        <div class="col-md-4 mb-3">
-                                            <img src="<?= BASE_URL . $gallery['image_path'] ?>" 
-                                                 class="gallery-image"
-                                                 onclick="openImageModal('<?= BASE_URL . $gallery['image_path'] ?>')">
-                                        </div>
-                                    <?php 
-                                        endwhile;
-                                    // Display gallery from JSON field
-                                    elseif (!empty($gallery_images)): 
-                                        foreach ($gallery_images as $image): 
-                                    ?>
-                                        <div class="col-md-4 mb-3">
-                                            <img src="<?= BASE_URL . $image ?>" 
-                                                 class="gallery-image"
-                                                 onclick="openImageModal('<?= BASE_URL . $image ?>')">
-                                        </div>
-                                    <?php 
-                                        endforeach;
-                                    endif; 
-                                    ?>
-                                </div>
-                            </div>
-                            <?php endif; ?>
-                            
-                            <!-- Reviews Section -->
-                            <?php if ($reviews_result && $reviews_result->num_rows > 0): ?>
-                            <div class="profile-card shadow">
-                                <h4 class="mb-4">Patient Reviews</h4>
-                                <?php while ($review = $reviews_result->fetch_assoc()): ?>
-                                <div class="info-box mb-3">
-                                    <div class="d-flex align-items-center mb-2">
-                                        <?php if (!empty($review['patient_image'])): ?>
-                                            <img src="<?= BASE_URL . $review['patient_image'] ?>" 
-                                                 class="rounded-circle me-2" width="40" height="40">
-                                        <?php endif; ?>
-                                        <div>
-                                            <strong><?= htmlspecialchars($review['patient_name']) ?></strong>
-                                            <div class="rating-stars">
-                                                <?php for ($i = 1; $i <= 5; $i++): ?>
-                                                    <i class="fa fa-star<?= $i <= $review['rating'] ? '' : '-o' ?>"></i>
-                                                <?php endfor; ?>
-                                            </div>
-                                        </div>
-                                        <small class="text-muted ms-auto"><?= date('d/m/Y', strtotime($review['created_at'])) ?></small>
-                                    </div>
-                                    <p class="mb-0"><?= htmlspecialchars($review['comment']) ?></p>
-                                </div>
-                                <?php endwhile; ?>
-                            </div>
-                            <?php endif; ?>
-                        </div>
-                        
-                        <!-- Right Column - Additional Info -->
-                        <div class="col-md-4">
-                            <!-- Contact Information -->
-                            <div class="profile-card shadow mb-4">
-                                <h5 class="mb-3">Contact Information</h5>
-                                <div class="info-box mb-3">
-                                    <p class="mb-1"><strong><i class="fa fa-envelope text-primary me-2"></i> Email</strong></p>
-                                    <p class="mb-0"><?= htmlspecialchars($doctor['email']) ?></p>
-                                </div>
-                                <div class="info-box mb-3">
-                                    <p class="mb-1"><strong><i class="fa fa-phone text-primary me-2"></i> Phone</strong></p>
-                                    <p class="mb-0"><?= htmlspecialchars($doctor['phone']) ?></p>
-                                </div>
-                                <?php if ($doctor['is_verified'] == 1): ?>
-                                <div class="info-box mb-3">
-                                    <p class="mb-1"><strong><i class="fa fa-shield-alt text-success me-2"></i> Verification</strong></p>
-                                    <p class="mb-0">
-                                        Verified on <?= date('d/m/Y', strtotime($doctor['verified_at'])) ?><br>
-                                        <small>By: <?= htmlspecialchars($doctor['verified_by_admin'] ?? 'Administrator') ?></small>
-                                    </p>
-                                </div>
-                                <?php endif; ?>
-                            </div>
-                            
-                            <!-- Practice Information -->
-                            <div class="profile-card shadow mb-4">
-                                <h5 class="mb-3">Practice Details</h5>
-                                <div class="info-box mb-3">
-                                    <p class="mb-1"><strong><i class="fa fa-stethoscope text-primary me-2"></i> Specialization</strong></p>
-                                    <p class="mb-0"><?= htmlspecialchars($doctor['specialization']) ?></p>
-                                </div>
-                                <div class="info-box mb-3">
-                                    <p class="mb-1"><strong><i class="fa fa-money-bill-wave text-primary me-2"></i> Consultation Fee</strong></p>
-                                    <p class="mb-0">₹<?= number_format($doctor['consultation_fee'], 2) ?></p>
-                                </div>
-                                <div class="info-box mb-3">
-                                    <p class="mb-1"><strong><i class="fa fa-briefcase text-primary me-2"></i> Experience Level</strong></p>
-                                    <p class="mb-0"><?= $experience_level ?></p>
-                                </div>
-                            </div>
-                            
-                            <!-- Quick Actions -->
-                            <div class="profile-card shadow">
-                                <h5 class="mb-3">Quick Actions</h5>
-                                <div class="d-grid gap-2">
-                                    <a href="my-contact.php" class="btn btn-primary">
-                                        <i class="fa fa-edit me-2"></i> Edit Profile
-                                    </a>
-                                    <a href="appointments.php" class="btn btn-success">
-                                        <i class="fa fa-calendar me-2"></i> View Appointments
-                                    </a>
-                                    <a href="my-patients.php" class="btn btn-info">
-                                        <i class="fa fa-users me-2"></i> My Patients
-                                    </a>
-                                    <button class="btn btn-outline-primary" onclick="window.print()">
-                                        <i class="fa fa-print me-2"></i> Print Profile
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <small class="text-muted ml-auto"><?= date('d M Y', strtotime($review['created_at'])) ?></small>
+                  </div>
+                  <div style="font-size:.86rem;color:#374151;"><?= htmlspecialchars($review['comment']) ?></div>
+                </div>
+                <?php endwhile; ?>
+              <?php else: ?>
+                <div class="empty-note"><i class="fa fa-star-o"></i>No patient reviews yet.</div>
+              <?php endif; ?>
+            </div>
+          </div>
+
+          <!-- Tab: Certificates -->
+          <div class="tab-pane" id="abouttab-certs">
+            <div class="info-section">
+              <?php if ($certificates_result->num_rows > 0): ?>
+                <?php while ($cert = $certificates_result->fetch_assoc()): ?>
+                <div class="cert-item">
+                  <div>
+                    <div style="font-weight:600;font-size:.88rem;color:#1f2937;"><?= htmlspecialchars($cert['document_name']) ?></div>
+                    <span class="cert-badge"><?= htmlspecialchars($cert['document_type']) ?></span>
+                    <span style="font-size:.72rem;color:#9ca3af;margin-left:6px;">Uploaded <?= date('d M Y', strtotime($cert['uploaded_at'])) ?></span>
+                  </div>
+                  <a href="<?= BASE_URL . $cert['file_path'] ?>" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fa fa-download"></i></a>
+                </div>
+                <?php endwhile; ?>
+              <?php else: ?>
+                <div class="empty-note"><i class="fa fa-certificate"></i>No certificates or licenses uploaded yet.</div>
+              <?php endif; ?>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="col-md-4">
+          <div class="info-section">
+            <div class="section-title"><i class="fa fa-address-card"></i> Contact Information</div>
+            <div class="info-row"><div class="info-label">Email</div><div class="info-value"><?= htmlspecialchars($doctor['email']) ?></div></div>
+            <div class="info-row"><div class="info-label">Phone</div><div class="info-value"><?= htmlspecialchars($doctor['phone']) ?></div></div>
+            <?php if ($doctor['is_verified'] == 1 && !empty($doctor['verified_at'])): ?>
+            <div class="info-row">
+              <div class="info-label">Verification</div>
+              <div class="info-value">
+                Verified <?= date('d M Y', strtotime($doctor['verified_at'])) ?>
+                <div style="font-size:.76rem;color:#9ca3af;">By <?= htmlspecialchars($doctor['verified_by_admin'] ?? 'Administrator') ?></div>
+              </div>
+            </div>
+            <?php endif; ?>
+          </div>
+
+          <div class="info-section">
+            <div class="section-title"><i class="fa fa-hospital-o"></i> Practice Details</div>
+            <div class="info-row"><div class="info-label">Specialization</div><div class="info-value"><?= htmlspecialchars($doctor['specialization']) ?></div></div>
+            <div class="info-row"><div class="info-label">Consultation Fee</div><div class="info-value">₹<?= number_format($doctor['consultation_fee'], 2) ?></div></div>
+            <div class="info-row"><div class="info-label">Experience Level</div><div class="info-value"><?= $experience_level ?></div></div>
+          </div>
+
+          <div class="info-section">
+            <div class="section-title"><i class="fa fa-bolt"></i> Quick Actions</div>
+            <div class="d-flex flex-column" style="gap:8px;">
+              <a href="my-contact.php" class="btn btn-sm btn-primary-custom"><i class="fa fa-edit mr-1"></i> Edit Profile</a>
+              <a href="appointments.php" class="btn btn-sm btn-outline-secondary"><i class="fa fa-calendar mr-1"></i> View Appointments</a>
+              <a href="my-patients.php" class="btn btn-sm btn-outline-secondary"><i class="fa fa-users mr-1"></i> My Patients</a>
+              <button class="btn btn-sm btn-outline-secondary" onclick="window.print()"><i class="fa fa-print mr-1"></i> Print Profile</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
-    <?php include("../footer.php") ?>
-    
+
     <!-- Image Modal -->
     <div class="modal fade" id="imageModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -575,34 +430,20 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
             </div>
         </div>
     </div>
-    
+
     <script>
-        
+        function showAboutTab(name, el) {
+          document.querySelectorAll('#abouttab-overview, #abouttab-gallery, #abouttab-reviews, #abouttab-certs').forEach(t => t.classList.remove('active'));
+          document.querySelectorAll('.profile-tabs .p-tab').forEach(t => t.classList.remove('active'));
+          document.getElementById('abouttab-' + name).classList.add('active');
+          el.classList.add('active');
+        }
+
         function openImageModal(imageSrc) {
             document.getElementById('modalImage').src = imageSrc;
             var modal = new bootstrap.Modal(document.getElementById('imageModal'));
             modal.show();
         }
-        
-        // Initialize gallery swiper if you want carousel
-        document.addEventListener('DOMContentLoaded', function() {
-            // You can add a swiper carousel here if needed
-            /* 
-            var gallerySwiper = new Swiper('.gallery-swiper', {
-                slidesPerView: 3,
-                spaceBetween: 10,
-                pagination: {
-                    el: '.swiper-pagination',
-                    clickable: true,
-                },
-                breakpoints: {
-                    640: { slidesPerView: 2 },
-                    768: { slidesPerView: 3 },
-                    1024: { slidesPerView: 4 }
-                }
-            });
-            */
-        });
     </script>
 </body>
 </html>

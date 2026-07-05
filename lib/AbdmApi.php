@@ -1,4 +1,5 @@
 <?php
+
 /**
  * AbdmApi — ABDM / ABHA API v3 client (spec v1.3, July 2025)
  *
@@ -46,29 +47,73 @@ class AbdmApi
 
     public function getAccessToken(): string
     {
-        if (!empty($_SESSION['abdm_token'])
+        if (
+            !empty($_SESSION['abdm_token'])
             && !empty($_SESSION['abdm_token_exp'])
-            && time() < (int)$_SESSION['abdm_token_exp']) {
+            && time() < (int)$_SESSION['abdm_token_exp']
+        ) {
             return $_SESSION['abdm_token'];
         }
 
-        // ABDM_GATEWAY_URL is already the full endpoint URL (v3)
-        $res = $this->rawPost($this->gateway, [
-            'clientId'     => $this->clientId,
+        $oauthData = [
+            'clientId' => $this->clientId,
             'clientSecret' => $this->clientSecret,
-            'grantType'    => 'client_credentials',
-        ], '', false);
+            'grantType' => 'client_credentials'
+        ];
 
-        if (empty($res['accessToken'])) {
-            throw new RuntimeException(
-                'ABDM OAuth failed: ' . ($res['message'] ?? $res['error'] ?? json_encode($res))
-            );
+        // Log the credentials being used (mask sensitive data)
+        error_log("ABDM OAuth Request - Client ID: " . substr($this->clientId, 0, 10) . "...");
+        error_log("ABDM OAuth URL: " . $this->gateway);
+
+        $res = $this->rawPost(
+            $this->gateway,
+            $oauthData,
+            '', // No bearer token
+            true, // Send v3 headers
+            [] // No extra headers
+        );
+
+        // Log the full response for debugging
+        error_log("ABDM OAuth Full Response: " . json_encode($res));
+
+        // Check for access token in both camelCase and snake_case
+        $accessToken = $res['accessToken'] ?? $res['access_token'] ?? '';
+
+        if (!$accessToken) {
+            // Build error message safely
+            $errorMsg = 'Unknown error';
+
+            if (isset($res['error'])) {
+                if (is_array($res['error'])) {
+                    $code = $res['error']['code'] ?? '';
+                    $message = $res['error']['message'] ?? '';
+                    $errorMsg = "[{$code}] {$message}";
+                } else {
+                    $errorMsg = (string)$res['error'];
+                }
+            } elseif (isset($res['message']) && is_string($res['message'])) {
+                $errorMsg = $res['message'];
+            } elseif (isset($res['_raw'])) {
+                $errorMsg = 'Raw response: ' . substr($res['_raw'], 0, 200);
+            } else {
+                $errorMsg = json_encode($res);
+            }
+
+            throw new RuntimeException("ABDM OAuth failed: {$errorMsg}");
         }
 
-        $ttl = max(300, (int)($res['expiresIn'] ?? 1800) - 300); // keep 5-min buffer
-        $_SESSION['abdm_token']     = $res['accessToken'];
+        // Get expires in (both camelCase and snake_case)
+        $expiresIn = (int)($res['expiresIn'] ?? $res['expires_in'] ?? 1200);
+        $ttl = max(300, $expiresIn - 300);
+
+        $_SESSION['abdm_token'] = $accessToken;
         $_SESSION['abdm_token_exp'] = time() + $ttl;
-        return $res['accessToken'];
+
+        // Log success
+        error_log("ABDM OAuth Success - Token: " . substr($accessToken, 0, 30) . "...");
+        error_log("ABDM OAuth - Expires in: " . $ttl . " seconds");
+
+        return $accessToken;
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -81,32 +126,35 @@ class AbdmApi
 
     public function getPublicCert(): string
     {
-        if (!empty($_SESSION['abdm_cert'])
+        if (
+            !empty($_SESSION['abdm_cert'])
             && !empty($_SESSION['abdm_cert_exp'])
-            && time() < (int)$_SESSION['abdm_cert_exp']) {
+            && time() < (int)$_SESSION['abdm_cert_exp']
+        ) {
             return $_SESSION['abdm_cert'];
         }
 
         $token = $this->getAccessToken();
-        $res   = $this->rawGet($this->base . '/certs', $token);
+
+        // CORRECT endpoint from Postman
+        $res = $this->rawGet($this->base . '/profile/public/certificate', $token);
 
         $raw = $res['publicKey'] ?? '';
         if (!$raw) {
-            throw new RuntimeException(
-                'ABDM: Could not fetch public certificate. Response: ' . json_encode($res)
-            );
+            throw new RuntimeException('ABDM: Could not fetch public certificate');
         }
 
         $pem = $this->toPem($raw);
 
-        // Validate key is loadable before caching
+        // Validate key
         $key = openssl_pkey_get_public($pem);
         if (!$key) {
-            throw new RuntimeException('ABDM public key is invalid: ' . openssl_error_string());
+            throw new RuntimeException('ABDM public key is invalid');
         }
 
-        $_SESSION['abdm_cert']     = $pem;
+        $_SESSION['abdm_cert'] = $pem;
         $_SESSION['abdm_cert_exp'] = time() + 3600;
+
         return $pem;
     }
 
@@ -124,7 +172,7 @@ class AbdmApi
 
         $encrypted = '';
         // RSA/ECB/PKCS1Padding — as required by ABDM v3 spec
-        if (!openssl_public_encrypt($plaintext, $encrypted, $key, OPENSSL_PKCS1_PADDING)) {
+        if (!openssl_public_encrypt($plaintext, $encrypted, $key, OPENSSL_PKCS1_OAEP_PADDING)) {
             throw new RuntimeException('ABDM RSA encryption failed: ' . openssl_error_string());
         }
 
@@ -350,27 +398,33 @@ class AbdmApi
     {
         $token = $this->getAccessToken();
 
-        if (in_array('abha-login', $scopes, true)) {
-            // Mobile login requires scope + otpSystem per ABDM spec
-            $body = [
-                'scope'     => ($loginHint === 'mobile')
-                                  ? ['abha-login', 'mobile-verify']
-                                  : ['abha-login'],
-                'loginHint' => $loginHint,
-                'loginId'   => $this->rsaEncrypt($loginId),
-                'otpSystem' => $otpSystem,
-            ];
-            return $this->post('/profile/login/request/otp', $body, $token);
+        // Build the request body
+        $body = [
+            'txnId' => '',
+            'scope' => $scopes,
+            'loginHint' => $loginHint,
+            'loginId' => $this->rsaEncrypt($loginId),
+            'otpSystem' => $otpSystem,
+        ];
+
+        // For mobile login, the scope should be ['abha-login', 'mobile-verify']
+        if ($loginHint === 'mobile') {
+            $body['scope'] = ['abha-login', 'mobile-verify'];
+            $body['otpSystem'] = 'abdm';
         }
 
-        // Enrollment scopes (abha-enrol, dl-flow, mobile-verify) → enrollment endpoint
-        return $this->post('/enrollment/request/otp', [
-            'txnId'     => '',
-            'scope'     => $scopes,
-            'loginHint' => $loginHint,
-            'loginId'   => $this->rsaEncrypt($loginId),
-            'otpSystem' => $otpSystem,
-        ], $token);
+        // For Aadhaar login
+        if ($loginHint === 'aadhaar') {
+            $body['scope'] = ['abha-login', 'aadhaar-verify'];
+            $body['otpSystem'] = 'aadhaar';
+        }
+
+        error_log("ABDM initAuth Request: " . json_encode([
+            'url' => $this->base . '/enrollment/request/otp',
+            'body' => $body
+        ]));
+
+        return $this->post('/enrollment/request/otp', $body, $token);
     }
 
     /**
@@ -419,14 +473,20 @@ class AbdmApi
      */
     public function verifyUserLogin(string $txnId, string $abhaNumber, string $tToken = ''): array
     {
-        $token        = $this->getAccessToken();
+        $token = $this->getAccessToken();
         $extraHeaders = $tToken ? ['T-Token' => 'Bearer ' . $tToken] : [];
+
+        // Use correct endpoint for sandbox
         return $this->rawPost(
-            $this->base . '/profile/login/verify/user',
+            $this->base . '/enrollment/auth/byAbdm',
             [
-                'txnId'      => $txnId,
-                'scope'      => ['abha-login', 'mobile-verify'],
+                'txnId' => $txnId,
+                'scope' => ['abha-login', 'mobile-verify'],
                 'ABHANumber' => $abhaNumber,
+                'authData' => [
+                    'authMethods' => ['abha-number'],
+                    'abhaNumber' => $abhaNumber
+                ]
             ],
             $token,
             true,
@@ -435,8 +495,14 @@ class AbdmApi
     }
 
     /* ── Backward-compat aliases ── */
-    public function confirmWithMobileOtp(string $otp, string $txnId): array  { return $this->confirmAuth($otp, $txnId); }
-    public function confirmWithAadhaarOtp(string $otp, string $txnId): array { return $this->confirmAuth($otp, $txnId, ['abha-login', 'aadhaar-verify']); }
+    public function confirmWithMobileOtp(string $otp, string $txnId): array
+    {
+        return $this->confirmAuth($otp, $txnId);
+    }
+    public function confirmWithAadhaarOtp(string $otp, string $txnId): array
+    {
+        return $this->confirmAuth($otp, $txnId, ['abha-login', 'aadhaar-verify']);
+    }
 
     /* ═══════════════════════════════════════════════════════════════
        7. PROFILE
@@ -650,9 +716,9 @@ class AbdmApi
         $digits = preg_replace('/\D/', '', $raw);
         if (strlen($digits) !== 14) return $raw;
         return substr($digits, 0, 2) . '-'
-             . substr($digits, 2, 4) . '-'
-             . substr($digits, 6, 4) . '-'
-             . substr($digits, 10, 4);
+            . substr($digits, 2, 4) . '-'
+            . substr($digits, 6, 4) . '-'
+            . substr($digits, 10, 4);
     }
 
     /**
@@ -710,15 +776,76 @@ class AbdmApi
     }
 
     /** Full-URL POST — returns decoded JSON array. */
-    private function rawPost(string $url, array $data, string $bearer = '', bool $v3Headers = true, array $extraHeaders = []): array
-    {
-        [$body, $http] = $this->curlExec('POST', $url, json_encode($data), $bearer, $extraHeaders, $v3Headers);
-        $decoded = json_decode($body, true);
-        if ($decoded === null) {
-            return ['_raw' => substr($body, 0, 500), '_http' => $http];
+    private function rawPost(
+        string $url,
+        array $data,
+        string $bearer = '',
+        bool $v3Headers = true,
+        array $extraHeaders = []
+    ): array {
+        $headers = ['Content-Type: application/json', 'Accept: application/json'];
+
+        if ($bearer) {
+            $headers[] = 'Authorization: Bearer ' . $bearer;
         }
-        $decoded['_http'] = $http;
-        return $decoded;
+
+        if ($v3Headers) {
+            $headers[] = 'REQUEST-ID: ' . $this->uuid();
+            $headers[] = 'TIMESTAMP: ' . $this->timestamp();
+            $headers[] = 'X-CM-ID: ' . $this->xCmId;
+        }
+
+        foreach ($extraHeaders as $k => $v) {
+            $headers[] = "$k: $v";
+        }
+
+        $ch = curl_init($url);
+        $opts = [
+            CURLOPT_CUSTOMREQUEST => 'POST',
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_CONNECTTIMEOUT => 15,
+            CURLOPT_SSL_VERIFYPEER => $this->sslVerify,
+            CURLOPT_SSL_VERIFYHOST => $this->sslVerify ? 2 : 0,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 3,
+            CURLOPT_POSTFIELDS => json_encode($data),
+        ];
+
+        curl_setopt_array($ch, $opts);
+
+        $response = curl_exec($ch);
+        $errno = curl_errno($ch);
+        $errMsg = curl_error($ch);
+        $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($errno) {
+            throw new RuntimeException("cURL [{$errno}] {$errMsg} → {$url}");
+        }
+
+        // Log the raw response for debugging
+        error_log("ABDM Raw Response for {$url}: " . substr($response, 0, 500));
+
+        // Parse JSON response
+        $decoded = json_decode($response, true);
+
+        // Check if JSON parsing failed
+        if ($decoded === null && !empty($response)) {
+            error_log("ABDM JSON Parse Error: " . json_last_error_msg());
+            error_log("ABDM Raw Response: " . substr($response, 0, 1000));
+            return ['_raw' => substr($response, 0, 500), '_http' => $http];
+        }
+
+        // Return the parsed response
+        if (is_array($decoded)) {
+            $decoded['_http'] = $http;
+            return $decoded;
+        }
+
+        // If response is empty or not JSON
+        return ['_raw' => $response, '_http' => $http];
     }
 
     /** Full-URL GET — returns decoded JSON array. */
@@ -839,8 +966,8 @@ class AbdmApi
         if (strpos($keyData, '-----BEGIN') !== false) return $keyData;
         $clean = preg_replace('/\s+/', '', $keyData);
         return "-----BEGIN PUBLIC KEY-----\n"
-             . chunk_split($clean, 64, "\n")
-             . "-----END PUBLIC KEY-----\n";
+            . chunk_split($clean, 64, "\n")
+            . "-----END PUBLIC KEY-----\n";
     }
 
     /**
