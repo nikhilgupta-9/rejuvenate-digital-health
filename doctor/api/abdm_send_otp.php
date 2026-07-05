@@ -53,27 +53,9 @@ $existingTxnId = $input['txnId'] ?? ''; // For mobile verification flow
 
 debug_log("Type: {$type}, Input Value: " . substr($inputValue, 0, 4) . '...');
 
-// ============================================
-// FIX: Mobile verification requires existing txnId
-// ============================================
-if ($type === 'mobile') {
-    // Check if we have a txnId from Aadhaar verification
-    $aadhaarTxnId = $_SESSION['abdm_aadhaar_txnId'] ?? $existingTxnId ?? '';
-    
-    if (empty($aadhaarTxnId)) {
-        debug_log("ERROR: No Aadhaar txnId found for mobile verification");
-        echo json_encode([
-            'success' => false, 
-            'error' => 'Please verify Aadhaar first before mobile verification. Click "Aadhaar OTP" tab first.'
-        ]);
-        exit;
-    }
-    
-    debug_log("Using Aadhaar txnId for mobile: " . substr($aadhaarTxnId, 0, 8) . '...');
-    $txnIdToUse = $aadhaarTxnId;
-} else {
-    $txnIdToUse = '';
-}
+// Mobile login is a standalone flow (ABDM "login by mobile number") — it does
+// not depend on any prior Aadhaar transaction. Each request starts fresh.
+$txnIdToUse = '';
 
 // Build request based on type
 $loginId = '';
@@ -98,7 +80,7 @@ switch($type) {
         break;
         
     case 'mobile':
-        debug_log("Processing Mobile (requires Aadhaar first)");
+        debug_log("Processing Mobile Login");
         $clean = preg_replace('/\D/', '', $inputValue);
         if (strlen($clean) !== 10) {
             debug_log("Mobile Validation Failed - Invalid length: " . strlen($clean));
@@ -108,7 +90,7 @@ switch($type) {
         $loginId = $clean;
         $loginHint = 'mobile';
         $otpSystem = 'abdm';
-        $scopes = ['abha-enrol', 'mobile-verify'];
+        $scopes = ['abha-login', 'mobile-verify'];
         break;
         
     case 'number':
@@ -165,8 +147,14 @@ try {
     $finalLoginId = abdm_rsa_encrypt($loginId, $publicKeyPem);
     debug_log("Encrypted Login ID Length: " . strlen($finalLoginId));
 
-    $url = 'https://abhasbx.abdm.gov.in/abha/api/v3/enrollment/request/otp';
-    
+    // Mobile login is a LOGIN-scope operation (existing ABHA holder), which ABDM
+    // routes through a different endpoint than enrollment — /enrollment/request/otp
+    // only accepts abha-enrol scope and rejects abha-login with a misleading
+    // "Invalid Transaction Id" 400, confirmed against the sandbox.
+    $url = ($type === 'mobile')
+        ? 'https://abhasbx.abdm.gov.in/abha/api/v3/profile/login/request/otp'
+        : 'https://abhasbx.abdm.gov.in/abha/api/v3/enrollment/request/otp';
+
     $headers = [
         'Authorization' => 'Bearer ' . $accessToken,
         'Content-Type' => 'application/json',
@@ -184,15 +172,8 @@ try {
         'loginHint' => $loginHint,
         'loginId' => $finalLoginId,
         'otpSystem' => $otpSystem,
+        'txnId' => '', // Empty for new request
     ];
-    
-    // For mobile, use the Aadhaar txnId
-    if ($type === 'mobile' && !empty($txnIdToUse)) {
-        $body['txnId'] = $txnIdToUse;
-        debug_log("Using Aadhaar txnId for mobile request: " . substr($txnIdToUse, 0, 8) . '...');
-    } else {
-        $body['txnId'] = ''; // Empty for new request
-    }
 
     debug_log("Sending Request", [
         'url' => $url,

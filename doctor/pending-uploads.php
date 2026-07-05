@@ -35,8 +35,8 @@ require_once __DIR__ . '/inc/sidebar.php';
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pending Uploads — Rejuvenate</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
 <style>
 .info-section{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.05);padding:18px 20px;margin-bottom:16px;}
 .section-title{font-size:.85rem;font-weight:700;color:#374151;margin-bottom:12px;}

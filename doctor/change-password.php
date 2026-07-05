@@ -148,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['change_password'])) {
                     $conn->commit();
                     
                     // Send email notification
-                    sendPasswordChangeEmail($doctor_email, $doctor_name, BASE_URL);
+                    sendPasswordChangeEmail($doctor_email, $doctor_name);
                     
                     $success_message = "Password changed successfully! You will be redirected to login in 5 seconds.";
                     
@@ -189,7 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['change_password'])) {
 }
 
 // Function to send password change email
-function sendPasswordChangeEmail($email, $name, BASE_URL) {
+function sendPasswordChangeEmail($email, $name) {
     // You can use your existing email function
     // For example: send_otp_email($email, $otp) modified for password change
     $subject = "Password Changed - REJUVENATE Digital Health";
@@ -260,6 +260,9 @@ foreach ($create_tables_sql as $sql) {
         error_log("Table creation error: " . $e->getMessage());
     }
 }
+
+$sidebar_active = 'settings';
+require_once __DIR__ . '/inc/sidebar.php';
 ?>
 
 <!DOCTYPE html>
@@ -274,24 +277,6 @@ foreach ($create_tables_sql as $sql) {
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
     <style>
-        .sidebar {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            height: fit-content;
-        }
-        .sidebar a {
-            display: block;
-            padding: 10px 15px;
-            margin: 5px 0;
-            color: #333;
-            text-decoration: none;
-            border-radius: 5px;
-        }
-        .sidebar a:hover, .sidebar a.active {
-            background: #02c9b8;
-            color: white;
-        }
         .userd-image {
             width: 100px;
             height: 100px;
@@ -306,15 +291,6 @@ foreach ($create_tables_sql as $sql) {
             border: 1px solid #dee2e6;
             max-width: 600px;
             margin: 0 auto;
-        }
-        .menu-btn {
-            display: none;
-            background: #02c9b8;
-            color: white;
-            padding: 10px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-bottom: 15px;
         }
         .password-strength {
             height: 5px;
@@ -346,17 +322,9 @@ foreach ($create_tables_sql as $sql) {
         .input-group-password {
             position: relative;
         }
-        @media (max-width: 768px) {
-            .sidebar { display: none; }
-            .sidebar.show { display: block; }
-            .menu-btn { display: block; }
-        }
     </style>
 </head>
 <body>
-    <?php include("../header.php") ?>
-    
-    <?php $sidebar_active = 'settings'; include(__DIR__ . "/inc/sidebar.php"); ?>
     <main class="doctor-content">
     
                     <!-- Password Change Form -->
@@ -535,8 +503,6 @@ foreach ($create_tables_sql as $sql) {
                     </div>
                     <?php endif; ?>
     </main>
-
-    <?php include("../footer.php") ?>
 
     <script>
         // Toggle password visibility

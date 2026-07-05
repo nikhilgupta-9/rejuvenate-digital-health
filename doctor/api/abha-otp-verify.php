@@ -251,9 +251,11 @@ try {
         ]);
         
     } else {
-        // For Mobile verification - use the enrollment/auth/byAbdm endpoint
-        $url = 'https://abhasbx.abdm.gov.in/abha/api/v3/enrollment/auth/byAbdm';
-        
+        // For Mobile login - use the login-scope verify endpoint (not enrollment).
+        // This is what actually sends "OTP to Login to your ABHA Address..." and
+        // supports logging in to an existing ABHA without any Aadhaar step.
+        $url = 'https://abhasbx.abdm.gov.in/abha/api/v3/profile/login/verify';
+
         $headers = [
             'Authorization' => 'Bearer ' . $accessToken,
             'Content-Type' => 'application/json',
@@ -262,9 +264,9 @@ try {
             'TIMESTAMP' => abdm_timestamp(),
             'X-CM-ID' => defined('ABDM_X_CM_ID_VALUE') ? ABDM_X_CM_ID_VALUE : 'sbx',
         ];
-        
+
         $body = [
-            'scope' => ['abha-enrol', 'mobile-verify'],
+            'scope' => ['abha-login', 'mobile-verify'],
             'authData' => [
                 'authMethods' => ['otp'],
                 'otp' => [
@@ -467,18 +469,30 @@ try {
                 [$profileRes, $profileHttp] = abdm_curl('GET', $profileUrl, $profileHeaders);
 
                 if ($profileHttp >= 200 && $profileHttp < 300 && !empty($profileRes)) {
+                    $pr = abdm_normalise_profile($profileRes);
+                    // ABDM sometimes masks mobile (e.g. "******0903"); fall back
+                    // to the mobile number the doctor entered on this request.
+                    if (strlen($pr['mobile']) !== 10) $pr['mobile'] = $mobile;
+
+                    $saved = abdm_upsert_patient($conn, $doctor_id, $pr);
+                    debug_log("Patient saved (mobile login)", $saved);
+
                     echo json_encode([
                         'success' => true,
                         'profile' => $profileRes,
+                        'abha_number' => $profileRes['ABHANumber'] ?? '',
+                        'patient_id' => $saved['patient_id'],
+                        'is_new' => $saved['is_new'],
                         'message' => 'ABHA verified successfully'
                     ]);
                     exit;
                 }
             }
 
+            debug_log("ERROR: Mobile login succeeded but no usable X-token/profile was returned");
             echo json_encode([
-                'success' => true,
-                'message' => 'OTP verified successfully'
+                'success' => false,
+                'error' => 'ABHA verified but no profile could be retrieved. Please try again.'
             ]);
             exit;
         } else {

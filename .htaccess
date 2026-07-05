@@ -48,9 +48,12 @@ RewriteCond %{REQUEST_FILENAME} !-d
 
 # php -- BEGIN cPanel-generated handler, do not edit
 # Set the “ea-php81” package as the default “PHP” programming language.
-<IfModule mime_module>
-  AddHandler application/x-httpd-ea-php81 .php .php8 .phtml
-</IfModule>
+# NOTE: disabled for local XAMPP dev — this handler only exists on the cPanel/EasyApache
+# production host. On XAMPP, Apache doesn't recognize it and serves .php files as raw
+# downloads instead of executing them. Re-enable this block when deploying to cPanel.
+# <IfModule mime_module>
+#   AddHandler application/x-httpd-ea-php81 .php .php8 .phtml
+# </IfModule>
 # php -- END cPanel-generated handler, do not edit
 
 

@@ -305,11 +305,23 @@ require_once __DIR__ . '/inc/sidebar.php';
                         
                         <form method="POST" action="" enctype="multipart/form-data">
                             <!-- Hidden profile image input -->
-                            <input type="file" name="profile_image" id="profileImage" 
-                                   accept="image/*" style="display: none;" 
+                            <input type="file" name="profile_image" id="profileImage"
+                                   accept="image/*" style="display: none;"
                                    onchange="previewProfileImage(this)">
-                            
+
                             <div class="row mt-4">
+                                <!-- Profile Photo -->
+                                <div class="col-md-12 text-center mb-3">
+                                    <div class="profile-image-container" onclick="document.getElementById('profileImage').click();">
+                                        <img id="profileImagePreview" class="userd-image"
+                                             src="<?= BASE_URL . $doctor_profile_image ?>" alt="Profile Photo">
+                                        <div class="profile-image-overlay">
+                                            <i class="fa fa-camera"></i> Change
+                                        </div>
+                                    </div>
+                                    <small class="text-muted d-block mt-1">Click photo to upload a new one (JPG, PNG, GIF — max 2MB)</small>
+                                </div>
+
                                 <!-- Basic Information -->
                                 <div class="col-md-6">
                                     <label>Full Name <span class="text-danger">*</span></label>

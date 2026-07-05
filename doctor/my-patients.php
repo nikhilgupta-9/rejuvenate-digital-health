@@ -525,8 +525,6 @@ $total = count($patients);
     </div>
   </div>
 
-  <?php include("../footer.php") ?>
-
   <script>
     var _sel = null,
       _st = null,

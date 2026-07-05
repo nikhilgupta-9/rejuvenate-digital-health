@@ -1,13 +1,8 @@
 <?php
-include_once(__DIR__ . "/../config/connect.php");
-session_start();
-
-if (!isset($_SESSION['doctor_logged_in'])) {
-    header("Location: " . BASE_URL . "doctor-login.php");
-    exit();
-}
-
-$doctor_id = $_SESSION['doctor_id'];
+require_once __DIR__ . '/auth/guard.php';
+require_once dirname(__DIR__) . '/config/connect.php';
+$payload   = doctor_jwt_guard();
+$doctor_id = (int) ($payload['doctor_id'] ?? $payload['sub'] ?? 0);
 
 // Get appointments for calendar
 $sql = "
@@ -39,18 +34,25 @@ while ($row = $result->fetch_assoc()) {
     }
     $appointments_by_date[$date][] = $row;
 }
+
+$sidebar_active = 'reports';
+require_once __DIR__ . '/inc/sidebar.php';
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
     <title>Appointments Calendar</title>
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css">
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
 </head>
 <body>
-    <div id="calendar"></div>
-    
+    <main class="doctor-content">
+        <div id="calendar"></div>
+    </main>
+
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             var calendarEl = document.getElementById('calendar');
