@@ -1,16 +1,12 @@
 <?php
 include_once(__DIR__ . "/../config/connect.php");
 include_once(__DIR__ . "/../util/function.php");
+require_once(__DIR__ . "/auth/guard.php");
 
-// Start session and check doctor login
-// session_start();
-if (!isset($_SESSION['doctor_logged_in']) || $_SESSION['doctor_logged_in'] !== true) {
-    header("Location: " . BASE_URL . "doctor-login.php");
-    exit();
-}
+$jwt_doctor = doctor_jwt_guard();
+$doctor_id  = (int)$jwt_doctor['sub'];
 
 $appointment_id = isset($_GET['appointment_id']) ? intval($_GET['appointment_id']) : 0;
-$doctor_id = $_SESSION['doctor_id'];
 
 // Get appointment details with patient information
 if ($appointment_id > 0) {
@@ -539,7 +535,7 @@ $current_date = date('d/m/Y');
                     SELECT a.id, u.name as patient_name, a.appointment_time 
                     FROM appointments a
                     INNER JOIN users u ON a.user_id = u.id
-                    WHERE a.doctor_id = ? AND a.appointment_date = ? AND a.status = 'confirmed'
+                    WHERE a.doctor_id = ? AND a.appointment_date = ? AND a.status = 'approved'
                     ORDER BY a.appointment_time ASC
                 ";
                 
@@ -572,7 +568,7 @@ $current_date = date('d/m/Y');
                     SELECT a.id, u.name as patient_name, a.appointment_date, a.appointment_time 
                     FROM appointments a
                     INNER JOIN users u ON a.user_id = u.id
-                    WHERE a.doctor_id = ? AND a.appointment_date >= ? AND a.status = 'confirmed'
+                    WHERE a.doctor_id = ? AND a.appointment_date >= ? AND a.status = 'approved'
                     ORDER BY a.appointment_date ASC, a.appointment_time ASC
                     LIMIT 10
                 ";

@@ -182,7 +182,8 @@ for ($i = 0; $i < 7; $i++) {
 $prev_week = (clone $week_start_dt)->modify('-7 days')->format('Y-m-d');
 $next_week = (clone $week_start_dt)->modify('+7 days')->format('Y-m-d');
 
-function appt_url($overrides, $status_filter, $search_query) {
+function appt_url($overrides, $status_filter, $search_query)
+{
     $params = array_filter([
         'status' => $status_filter,
         'search' => $search_query,
@@ -196,6 +197,7 @@ require_once __DIR__ . '/inc/sidebar.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -212,31 +214,55 @@ require_once __DIR__ . '/inc/sidebar.php';
             border-radius: 10px;
             border: 1px solid #dee2e6;
         }
+
         .stats-card {
             background: white;
             padding: 15px;
             border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
             margin-bottom: 15px;
             text-align: center;
         }
+
         .badge-status {
             padding: 5px 10px;
             border-radius: 20px;
             font-size: 12px;
             font-weight: 500;
         }
-        .badge-pending { background: #fff3cd; color: #856404; }
-        .badge-approved { background: #d1ecf1; color: #0c5460; }
-        .badge-completed { background: #d4edda; color: #155724; }
-        .badge-rejected { background: #f8d7da; color: #721c24; }
-        .badge-no_show { background: #e2e3e5; color: #383d41; }
+
+        .badge-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-approved {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .badge-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-rejected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge-no_show {
+            background: #e2e3e5;
+            color: #383d41;
+        }
+
         .filter-section {
             background: #f8f9fa;
             padding: 15px;
             border-radius: 8px;
             margin-bottom: 20px;
         }
+
         .calendar-icon {
             cursor: pointer;
             background: #02c9b8;
@@ -244,10 +270,12 @@ require_once __DIR__ . '/inc/sidebar.php';
             padding: 8px 12px;
             border-radius: 0 5px 5px 0;
         }
+
         .appointment-time {
             font-weight: bold;
             color: #2c5aa0;
         }
+
         .patient-avatar {
             width: 40px;
             height: 40px;
@@ -255,12 +283,14 @@ require_once __DIR__ . '/inc/sidebar.php';
             object-fit: cover;
             margin-right: 10px;
         }
+
         .status-dropdown {
             padding: 3px 8px;
             border-radius: 4px;
             font-size: 12px;
             border: 1px solid #ddd;
         }
+
         .appointment-id {
             font-size: 10px;
             color: #666;
@@ -268,34 +298,141 @@ require_once __DIR__ . '/inc/sidebar.php';
         }
 
         /* ── Week-strip date navigator ── */
-        .week-strip-card{background:linear-gradient(135deg,var(--primary),var(--primary-dk));border-radius:14px;padding:14px 16px;margin-bottom:20px;color:#fff;}
-        .week-strip-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
-        .week-strip-nav a{color:#fff;font-size:1.1rem;text-decoration:none;padding:4px 10px;}
-        .week-strip-nav a:hover{opacity:.75;}
-        .week-strip-label{font-weight:600;font-size:.92rem;}
-        .week-strip-days{display:flex;justify-content:space-between;gap:6px;}
-        .week-day{flex:1;text-align:center;text-decoration:none;color:rgba(255,255,255,.85);padding:8px 2px;border-radius:10px;transition:.15s;}
-        .week-day:hover{background:rgba(255,255,255,.12);color:#fff;text-decoration:none;}
-        .week-day .wd-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;}
-        .week-day .wd-num{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-weight:600;font-size:.9rem;}
-        .week-day.is-today .wd-num{border:2px solid #fff;}
-        .week-day.is-selected .wd-num{background:#fff;color:var(--primary);}
-        .week-strip-all{font-size:.74rem;color:rgba(255,255,255,.85);text-decoration:underline;}
-        .week-strip-all:hover{color:#fff;}
+        .week-strip-card {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dk));
+            border-radius: 14px;
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        .week-strip-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .week-strip-nav a {
+            color: #fff;
+            font-size: 1.1rem;
+            text-decoration: none;
+            padding: 4px 10px;
+        }
+
+        .week-strip-nav a:hover {
+            opacity: .75;
+        }
+
+        .week-strip-label {
+            font-weight: 600;
+            font-size: .92rem;
+        }
+
+        .week-strip-days {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+        }
+
+        .week-day {
+            flex: 1;
+            text-align: center;
+            text-decoration: none;
+            color: rgba(255, 255, 255, .85);
+            padding: 8px 2px;
+            border-radius: 10px;
+            transition: .15s;
+        }
+
+        .week-day:hover {
+            background: rgba(255, 255, 255, .12);
+            color: #fff;
+            text-decoration: none;
+        }
+
+        .week-day .wd-label {
+            font-size: .68rem;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .week-day .wd-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            font-weight: 600;
+            font-size: .9rem;
+        }
+
+        .week-day.is-today .wd-num {
+            border: 2px solid #fff;
+        }
+
+        .week-day.is-selected .wd-num {
+            background: #fff;
+            color: var(--primary);
+        }
+
+        .week-strip-all {
+            font-size: .74rem;
+            color: rgba(255, 255, 255, .85);
+            text-decoration: underline;
+        }
+
+        .week-strip-all:hover {
+            color: #fff;
+        }
 
         /* ── Floating add button ── */
-        .fab-add{position:fixed;right:28px;bottom:28px;width:56px;height:56px;border-radius:50%;
-          background:#e07e18;color:#fff;display:flex;align-items:center;justify-content:center;
-          font-size:1.4rem;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:1040;text-decoration:none;transition:.15s;}
-        .fab-add:hover{background:#c96b0f;color:#fff;transform:scale(1.05);}
+        .fab-add {
+            position: fixed;
+            right: 28px;
+            bottom: 28px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: #e07e18;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
+            z-index: 1040;
+            text-decoration: none;
+            transition: .15s;
+        }
+
+        .fab-add:hover {
+            background: #c96b0f;
+            color: #fff;
+            transform: scale(1.05);
+        }
 
         @media (max-width: 768px) {
-            .table-responsive { font-size: 12px; }
-            .week-day .wd-label { font-size:.6rem; }
-            .week-day .wd-num { width:26px;height:26px;font-size:.8rem; }
+            .table-responsive {
+                font-size: 12px;
+            }
+
+            .week-day .wd-label {
+                font-size: .6rem;
+            }
+
+            .week-day .wd-num {
+                width: 26px;
+                height: 26px;
+                font-size: .8rem;
+            }
         }
     </style>
 </head>
+
 <body>
     <main class="doctor-content">
         <!-- Success/Error Messages -->
@@ -323,12 +460,12 @@ require_once __DIR__ . '/inc/sidebar.php';
             <div class="week-strip-days">
                 <?php foreach ($week_days as $d): ?>
                     <?php
-                        $d_str = $d->format('Y-m-d');
-                        $is_today = $d_str === date('Y-m-d');
-                        $is_selected = !empty($date_filter) && $d_str === $date_filter;
+                    $d_str = $d->format('Y-m-d');
+                    $is_today = $d_str === date('Y-m-d');
+                    $is_selected = !empty($date_filter) && $d_str === $date_filter;
                     ?>
                     <a class="week-day<?= $is_today ? ' is-today' : '' ?><?= $is_selected ? ' is-selected' : '' ?>"
-                       href="<?= appt_url(['date' => $d_str], $status_filter, $search_query) ?>">
+                        href="<?= appt_url(['date' => $d_str], $status_filter, $search_query) ?>">
                         <span class="wd-label"><?= $d->format('D') ?></span>
                         <span class="wd-num"><?= $d->format('j') ?></span>
                     </a>
@@ -399,8 +536,8 @@ require_once __DIR__ . '/inc/sidebar.php';
                 <div class="col-md-5">
                     <label>Search Patient</label>
                     <input type="text" name="search" class="form-control"
-                           placeholder="Name, Email or Phone"
-                           value="<?= htmlspecialchars($search_query) ?>">
+                        placeholder="Name, Email or Phone"
+                        value="<?= htmlspecialchars($search_query) ?>">
                 </div>
                 <div class="col-md-3 d-flex align-items-end">
                     <button type="submit" class="btn btn-primary me-2">Apply Filter</button>
@@ -463,8 +600,8 @@ require_once __DIR__ . '/inc/sidebar.php';
                                         <div class="d-flex align-items-center">
                                             <?php if (!empty($appointment['patient_image'])): ?>
                                                 <img src="<?= BASE_URL . $appointment['patient_image'] ?>"
-                                                     class="patient-avatar"
-                                                     onerror="this.src='<?= BASE_URL ?>assets/img/dummy.png'">
+                                                    class="patient-avatar"
+                                                    onerror="this.src='<?= BASE_URL ?>assets/img/dummy.png'">
                                             <?php else: ?>
                                                 <div class="patient-avatar bg-light d-flex align-items-center justify-content-center">
                                                     <i class="fa fa-user text-muted"></i>
@@ -501,13 +638,13 @@ require_once __DIR__ . '/inc/sidebar.php';
                                     <td>
                                         <?php if ($appointment['patient_phone']): ?>
                                             <a href="tel:<?= $appointment['patient_phone'] ?>"
-                                               class="btn btn-sm btn-outline-primary">
+                                                class="btn btn-sm btn-outline-primary">
                                                 <i class="fa fa-phone"></i> Call
                                             </a><br>
                                         <?php endif; ?>
                                         <?php if ($appointment['patient_email']): ?>
                                             <a href="mailto:<?= $appointment['patient_email'] ?>"
-                                               class="btn btn-sm btn-outline-secondary mt-1">
+                                                class="btn btn-sm btn-outline-secondary mt-1">
                                                 <i class="fa fa-envelope"></i> Email
                                             </a>
                                         <?php endif; ?>
@@ -516,8 +653,8 @@ require_once __DIR__ . '/inc/sidebar.php';
                                         <form method="POST" action="" class="d-inline">
                                             <input type="hidden" name="appointment_id" value="<?= $appointment['appointment_id'] ?>">
                                             <select name="status" class="status-dropdown"
-                                                    onchange="this.form.submit()"
-                                                    <?= in_array($appointment['status'], ['completed', 'rejected'], true) ? 'disabled' : '' ?>>
+                                                onchange="this.form.submit()"
+                                                <?= in_array($appointment['status'], ['completed', 'rejected'], true) ? 'disabled' : '' ?>>
                                                 <option value="pending" <?= $appointment['status'] == 'pending' ? 'selected' : '' ?>>Pending</option>
                                                 <option value="approved" <?= $appointment['status'] == 'approved' ? 'selected' : '' ?>>Approved</option>
                                                 <option value="completed" <?= $appointment['status'] == 'completed' ? 'selected' : '' ?>>Completed</option>
@@ -534,19 +671,18 @@ require_once __DIR__ . '/inc/sidebar.php';
                                     </td>
                                     <td>
                                         <div class="btn-group btn-group-sm">
-                                            <button type="button" class="btn btn-info"
-                                                    onclick="viewAppointmentDetails(<?= $appointment['appointment_id'] ?>)"
-                                                    title="View Details">
+                                            <a href="patient-profile.php?id=<?= $appointment['appointment_id'] ?>" class="btn btn-info"
+                                                title="View Details">
                                                 <i class="fa fa-eye"></i>
-                                            </button>
+                                        </a>
                                             <a href="appointments.php?cancel_appointment=<?= $appointment['appointment_id'] ?>"
-                                               class="btn btn-danger" title="Cancel"
-                                               onclick="return confirm('Cancel this appointment?')"
-                                               <?= in_array($appointment['status'], ['rejected', 'completed'], true) ? 'disabled' : '' ?>>
+                                                class="btn btn-danger" title="Cancel"
+                                                onclick="return confirm('Cancel this appointment?')"
+                                                <?= in_array($appointment['status'], ['rejected', 'completed'], true) ? 'disabled' : '' ?>>
                                                 <i class="fa fa-times"></i>
                                             </a>
                                             <a href="patient-form.php?appointment_id=<?= $appointment['appointment_id'] ?>"
-                                               class="btn btn-success" title="Add Prescription">
+                                                class="btn btn-success" title="Add Prescription">
                                                 <i class="fa fa-file-medical"></i>
                                             </a>
                                         </div>
@@ -599,4 +735,5 @@ require_once __DIR__ . '/inc/sidebar.php';
         }
     </script>
 </body>
+
 </html>
