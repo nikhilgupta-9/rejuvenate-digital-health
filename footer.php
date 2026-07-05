@@ -28,11 +28,11 @@ $logo    = get_header_logo();
 <footer class="rjv-footer">
 
   <!-- Wave divider -->
-  <div class="rjv-footer-wave">
+  <!-- <div class="rjv-footer-wave">
     <svg viewBox="0 0 1440 60" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
       <path d="M0,30 C360,60 1080,0 1440,30 L1440,0 L0,0 Z" fill="#ffffff"/>
     </svg>
-  </div>
+  </div> -->
 
   <div class="container rjv-footer-body">
     <div class="row g-5">
@@ -126,6 +126,7 @@ $logo    = get_header_logo();
           <li><a href="<?= BASE_URL ?>terms-and-condition.php"><i class="fas fa-chevron-right"></i>Terms &amp; Conditions</a></li>
           <li><a href="<?= BASE_URL ?>disclaimer.php"><i class="fas fa-chevron-right"></i>Disclaimer</a></li>
           <li><a href="<?= BASE_URL ?>legal-compliance.php"><i class="fas fa-chevron-right"></i>Legal Compliance</a></li>
+          <li><a href="<?= BASE_URL ?>faq.php"><i class="fas fa-chevron-right"></i>FAQ's</a></li>
         </ul>
       </div>
 

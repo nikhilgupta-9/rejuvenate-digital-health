@@ -124,82 +124,367 @@ $contact = contact_us();
         </div>
     </section>
 
-    <!-- Program Features Section Start -->
+    <!-- Health ID & Certificates Section Start -->
     <section class="py-5">
         <div class="container">
             <div class="row text-center mb-5">
                 <div class="col-lg-8 mx-auto">
                     <span class="badge bg-primary bg-opacity-10 text-primary mb-3 px-3 py-2 fs-6 fw-semibold">
-                        <i class="fas fa-star me-2"></i>Program Features
+                        <i class="fas fa-id-card me-2"></i>Digital Health ID &amp; Certificates
                     </span>
-                    <h2 class="display-6 fw-bold mb-3">Comprehensive Digital Health Solutions</h2>
-                    <p class="text-muted">Empowering schools with cutting-edge health management tools</p>
+                    <h2 class="display-6 fw-bold mb-3">Everything Your Child's Health Record Needs</h2>
+                    <p class="text-muted">One digital profile — Health ID, vaccination status, deworming record and
+                        blood group, always accessible to school and parents.</p>
                 </div>
             </div>
             <div class="row g-4">
-                <div class="col-md-6 col-lg-4">
-                    <div class="card border-0 shadow-sm h-100 hover-shadow">
+                <div class="col-md-6 col-lg-3">
+                    <div class="card border-0 shadow-sm h-100 border-top border-4 border-primary">
                         <div class="card-body p-4 text-center">
                             <div class="bg-primary bg-opacity-10 rounded-circle p-3 d-inline-block mb-3">
-                                <i class="fas fa-id-card fs-1 text-primary"></i>
+                                <i class="fas fa-id-badge fs-1 text-primary"></i>
                             </div>
-                            <h5 class="fw-bold">ABHA Integration</h5>
-                            <p class="text-muted">Seamless integration with ABHA (Ayushman Bharat Health Account) for student health records</p>
+                            <h5 class="fw-bold">Health ID Card</h5>
+                            <p class="text-muted small mb-0">Photo ID with Student ID, class, DOB, gender, blood group,
+                                address and emergency contact — verified by the school nurse.</p>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6 col-lg-4">
-                    <div class="card border-0 shadow-sm h-100 hover-shadow">
+                <div class="col-md-6 col-lg-3">
+                    <div class="card border-0 shadow-sm h-100 border-top border-4 border-success">
                         <div class="card-body p-4 text-center">
                             <div class="bg-success bg-opacity-10 rounded-circle p-3 d-inline-block mb-3">
-                                <i class="fas fa-heartbeat fs-1 text-success"></i>
+                                <i class="fas fa-syringe fs-1 text-success"></i>
                             </div>
-                            <h5 class="fw-bold">Health Monitoring</h5>
-                            <p class="text-muted">Real-time health monitoring and early warning systems for student wellness</p>
+                            <h5 class="fw-bold">Vaccination Certificate</h5>
+                            <p class="text-muted small mb-0">Full immunization record — BCG, OPV, DPT, Hepatitis B, MMR,
+                                Typhoid, Tetanus — verified by the Medical Officer.</p>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6 col-lg-4">
-                    <div class="card border-0 shadow-sm h-100 hover-shadow">
+                <div class="col-md-6 col-lg-3">
+                    <div class="card border-0 shadow-sm h-100" style="border-top: 4px solid #7c3aed !important;">
                         <div class="card-body p-4 text-center">
-                            <div class="bg-info bg-opacity-10 rounded-circle p-3 d-inline-block mb-3">
-                                <i class="fas fa-ambulance fs-1 text-info"></i>
+                            <div class="rounded-circle p-3 d-inline-block mb-3" style="background:rgba(124,58,237,.1);">
+                                <i class="fas fa-pills fs-1" style="color:#7c3aed;"></i>
                             </div>
-                            <h5 class="fw-bold">Emergency Response</h5>
-                            <p class="text-muted">Quick emergency response system with instant alert mechanisms</p>
+                            <h5 class="fw-bold">Deworming Certificate</h5>
+                            <p class="text-muted small mb-0">Records Albendazole dosage, date administered and next
+                                dose due, as per the school health program.</p>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6 col-lg-4">
-                    <div class="card border-0 shadow-sm h-100 hover-shadow">
-                        <div class="card-body p-4 text-center">
-                            <div class="bg-warning bg-opacity-10 rounded-circle p-3 d-inline-block mb-3">
-                                <i class="fas fa-file-medical fs-1 text-warning"></i>
-                            </div>
-                            <h5 class="fw-bold">Digital Records</h5>
-                            <p class="text-muted">Secure digital health records accessible to authorized personnel</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6 col-lg-4">
-                    <div class="card border-0 shadow-sm h-100 hover-shadow">
+                <div class="col-md-6 col-lg-3">
+                    <div class="card border-0 shadow-sm h-100 border-top border-4 border-danger">
                         <div class="card-body p-4 text-center">
                             <div class="bg-danger bg-opacity-10 rounded-circle p-3 d-inline-block mb-3">
-                                <i class="fas fa-hand-holding-heart fs-1 text-danger"></i>
+                                <i class="fas fa-tint fs-1 text-danger"></i>
                             </div>
-                            <h5 class="fw-bold">Mental Health Support</h5>
-                            <p class="text-muted">Counseling and mental health resources for students and staff</p>
+                            <h5 class="fw-bold">Blood Group Certificate</h5>
+                            <p class="text-muted small mb-0">Lab-verified blood group on record for every student —
+                                critical information available instantly in an emergency.</p>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6 col-lg-4">
-                    <div class="card border-0 shadow-sm h-100 hover-shadow">
-                        <div class="card-body p-4 text-center">
-                            <div class="bg-purple bg-opacity-10 rounded-circle p-3 d-inline-block mb-3">
-                                <i class="fas fa-users fs-1 text-purple"></i>
+            </div>
+        </div>
+    </section>
+
+    <!-- Health Tips Section Start -->
+    <section class="py-5 bg-light">
+        <div class="container">
+            <div class="row text-center mb-5">
+                <div class="col-lg-8 mx-auto">
+                    <span class="badge bg-success bg-opacity-10 text-success mb-3 px-3 py-2 fs-6 fw-semibold">
+                        <i class="fas fa-leaf me-2"></i>Health Tips for Students
+                    </span>
+                    <h2 class="display-6 fw-bold mb-3">A Healthy Body, A Healthy Mind, A Happy Life</h2>
+                </div>
+            </div>
+            <div class="row g-3">
+                <?php
+                $health_tips = [
+                    ['icon' => 'fa-apple-alt', 'color' => '#16a34a', 'title' => 'Eat Healthy', 'desc' => 'Eat balanced meals with fruits, vegetables, whole grains and proteins.'],
+                    ['icon' => 'fa-tint', 'color' => '#0C74C5', 'title' => 'Drink Water', 'desc' => 'Drink plenty of water. It keeps you active and energized.'],
+                    ['icon' => 'fa-running', 'color' => '#ef4444', 'title' => 'Be Active', 'desc' => 'Exercise daily. Play outdoor games and stay fit.'],
+                    ['icon' => 'fa-hands-wash', 'color' => '#02c9b8', 'title' => 'Wash Hands', 'desc' => 'Wash hands with soap before eating and after using the toilet.'],
+                    ['icon' => 'fa-moon', 'color' => '#1e3a8a', 'title' => 'Sleep Well', 'desc' => 'Get 8-10 hours of sleep daily for better growth and concentration.'],
+                    ['icon' => 'fa-tooth', 'color' => '#db2777', 'title' => 'Keep Clean', 'desc' => 'Keep your body, clothes, hair and surroundings clean.'],
+                    ['icon' => 'fa-shield-alt', 'color' => '#f59e0b', 'title' => 'Stay Safe', 'desc' => 'Follow safety rules. Say NO to junk food, tobacco and other harmful habits.'],
+                ];
+                foreach ($health_tips as $tip):
+                ?>
+                    <div class="col-6 col-md-4 col-lg-3">
+                        <div class="card border-0 shadow-sm h-100 text-center">
+                            <div class="card-body p-3">
+                                <i class="fas <?= $tip['icon'] ?> fs-2 mb-2" style="color:<?= $tip['color'] ?>;"></i>
+                                <h6 class="fw-bold mb-1"><?= $tip['title'] ?></h6>
+                                <small class="text-muted"><?= $tip['desc'] ?></small>
                             </div>
-                            <h5 class="fw-bold">Parent Portal</h5>
-                            <p class="text-muted">Dedicated parent portal for monitoring child's health status</p>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </section>
+
+    <!-- School Health Plans (Pricing) Section Start -->
+    <section class="py-5">
+        <div class="container">
+            <div class="row text-center mb-5">
+                <div class="col-lg-8 mx-auto">
+                    <span class="badge bg-primary bg-opacity-10 text-primary mb-3 px-3 py-2 fs-6 fw-semibold">
+                        <i class="fas fa-shield-alt me-2"></i>School Health Plans
+                    </span>
+                    <h2 class="display-6 fw-bold mb-3">Every Child. Every School. Every Future.</h2>
+                    <p class="text-muted">Choose the plan that fits your school's needs — all prices are per student,
+                        per year.</p>
+                </div>
+            </div>
+            <div class="row g-4 align-items-stretch">
+                <!-- Basic Plan -->
+                <div class="col-lg-4">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body p-4 d-flex flex-column">
+                            <span class="badge bg-success mb-3 align-self-start">Basic Health ID Plan</span>
+                            <h4 class="fw-bold mb-0">Basic Plan</h4>
+                            <div class="mb-3">
+                                <span class="display-5 fw-bold text-success">₹49</span>
+                                <span class="text-muted">/ student / year</span>
+                            </div>
+                            <ul class="list-unstyled mb-4 flex-grow-1">
+                                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>Digital Health ID
+                                    with Photo</li>
+                                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>Basic Health
+                                    Record (School Entry Profile)</li>
+                                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>Vaccination
+                                    Tracking</li>
+                                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>Deworming
+                                    Certificate</li>
+                                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>Basic Health
+                                    Tips (Hygiene + Nutrition PDF)</li>
+                                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>Annual Basic
+                                    Health Summary</li>
+                            </ul>
+                            <p class="text-success small fw-semibold mb-3">Perfect start for every child's health
+                                journey.</p>
+                            <a href="#contact" class="btn btn-outline-success mt-auto">Choose Basic</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Standard Plan -->
+                <div class="col-lg-4">
+                    <div class="card border-0 shadow h-100" style="border-top:4px solid #f59e0b !important;">
+                        <div class="card-body p-4 d-flex flex-column">
+                            <span class="badge mb-3 align-self-start" style="background:#f59e0b;">Health Screening
+                                &amp; Care Plan</span>
+                            <h4 class="fw-bold mb-0">Standard Plan</h4>
+                            <div class="mb-3">
+                                <span class="display-5 fw-bold" style="color:#f59e0b;">₹199</span>
+                                <span class="text-muted">/ student / year</span>
+                            </div>
+                            <ul class="list-unstyled mb-4 flex-grow-1">
+                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Includes
+                                    all features of the ₹49 Plan</li>
+                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Vision
+                                    Screening Report</li>
+                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Dental
+                                    Check-up Report</li>
+                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Height /
+                                    Weight / BMI Tracking</li>
+                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Hemoglobin
+                                    / Anemia Screening</li>
+                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Parent
+                                    Alert System (Deficiency, Low BMI etc.)</li>
+                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Basic
+                                    Teleconsultation (Limited)</li>
+                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Nutrition
+                                    Guidance Report</li>
+                            </ul>
+                            <p class="small fw-semibold mb-3" style="color:#f59e0b;">Early detection today, healthy
+                                tomorrow.</p>
+                            <a href="#contact" class="btn mt-auto text-white" style="background:#f59e0b;">Choose
+                                Standard</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Premium Plan -->
+                <div class="col-lg-4">
+                    <div class="card border-0 shadow h-100" style="border-top:4px solid #7c3aed !important;">
+                        <div class="card-body p-4 d-flex flex-column">
+                            <span class="badge mb-3 align-self-start" style="background:#7c3aed;">Complete Health
+                                &amp; Wellness Plan</span>
+                            <h4 class="fw-bold mb-0">Premium Plan</h4>
+                            <div class="mb-3">
+                                <span class="display-5 fw-bold" style="color:#7c3aed;">₹299</span>
+                                <span class="text-muted">/ student / year</span>
+                            </div>
+                            <p class="small fw-semibold" style="color:#7c3aed;">Includes all features of the ₹199
+                                Plan, plus:</p>
+                            <ul class="list-unstyled mb-3 flex-grow-1" style="font-size:.88rem;">
+                                <li class="fw-bold mt-2 mb-1">1. Mental &amp; Adolescent Health</li>
+                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Stress &amp; Anxiety
+                                    Assessment (Self Score)</li>
+                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Sleep Tracking
+                                    Guidance</li>
+                                <li class="ms-3 mb-2"><i class="fas fa-check text-muted me-2"></i>Screen Time &amp;
+                                    Digital Addiction Report</li>
+
+                                <li class="fw-bold mt-2 mb-1">2. Advanced Medical Support</li>
+                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Unlimited
+                                    Teleconsultation (Basic Doctors)</li>
+                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Priority Doctor
+                                    Response</li>
+                                <li class="ms-3 mb-2"><i class="fas fa-check text-muted me-2"></i>Follow-up
+                                    Reminders</li>
+
+                                <li class="fw-bold mt-2 mb-1">3. Nutrition &amp; Lifestyle Program</li>
+                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Personalized Diet
+                                    Chart (Age-Based)</li>
+                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Anemia Prevention
+                                    Program</li>
+                                <li class="ms-3 mb-2"><i class="fas fa-check text-muted me-2"></i>Fitness &amp;
+                                    Activity Tracking Guidance</li>
+
+                                <li class="fw-bold mt-2 mb-1">4. School Health Intelligence</li>
+                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>School-level Health
+                                    Dashboard</li>
+                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Class-wise Health
+                                    Report Analytics</li>
+                                <li class="ms-3 mb-2"><i class="fas fa-check text-muted me-2"></i>Risk Identification
+                                    (Low BMI, Anemia Risk Group)</li>
+
+                                <li class="fw-bold mt-2 mb-1">5. Career &amp; Wellness Guidance</li>
+                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Stress Handling for
+                                    Exams</li>
+                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Study-Life Balance
+                                    Tips</li>
+                                <li class="ms-3"><i class="fas fa-check text-muted me-2"></i>Career Awareness &amp;
+                                    Health Link (Focus + Mental Clarity)</li>
+                            </ul>
+                            <p class="small fw-semibold mb-3" style="color:#7c3aed;">Healthy Body. Healthy Mind.
+                                Bright Future.</p>
+                            <a href="#contact" class="btn mt-auto text-white" style="background:#7c3aed;">Choose
+                                Premium</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Plans for Different Age Groups Section Start -->
+    <section class="py-5 bg-light">
+        <div class="container">
+            <div class="row text-center mb-5">
+                <div class="col-lg-8 mx-auto">
+                    <span class="badge bg-primary bg-opacity-10 text-primary mb-3 px-3 py-2 fs-6 fw-semibold">
+                        <i class="fas fa-layer-group me-2"></i>Plans for Different Age Groups
+                    </span>
+                    <h2 class="display-6 fw-bold mb-3">Age-Appropriate Health Focus</h2>
+                </div>
+            </div>
+            <div class="row g-4">
+                <!-- Age 6-8 -->
+                <div class="col-lg-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body p-4">
+                            <span class="badge bg-success mb-2">AGE GROUP 6-8 YEARS (CLASS 6 TO 8)</span>
+                            <h5 class="fw-bold mb-3">Healthy Growth Plan for Students</h5>
+                            <div class="d-flex flex-wrap gap-3 mb-3">
+                                <?php foreach (['Growth Monitoring', 'Hygiene & Clean Habits', 'Vision & Dental Care', 'Nutrition Support', 'Healthy Habits for a Strong Future'] as $focus): ?>
+                                    <span class="badge bg-success bg-opacity-10 text-success px-3 py-2"><?= $focus ?></span>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr class="small text-muted">
+                                            <th>Plan Benefits for Age 6-8</th>
+                                            <th class="text-center">₹49<br>Basic</th>
+                                            <th class="text-center">₹199<br>Standard</th>
+                                            <th class="text-center">₹299<br>Premium</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="small">
+                                        <?php
+                                        $age68 = [
+                                            ['Digital Health ID & Records', true, true, true],
+                                            ['Growth Tracking (Height, Weight, BMI)', true, true, true],
+                                            ['Vision & Dental Screening', false, true, true],
+                                            ['Nutrition Guidance', true, true, true],
+                                            ['Anemia Screening', false, true, true],
+                                            ['Parent Alerts', false, true, true],
+                                            ['Mental Wellness & Healthy Habits', false, true, true],
+                                            ['Teleconsultation', false, true, true],
+                                        ];
+                                        foreach ($age68 as $row):
+                                        ?>
+                                            <tr>
+                                                <td><?= $row[0] ?></td>
+                                                <td class="text-center"><?= $row[1] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
+                                                <td class="text-center"><?= $row[2] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
+                                                <td class="text-center"><?= $row[3] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="text-success fw-semibold small mt-3 mb-0">Good habits today, strong children
+                                tomorrow.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Age 9-12 -->
+                <div class="col-lg-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body p-4">
+                            <span class="badge bg-primary mb-2">AGE GROUP 9-12 YEARS (CLASS 9 TO 12)</span>
+                            <h5 class="fw-bold mb-3">Smart Health for Smart Future</h5>
+                            <div class="d-flex flex-wrap gap-3 mb-3">
+                                <?php foreach (['Mental Health Support', 'Anemia & Nutrition Check', 'Stress & Sleep Management', 'Career Pressure Guidance', 'Healthy Lifestyle for Better Performance'] as $focus): ?>
+                                    <span class="badge bg-primary bg-opacity-10 text-primary px-3 py-2"><?= $focus ?></span>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr class="small text-muted">
+                                            <th>Plan Benefits for Age 9-12</th>
+                                            <th class="text-center">₹49<br>Basic</th>
+                                            <th class="text-center">₹199<br>Standard</th>
+                                            <th class="text-center">₹299<br>Premium</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="small">
+                                        <?php
+                                        $age912 = [
+                                            ['Digital Health ID & Records', true, true, true],
+                                            ['Anemia Screening & Nutrition Support', true, true, true],
+                                            ['Mental Health Assessment', false, true, true],
+                                            ['Stress & Sleep Guidance', false, true, true],
+                                            ['Lifestyle & Screen Time Report', false, true, true],
+                                            ['Teleconsultation (Unlimited in Premium)', false, true, true],
+                                            ['Career & Wellness Guidance', false, false, true],
+                                            ['School Health Dashboard & Analytics', false, false, true],
+                                        ];
+                                        foreach ($age912 as $row):
+                                        ?>
+                                            <tr>
+                                                <td><?= $row[0] ?></td>
+                                                <td class="text-center"><?= $row[1] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
+                                                <td class="text-center"><?= $row[2] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
+                                                <td class="text-center"><?= $row[3] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="text-primary fw-semibold small mt-3 mb-0">Healthy mind. Strong body. Bright
+                                future.</p>
                         </div>
                     </div>
                 </div>
@@ -335,6 +620,56 @@ $contact = contact_us();
                             </div>
                         </li>
                     </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Why Choose Us Bar Section Start -->
+    <section class="py-4" style="background:#0C2340;" id="contact">
+        <div class="container">
+            <div class="row align-items-center g-4 text-center text-lg-start">
+                <div class="col-lg-3">
+                    <h6 class="text-white fw-bold mb-0"><i class="fas fa-shield-check me-2 text-success"></i>Why
+                        Choose REJUVENATE Digital Health?</h6>
+                </div>
+                <div class="col-lg-9">
+                    <div class="row g-3 text-center">
+                        <div class="col-6 col-md-3">
+                            <i class="fas fa-school text-white-50 d-block mb-1"></i>
+                            <small class="text-white">Trusted by Schools<br>Across India</small>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <i class="fas fa-id-card text-white-50 d-block mb-1"></i>
+                            <small class="text-white">Digital Health<br>ID &amp; Records</small>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <i class="fas fa-user-md text-white-50 d-block mb-1"></i>
+                            <small class="text-white">Expert Doctors &amp;<br>Health Professionals</small>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <i class="fas fa-lock text-white-50 d-block mb-1"></i>
+                            <small class="text-white">Safe, Secure<br>&amp; Confidential</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <hr class="border-secondary my-3">
+            <div class="row align-items-center text-center text-lg-start g-3">
+                <div class="col-lg-3">
+                    <a href="tel:+91-<?= $contact['phone'] ?>" class="btn btn-success btn-sm">
+                        <i class="fas fa-phone-alt me-1"></i> Contact Us Today!
+                    </a>
+                </div>
+                <div class="col-lg-9">
+                    <div class="d-flex flex-wrap justify-content-center justify-content-lg-end gap-4">
+                        <span class="text-white-50 small"><i class="fas fa-phone-alt me-1"></i>
+                            +91-<?= htmlspecialchars($contact['phone'] ?? '') ?></span>
+                        <span class="text-white-50 small"><i class="fas fa-envelope me-1"></i>
+                            <?= htmlspecialchars($contact['email'] ?? '') ?></span>
+                        <span class="text-white-50 small"><i class="fas fa-map-marker-alt me-1"></i>
+                            <?= htmlspecialchars($contact['address'] ?? '') ?></span>
+                    </div>
                 </div>
             </div>
         </div>

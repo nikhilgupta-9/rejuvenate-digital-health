@@ -692,6 +692,23 @@ function faq_home()
     return $test;
 }
 
+function faq_all()
+{
+    global $conn;
+
+    $sql = "SELECT * FROM `faqs` WHERE `page_name` = 'faq' AND `status` = 1 ORDER BY `id` DESC";
+    $res = mysqli_query($conn, $sql);
+
+    $faqs = [];
+
+    if ($res) {
+        while ($row = mysqli_fetch_assoc($res)) {
+            $faqs[] = $row;
+        }
+    }
+    return $faqs;
+}
+
 
 // ... existing functions ...
 
