@@ -12,7 +12,7 @@ $logo    = get_header_logo();
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="author" content="REJUVENATE Digital Health">
-    <meta name="description" content="Learn about REJUVENATE Digital Health — India's trusted digital health platform connecting patients with expert doctors through telemedicine, school health programs, and ABHA-linked health records.">
+    <meta name="description" content="Rejuvenate Digital Health — India's school health platform empowering students, parents, teachers, doctors and government health systems through ABHA-linked digital health records.">
     <title>About Us | REJUVENATE Digital Health</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
@@ -23,11 +23,304 @@ $logo    = get_header_logo();
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/swiper-bundle.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/nice-select.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
+    <style>
+        :root {
+            --rdh-teal:  #02c9b8;
+            --rdh-blue:  #0C74C5;
+            --rdh-dark:  #1a2340;
+            --rdh-light: #f4fbfb;
+        }
+
+        /* ── Hero ── */
+        .about-hero {
+            background: linear-gradient(135deg, var(--rdh-dark) 0%, #0a4a8a 50%, #025a52 100%);
+            padding: 80px 0 60px;
+            text-align: center;
+            color: #fff;
+        }
+        .about-hero .hero-badge {
+            display: inline-block;
+            background: rgba(2,201,184,.18);
+            border: 1px solid var(--rdh-teal);
+            color: var(--rdh-teal);
+            border-radius: 20px;
+            font-size: .8rem;
+            letter-spacing: .08em;
+            padding: 4px 16px;
+            margin-bottom: 18px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        .about-hero h1 {
+            font-size: 2.4rem;
+            font-weight: 700;
+            line-height: 1.25;
+            margin-bottom: 18px;
+        }
+        .about-hero h1 span { color: var(--rdh-teal); }
+        .about-hero p {
+            font-size: 1.05rem;
+            opacity: .88;
+            max-width: 700px;
+            margin: 0 auto 28px;
+            line-height: 1.7;
+        }
+        .about-hero .hero-stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            flex-wrap: wrap;
+            margin-top: 40px;
+            border-top: 1px solid rgba(255,255,255,.15);
+            padding-top: 32px;
+        }
+        .about-hero .hero-stat strong {
+            display: block;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--rdh-teal);
+        }
+        .about-hero .hero-stat span {
+            font-size: .82rem;
+            opacity: .78;
+        }
+
+        /* ── Connection diagram ── */
+        .connections-section {
+            background: #fff;
+            padding: 70px 0 60px;
+        }
+        .connections-section .section-label {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        .connections-section .section-label h2 { font-size: 1.9rem; font-weight: 700; color: var(--rdh-dark); }
+        .connections-section .section-label p  { color: #6c757d; max-width: 560px; margin: 10px auto 0; }
+
+        .stakeholder-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+        @media (max-width: 768px) { .stakeholder-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 480px) { .stakeholder-grid { grid-template-columns: 1fr; } }
+
+        .stakeholder-card {
+            background: var(--rdh-light);
+            border: 1.5px solid #e0f5f3;
+            border-radius: 14px;
+            padding: 26px 20px;
+            text-align: center;
+            transition: box-shadow .25s, transform .25s, border-color .25s;
+        }
+        .stakeholder-card:hover {
+            box-shadow: 0 8px 28px rgba(2,201,184,.18);
+            transform: translateY(-4px);
+            border-color: var(--rdh-teal);
+        }
+        .stakeholder-card .s-icon {
+            width: 60px; height: 60px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem;
+            margin: 0 auto 14px;
+        }
+        .stakeholder-card h5 { font-size: 1rem; font-weight: 700; color: var(--rdh-dark); margin-bottom: 6px; }
+        .stakeholder-card p  { font-size: .84rem; color: #6c757d; margin: 0; }
+
+        /* icon colour variants */
+        .s-icon.schools   { background: #e8f9f8; color: var(--rdh-teal); }
+        .s-icon.teachers  { background: #e8f0fa; color: var(--rdh-blue); }
+        .s-icon.students  { background: #fff3e0; color: #f57c00; }
+        .s-icon.parents   { background: #fce4ec; color: #e91e63; }
+        .s-icon.doctors   { background: #e8f5e9; color: #2e7d32; }
+        .s-icon.govt      { background: #ede7f6; color: #512da8; }
+
+        /* centre hub */
+        .hub-center {
+            text-align: center;
+            padding: 28px 0 8px;
+        }
+        .hub-center .hub-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--rdh-teal), var(--rdh-blue));
+            color: #fff;
+            border-radius: 30px;
+            padding: 10px 28px;
+            font-weight: 700;
+            font-size: 1rem;
+            letter-spacing: .03em;
+            box-shadow: 0 4px 18px rgba(2,201,184,.35);
+        }
+
+        /* ── How We Help ── */
+        .help-section {
+            background: var(--rdh-light);
+            padding: 70px 0 60px;
+        }
+        .help-section .section-label { text-align: center; margin-bottom: 48px; }
+        .help-section .section-label h2 { font-size: 1.9rem; font-weight: 700; color: var(--rdh-dark); }
+        .help-section .section-label p  { color: #6c757d; max-width: 540px; margin: 10px auto 0; }
+
+        .help-card {
+            background: #fff;
+            border-radius: 14px;
+            padding: 28px 22px;
+            height: 100%;
+            border: 1.5px solid #e8f5f4;
+            transition: box-shadow .25s, transform .25s;
+        }
+        .help-card:hover {
+            box-shadow: 0 8px 28px rgba(2,201,184,.16);
+            transform: translateY(-4px);
+        }
+        .help-card .h-icon {
+            width: 52px; height: 52px;
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.3rem;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, #e8f9f8, #d0f0f5);
+            color: var(--rdh-teal);
+        }
+        .help-card h5 { font-size: .97rem; font-weight: 700; color: var(--rdh-dark); margin-bottom: 8px; }
+        .help-card p  { font-size: .84rem; color: #6c757d; margin: 0; line-height: 1.6; }
+
+        /* ── Why It Matters ── */
+        .matters-section {
+            background: #fff;
+            padding: 70px 0 60px;
+        }
+        .matters-section .section-label { text-align: center; margin-bottom: 48px; }
+        .matters-section .section-label h2 { font-size: 1.9rem; font-weight: 700; color: var(--rdh-dark); }
+
+        .matter-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 20px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .matter-item:last-child { border-bottom: none; }
+        .matter-item .m-num {
+            width: 44px; height: 44px; flex-shrink: 0;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--rdh-teal), var(--rdh-blue));
+            color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 1rem;
+        }
+        .matter-item h5 { font-size: 1rem; font-weight: 700; color: var(--rdh-dark); margin: 0 0 5px; }
+        .matter-item p  { font-size: .85rem; color: #6c757d; margin: 0; }
+
+        .matters-visual {
+            background: linear-gradient(135deg, var(--rdh-dark), #0a4a8a);
+            border-radius: 18px;
+            padding: 40px 30px;
+            color: #fff;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .matters-visual h3 { font-size: 1.5rem; font-weight: 700; margin-bottom: 12px; }
+        .matters-visual p  { opacity: .82; font-size: .9rem; line-height: 1.7; }
+        .matters-visual .mv-stat { margin-top: 28px; }
+        .matters-visual .mv-stat strong { font-size: 2rem; color: var(--rdh-teal); display: block; }
+        .matters-visual .mv-stat span  { font-size: .82rem; opacity: .75; }
+
+        /* ── Government Alignment ── */
+        .govt-section {
+            background: var(--rdh-light);
+            padding: 60px 0;
+        }
+        .govt-section .section-label { text-align: center; margin-bottom: 40px; }
+        .govt-section .section-label h2 { font-size: 1.7rem; font-weight: 700; color: var(--rdh-dark); }
+        .govt-section .section-label p  { color: #6c757d; }
+
+        .govt-badge {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #fff;
+            border: 1.5px solid #e0f5f3;
+            border-radius: 12px;
+            padding: 22px 16px;
+            text-align: center;
+            transition: box-shadow .2s, border-color .2s;
+        }
+        .govt-badge:hover { box-shadow: 0 4px 18px rgba(2,201,184,.15); border-color: var(--rdh-teal); }
+        .govt-badge .g-icon { font-size: 2rem; margin-bottom: 10px; }
+        .govt-badge h6 { font-size: .82rem; font-weight: 700; color: var(--rdh-dark); margin: 0; line-height: 1.35; }
+
+        /* ── Security Footer Section ── */
+        .security-section {
+            background: linear-gradient(135deg, var(--rdh-dark) 0%, #0a4a8a 60%, #025a52 100%);
+            padding: 60px 0;
+            color: #fff;
+            text-align: center;
+        }
+        .security-section h2 { font-size: 2rem; font-weight: 700; margin-bottom: 8px; }
+        .security-section h2 span { color: var(--rdh-teal); }
+        .security-section .sec-sub { opacity: .8; margin-bottom: 40px; }
+
+        .security-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            max-width: 900px;
+            margin: 0 auto 44px;
+        }
+        @media (max-width: 768px) { .security-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 480px) { .security-grid { grid-template-columns: 1fr; } }
+
+        .sec-item {
+            background: rgba(255,255,255,.08);
+            border: 1px solid rgba(2,201,184,.25);
+            border-radius: 12px;
+            padding: 22px 14px;
+        }
+        .sec-item .si-icon { font-size: 1.8rem; margin-bottom: 10px; color: var(--rdh-teal); }
+        .sec-item p { font-size: .82rem; opacity: .82; margin: 0; line-height: 1.5; }
+
+        .cta-final {
+            margin-top: 30px;
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .btn-teal {
+            background: var(--rdh-teal);
+            color: #fff;
+            border: none;
+            padding: 12px 28px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: .92rem;
+            text-decoration: none;
+            transition: opacity .2s;
+        }
+        .btn-teal:hover { opacity: .88; color: #fff; text-decoration: none; }
+        .btn-outline-white {
+            background: transparent;
+            color: #fff;
+            border: 2px solid rgba(255,255,255,.5);
+            padding: 10px 28px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: .92rem;
+            text-decoration: none;
+            transition: background .2s, border-color .2s;
+        }
+        .btn-outline-white:hover { background: rgba(255,255,255,.12); border-color: #fff; color: #fff; text-decoration: none; }
+    </style>
 </head>
 <body>
 <?php include "header.php" ?>
 
-<!-- Breadcrumb Section -->
+<!-- Breadcrumb -->
 <div class="breadcrumb-wrapper bg-cover" style="background-image: url('<?= BASE_URL ?>assets/img/inner/breadcrumb-img.jpg');">
     <div class="container">
         <div class="page-heading">
@@ -45,185 +338,203 @@ $logo    = get_header_logo();
     </div>
 </div>
 
-<!-- About Section -->
-<section class="about-section-2 section-padding pb-4 fix">
+<!-- ══════════════════════════════════════════════
+     HERO
+══════════════════════════════════════════════ -->
+<section class="about-hero">
     <div class="container">
-        <div class="about-wrapper-2">
-            <div class="row g-4 align-items-center">
-
-                <div class="col-lg-6">
-                    <div class="about-image-items">
-                        <img src="<?= BASE_URL ?>assets/img/inner/news/post-04.jpg" alt="About REJUVENATE Digital Health" class="img-fluid rounded">
-                    </div>
-                </div>
-
-                <div class="col-lg-6">
-                    <div class="about-content">
-                        <div class="section-title text-start mb-4">
-                            <span class="subtitle tz-sub-tilte tz-sub-anim text-uppercase tx-subTitle">Who We Are</span>
-                            <h2 class="tx-title sec_title tz-itm-title tz-itm-anim">
-                                REJUVENATE Digital Health — Your Trusted Online Healthcare Partner
-                            </h2>
-                        </div>
-                        <p class="about-text">
-                            <strong>REJUVENATE Digital Health</strong> is a comprehensive digital health platform built to bring quality, accessible, and affordable healthcare directly to your fingertips — anytime, anywhere across India.
-                        </p>
-                        <p class="about-text">
-                            We connect patients with experienced, verified doctors through secure telemedicine consultations, manage school health programmes, facilitate ABHA (Ayushman Bharat Health Account) linkage, and empower individuals with complete digital health records — all on a single, easy-to-use platform.
-                        </p>
-                        <p class="about-text">
-                            Our platform serves patients, school students, teachers, and healthcare professionals, offering them a unified portal to manage health, wellness, and medical records securely and efficiently.
-                        </p>
-                        <div class="row g-3 mt-2">
-                            <div class="col-6">
-                                <div class="d-flex align-items-center gap-2">
-                                    <i class="fas fa-check-circle text-primary fs-5"></i>
-                                    <span>Verified Doctors</span>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="d-flex align-items-center gap-2">
-                                    <i class="fas fa-check-circle text-primary fs-5"></i>
-                                    <span>ABHA Integration</span>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="d-flex align-items-center gap-2">
-                                    <i class="fas fa-check-circle text-primary fs-5"></i>
-                                    <span>School Health Portal</span>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="d-flex align-items-center gap-2">
-                                    <i class="fas fa-check-circle text-primary fs-5"></i>
-                                    <span>Encrypted Health Records</span>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="d-flex align-items-center gap-2">
-                                    <i class="fas fa-check-circle text-primary fs-5"></i>
-                                    <span>24/7 Online Consultation</span>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="d-flex align-items-center gap-2">
-                                    <i class="fas fa-check-circle text-primary fs-5"></i>
-                                    <span>Discounted Lab Tests</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
+        <div class="hero-badge">School Health Platform</div>
+        <h1>Empowering Every Child.<br><span>Strengthening Every Future.</span></h1>
+        <p>
+            Rejuvenate Digital Health is India's dedicated school health platform — connecting schools, families, doctors,
+            and government health systems to deliver proactive, data-driven healthcare for every student.
+        </p>
+        <div class="hero-stats">
+            <div class="hero-stat">
+                <strong>500+</strong>
+                <span>Schools Onboarded</span>
+            </div>
+            <div class="hero-stat">
+                <strong>1L+</strong>
+                <span>Student Profiles</span>
+            </div>
+            <div class="hero-stat">
+                <strong>200+</strong>
+                <span>Verified Doctors</span>
+            </div>
+            <div class="hero-stat">
+                <strong>ABHA</strong>
+                <span>Linked &amp; Compliant</span>
             </div>
         </div>
     </div>
 </section>
 
-<!-- Mission Vision Values -->
-<section class="section-padding fix" style="background: var(--bg); margin-bottom: 2rem;">
+<!-- ══════════════════════════════════════════════
+     ONE PLATFORM. MANY CONNECTIONS.
+══════════════════════════════════════════════ -->
+<section class="connections-section">
     <div class="container">
-        <div class="row g-4">
-            <div class="col-lg-4">
-                <div class="about-box-items h-100">
-                    <div class="number-content text-center">
-                        <div class="mb-3">
-                            <i class="fas fa-bullseye fa-3x" style="color: var(--theme-color);"></i>
-                        </div>
-                        <h4>Our Mission</h4>
-                        <p>To make quality healthcare accessible and affordable to every Indian — from urban centres to rural communities — by leveraging digital technology, telemedicine, and seamless health record management.</p>
-                    </div>
-                </div>
+        <div class="section-label">
+            <h2>One Platform. Many Connections. Better Health for All.</h2>
+            <p>We bring together every stakeholder in a child's health journey on a single, secure, integrated platform.</p>
+        </div>
+
+        <div class="stakeholder-grid">
+            <div class="stakeholder-card">
+                <div class="s-icon schools"><i class="fas fa-school"></i></div>
+                <h5>Schools</h5>
+                <p>Manage student health records, track vaccinations, monitor growth and trigger early interventions.</p>
             </div>
-            <div class="col-lg-4">
-                <div class="about-box-items h-100">
-                    <div class="number-content text-center">
-                        <div class="mb-3">
-                            <i class="fas fa-eye fa-3x" style="color: var(--theme-color);"></i>
-                        </div>
-                        <h4>Our Vision</h4>
-                        <p>To become India's most trusted digital health ecosystem — where every patient, student, doctor, and school institution can manage health proactively with confidence, privacy, and dignity.</p>
-                    </div>
-                </div>
+            <div class="stakeholder-card">
+                <div class="s-icon teachers"><i class="fas fa-chalkboard-teacher"></i></div>
+                <h5>Teachers &amp; Admins</h5>
+                <p>Track, monitor &amp; take action early — flag health concerns and coordinate with parents in real time.</p>
             </div>
-            <div class="col-lg-4">
-                <div class="about-box-items h-100">
-                    <div class="number-content text-center">
-                        <div class="mb-3">
-                            <i class="fas fa-heart fa-3x" style="color: var(--theme-color);"></i>
-                        </div>
-                        <h4>Our Values</h4>
-                        <p>We are guided by compassion, transparency, patient privacy, and clinical excellence. Every feature we build and every decision we make puts the health and trust of our users first.</p>
-                    </div>
-                </div>
+            <div class="stakeholder-card">
+                <div class="s-icon students"><i class="fas fa-child"></i></div>
+                <h5>Students</h5>
+                <p>Healthy today, strong tomorrow — every student gets a lifelong ABHA-linked digital health record.</p>
             </div>
+            <div class="stakeholder-card">
+                <div class="s-icon parents"><i class="fas fa-users"></i></div>
+                <h5>Parents</h5>
+                <p>Real-time updates, complete peace of mind — receive instant alerts and access your child's health summary anytime.</p>
+            </div>
+            <div class="stakeholder-card">
+                <div class="s-icon doctors"><i class="fas fa-user-md"></i></div>
+                <h5>Doctors</h5>
+                <p>Clinical insights &amp; tele-consultations — provide specialist care without students missing school.</p>
+            </div>
+            <div class="stakeholder-card">
+                <div class="s-icon govt"><i class="fas fa-landmark"></i></div>
+                <h5>Government Health Systems</h5>
+                <p>Stronger data for stronger nations — anonymised, aggregated insights to drive national health policy.</p>
+            </div>
+        </div>
+
+        <div class="hub-center mt-4">
+            <span class="hub-badge">&#9679;&nbsp; Rejuvenate Digital Health &nbsp;&#9679;</span>
         </div>
     </div>
 </section>
 
-<!-- Why Choose Us -->
-<section class="section-padding fix">
+<!-- ══════════════════════════════════════════════
+     HOW WE HELP
+══════════════════════════════════════════════ -->
+<section class="help-section">
     <div class="container">
-        <div class="row justify-content-center mb-5">
-            <div class="col-lg-8 text-center">
-                <div class="section-title">
-                    <span class="subtitle tz-sub-tilte text-uppercase tx-subTitle">Why Us</span>
-                    <h2 class="tx-title sec_title tz-itm-title">Why Choose REJUVENATE Digital Health?</h2>
-                </div>
-            </div>
+        <div class="section-label">
+            <h2>How We Help</h2>
+            <p>Purpose-built features that make school health management seamless, proactive and effective.</p>
         </div>
         <div class="row g-4">
             <div class="col-lg-4 col-md-6">
-                <div class="about-box-items">
-                    <div class="number-content">
-                        <img src="<?= BASE_URL ?>assets/img/icon1.png" alt="Convenient">
-                        <h4>Convenient &amp; Time-Saving</h4>
-                        <p>No more waiting rooms or long travel times. Consult your doctor through secure video or chat consultations — from home, office, or anywhere.</p>
-                    </div>
+                <div class="help-card">
+                    <div class="h-icon"><i class="fas fa-file-medical-alt"></i></div>
+                    <h5>Digital Health Records</h5>
+                    <p>Each student gets a secure, ABHA-linked digital health record that travels with them from kindergarten to graduation — complete, private, and always accessible.</p>
                 </div>
             </div>
             <div class="col-lg-4 col-md-6">
-                <div class="about-box-items">
-                    <div class="number-content">
-                        <img src="<?= BASE_URL ?>assets/img/icon2.png" alt="Affordable">
-                        <h4>Affordable Healthcare</h4>
-                        <p>Enjoy discounted online consultations, special prices on lab investigations, and exclusive discounts on medicines — healthcare that fits your budget.</p>
-                    </div>
+                <div class="help-card">
+                    <div class="h-icon"><i class="fas fa-syringe"></i></div>
+                    <h5>Vaccination Tracking</h5>
+                    <p>Never miss a dose. Automated reminders and a complete immunisation history ensure every child stays protected on schedule.</p>
                 </div>
             </div>
             <div class="col-lg-4 col-md-6">
-                <div class="about-box-items">
-                    <div class="number-content">
-                        <img src="<?= BASE_URL ?>assets/img/icon3.png" alt="Trusted Doctors">
-                        <h4>Trusted Medical Experts</h4>
-                        <p>Get advice from qualified and verified doctors across multiple specialties. All doctors on our platform are registered with the National Medical Commission.</p>
-                    </div>
+                <div class="help-card">
+                    <div class="h-icon"><i class="fas fa-chart-line"></i></div>
+                    <h5>Growth &amp; Development Monitoring</h5>
+                    <p>Track BMI, height, weight, and developmental milestones. Visual growth charts help identify concerns early — before they become problems.</p>
                 </div>
             </div>
             <div class="col-lg-4 col-md-6">
-                <div class="about-box-items">
-                    <div class="number-content">
-                        <img src="<?= BASE_URL ?>assets/img/icon4.png" alt="Diagnostics">
-                        <h4>Easy Access to Diagnostics</h4>
-                        <p>Book lab tests online at partner diagnostic centres and get reports directly on your personal health dashboard — no paperwork, no delays.</p>
-                    </div>
+                <div class="help-card">
+                    <div class="h-icon"><i class="fas fa-shield-alt"></i></div>
+                    <h5>Preventive Healthcare</h5>
+                    <p>Scheduled screenings, annual health check-ups, and early-warning alerts empower schools to act before illness disrupts learning.</p>
                 </div>
             </div>
             <div class="col-lg-4 col-md-6">
-                <div class="about-box-items">
-                    <div class="number-content">
-                        <img src="<?= BASE_URL ?>assets/img/icon5.png" alt="Medicine">
-                        <h4>Hassle-Free Medicine Delivery</h4>
-                        <p>Order prescribed medicines at discounted rates — delivered right to your doorstep through our trusted pharmacy network across India.</p>
-                    </div>
+                <div class="help-card">
+                    <div class="h-icon"><i class="fas fa-video"></i></div>
+                    <h5>Doctor Support &amp; Online Consultations</h5>
+                    <p>Verified doctors available for tele-consultations — students get expert care without leaving campus. Prescriptions and notes saved directly to their health record.</p>
                 </div>
             </div>
             <div class="col-lg-4 col-md-6">
-                <div class="about-box-items">
-                    <div class="number-content">
-                        <img src="<?= BASE_URL ?>assets/img/icon6.png" alt="Secure">
-                        <h4>Safe, Secure &amp; Confidential</h4>
-                        <p>Your health data and medical records are fully encrypted, DPDP Act compliant, and protected with industry-grade security. Your privacy is our priority.</p>
+                <div class="help-card">
+                    <div class="h-icon"><i class="fas fa-brain"></i></div>
+                    <h5>Data-Driven Insights</h5>
+                    <p>Anonymised, school-level and district-level analytics give administrators and policymakers the intelligence to allocate resources where they matter most.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ══════════════════════════════════════════════
+     WHY IT MATTERS
+══════════════════════════════════════════════ -->
+<section class="matters-section">
+    <div class="container">
+        <div class="section-label">
+            <h2>Why It Matters</h2>
+        </div>
+        <div class="row g-4 align-items-stretch">
+            <div class="col-lg-7">
+                <div class="matter-item">
+                    <div class="m-num">1</div>
+                    <div>
+                        <h5>Healthier Students</h5>
+                        <p>Early identification and timely interventions mean children stay healthier, miss fewer classes, and perform better academically.</p>
+                    </div>
+                </div>
+                <div class="matter-item">
+                    <div class="m-num">2</div>
+                    <div>
+                        <h5>Peace of Mind for Parents</h5>
+                        <p>Parents receive instant alerts, can view their child's health records anytime, and connect with doctors directly — from any device.</p>
+                    </div>
+                </div>
+                <div class="matter-item">
+                    <div class="m-num">3</div>
+                    <div>
+                        <h5>Empowered Schools</h5>
+                        <p>Schools replace paper forms and manual tracking with a single digital dashboard — saving time, reducing errors, and demonstrating duty of care.</p>
+                    </div>
+                </div>
+                <div class="matter-item">
+                    <div class="m-num">4</div>
+                    <div>
+                        <h5>Stronger Communities</h5>
+                        <p>When children are healthy, families are more productive and communities thrive. Health data flowing between schools and clinics closes the gaps in community care.</p>
+                    </div>
+                </div>
+                <div class="matter-item">
+                    <div class="m-num">5</div>
+                    <div>
+                        <h5>Future-Ready Nation</h5>
+                        <p>Aggregated, anonymised school health data feeds into national health programmes — helping India build evidence-based policies for a healthier next generation.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="matters-visual">
+                    <h3>Building India's Healthiest Generation</h3>
+                    <p>
+                        Every data point captured, every vaccination tracked, every consultation conducted on our platform
+                        is a step toward a healthier, stronger, and more resilient India.
+                    </p>
+                    <p>
+                        We believe that school is where health habits form — and that technology should make it effortless
+                        for every stakeholder to protect and nurture every child's wellbeing.
+                    </p>
+                    <div class="mv-stat">
+                        <strong>2030</strong>
+                        <span>Vision: Every school in India digitally health-connected</span>
                     </div>
                 </div>
             </div>
@@ -231,73 +542,84 @@ $logo    = get_header_logo();
     </div>
 </section>
 
-<!-- What We Offer -->
-<section class="section-padding fix" style="background: var(--bg);">
+<!-- ══════════════════════════════════════════════
+     GOVERNMENT ALIGNMENT
+══════════════════════════════════════════════ -->
+<section class="govt-section">
     <div class="container">
-        <div class="row justify-content-center mb-5">
-            <div class="col-lg-8 text-center">
-                <div class="section-title">
-                    <span class="subtitle tz-sub-tilte text-uppercase tx-subTitle">Services</span>
-                    <h2 class="tx-title sec_title tz-itm-title">What We Offer</h2>
-                </div>
-            </div>
+        <div class="section-label">
+            <h2>Aligned with India's National Health Initiatives</h2>
+            <p>Built in compliance with — and in support of — India's flagship digital health and wellness programmes.</p>
         </div>
         <div class="row g-4">
-            <div class="col-lg-3 col-md-6">
-                <div class="contact-info-box-items">
-                    <div class="icon"><i class="fas fa-video"></i></div>
-                    <div class="content">
-                        <h6>Telemedicine Consultations</h6>
-                        <p>Secure online doctor consultations via video and chat with NMC-verified specialists.</p>
-                    </div>
+            <div class="col-lg col-md-4 col-6">
+                <div class="govt-badge">
+                    <div class="g-icon">🏥</div>
+                    <h6>Ayushman Bharat</h6>
                 </div>
             </div>
-            <div class="col-lg-3 col-md-6">
-                <div class="contact-info-box-items">
-                    <div class="icon"><i class="fas fa-school"></i></div>
-                    <div class="content">
-                        <h6>School Health Portal</h6>
-                        <p>Dedicated module for schools to manage student and teacher health records, BMI, and wellness tracking.</p>
-                    </div>
+            <div class="col-lg col-md-4 col-6">
+                <div class="govt-badge">
+                    <div class="g-icon">💻</div>
+                    <h6>Digital India</h6>
                 </div>
             </div>
-            <div class="col-lg-3 col-md-6">
-                <div class="contact-info-box-items">
-                    <div class="icon"><i class="fas fa-id-card"></i></div>
-                    <div class="content">
-                        <h6>ABHA Health ID</h6>
-                        <p>Create and link your Ayushman Bharat Health Account to maintain a lifelong digital health record.</p>
-                    </div>
+            <div class="col-lg col-md-4 col-6">
+                <div class="govt-badge">
+                    <div class="g-icon">🔗</div>
+                    <h6>ABDM / NDHM</h6>
                 </div>
             </div>
-            <div class="col-lg-3 col-md-6">
-                <div class="contact-info-box-items">
-                    <div class="icon"><i class="fas fa-flask"></i></div>
-                    <div class="content">
-                        <h6>Lab Test Booking</h6>
-                        <p>Book diagnostic tests at partner labs and access reports digitally on your health dashboard.</p>
-                    </div>
+            <div class="col-lg col-md-4 col-6">
+                <div class="govt-badge">
+                    <div class="g-icon">🌾</div>
+                    <h6>POSHAN Abhiyaan</h6>
+                </div>
+            </div>
+            <div class="col-lg col-md-4 col-6">
+                <div class="govt-badge">
+                    <div class="g-icon">🏫</div>
+                    <h6>School Health Programmes</h6>
                 </div>
             </div>
         </div>
     </div>
 </section>
 
-<!-- CTA Section -->
-<section class="section-padding fix">
+<!-- ══════════════════════════════════════════════
+     SECURITY / COMPLIANCE FOOTER
+══════════════════════════════════════════════ -->
+<section class="security-section">
     <div class="container">
-        <div class="row justify-content-center text-center">
-            <div class="col-lg-8">
-                <div class="section-title mb-4">
-                    <span class="subtitle tz-sub-tilte text-uppercase tx-subTitle">Get Started</span>
-                    <h2 class="tx-title sec_title tz-itm-title">Ready to Take Control of Your Health?</h2>
-                    <p class="mt-3">Your health deserves convenience, quality, and care — all in one place. Join thousands of patients, schools, and healthcare professionals who trust REJUVENATE Digital Health.</p>
-                </div>
-                <div class="d-flex gap-3 justify-content-center flex-wrap">
-                    <a href="<?= BASE_URL ?>signup.php" class="theme-btn px-3 pt-2">Register as Patient</a>
-                    <a href="<?= BASE_URL ?>school-register.php" class="btn btn-esanjeevni">Register Your School</a>
-                </div>
+        <h2>Secure. <span>Compliant.</span> Built for Scale.</h2>
+        <p class="sec-sub">Your students' health data protected by enterprise-grade security and full regulatory compliance.</p>
+
+        <div class="security-grid">
+            <div class="sec-item">
+                <div class="si-icon"><i class="fas fa-lock"></i></div>
+                <p>End-to-End Encryption</p>
             </div>
+            <div class="sec-item">
+                <div class="si-icon"><i class="fas fa-user-shield"></i></div>
+                <p>Role-Based Access Control</p>
+            </div>
+            <div class="sec-item">
+                <div class="si-icon"><i class="fas fa-gavel"></i></div>
+                <p>Data Protection Compliance (DPDP Act)</p>
+            </div>
+            <div class="sec-item">
+                <div class="si-icon"><i class="fas fa-expand-arrows-alt"></i></div>
+                <p>Scalable for Schools of All Sizes</p>
+            </div>
+        </div>
+
+        <p style="font-size: 1.15rem; font-weight: 600; opacity: .9; margin-bottom: 28px;">
+            Healthy Students. Stronger Nation.
+        </p>
+
+        <div class="cta-final">
+            <a href="<?= BASE_URL ?>school-register.php" class="btn-teal">Register Your School</a>
+            <a href="<?= BASE_URL ?>contact-us.php"       class="btn-outline-white">Get in Touch</a>
         </div>
     </div>
 </section>
@@ -325,7 +647,6 @@ $logo    = get_header_logo();
                     </div>
                 </div>
             </div>
-            
         </div>
     </div>
 </section>
