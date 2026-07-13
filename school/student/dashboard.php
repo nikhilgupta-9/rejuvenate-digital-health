@@ -346,6 +346,7 @@ if (!empty($hp['height_cm']) && !empty($hp['weight_kg'])) {
 <nav class="s-bottomnav">
   <a href="dashboard.php" class="active"><i class="fas fa-home"></i>Home</a>
   <a href="health.php"><i class="fas fa-heartbeat"></i>Health</a>
+  <a href="records.php"><i class="fas fa-file-medical"></i>Records</a>
   <a href="abha.php"><i class="fas fa-id-card"></i>ABHA</a>
   <a href="profile.php"><i class="fas fa-user-circle"></i>Profile</a>
 </nav>
