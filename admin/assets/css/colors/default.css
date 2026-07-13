@@ -53,6 +53,24 @@
 .sidebar.dark_sidebar .admin-profile h6 {
   color: #fff;
 }
+.sidebar.dark_sidebar .admin-profile a:hover h6 {
+  color: var(--adm-accent);
+}
+
+/* Sidebar section labels (Main, Website Content, Healthcare Operations, ...) */
+.sidebar.dark_sidebar #sidebar_menu li.menu-label {
+  padding: 18px 20px 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+  user-select: none;
+}
+.sidebar.dark_sidebar #sidebar_menu li.menu-label:first-child {
+  padding-top: 6px;
+}
 
 /* ══════════════════════════════════════════════════
    TOP NAVIGATION / HEADER

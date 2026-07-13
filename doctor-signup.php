@@ -19,6 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $specialization = trim($_POST['specialization']);
     $password = $_POST['password'];
     $confirm_password = $_POST['confirmPassword'];
+    $role = "doctor";
     
     try {
         // Validate passwords match
@@ -32,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         
         // Check if email already exists
-        $check_sql = "SELECT id FROM doctors WHERE email = ?";
+        $check_sql = "SELECT id FROM doctors WHERE email = ? limit 1";
         $check_stmt = $conn->prepare($check_sql);
         $check_stmt->bind_param('s', $email);
         $check_stmt->execute();

@@ -3,8 +3,8 @@ session_start();
 include "db-conn.php";
 
 // Check admin login
-if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
-  header("Location: ../index.php");
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+  header("Location: auth/login.php");
   exit();
 }
 
@@ -21,9 +21,18 @@ mysqli_stmt_close($stmt);
 
 if (!$customer) {
     $_SESSION['error_message'] = "Customer not found.";
-    header("Location: customer-management.php");
+    header("Location: all-customers.php");
     exit();
 }
+
+// Recent medical records for this patient
+$docs_stmt = $conn->prepare("SELECT pd.*, d.name as doctor_name
+    FROM patient_documents pd LEFT JOIN doctors d ON d.id = pd.doctor_id
+    WHERE pd.patient_id = ? ORDER BY pd.uploaded_at DESC LIMIT 10");
+$docs_stmt->bind_param('i', $customer_id);
+$docs_stmt->execute();
+$medical_records = $docs_stmt->get_result();
+$medical_records_count = $medical_records->num_rows;
 
 // Calculate age from date of birth
 $age = '';
@@ -195,6 +204,9 @@ if (!empty($customer['dob']) && $customer['dob'] != '0000-00-00') {
                                         <a href="edit-customer.php?id=<?= $customer['id'] ?>" class="btn btn-light">
                                             <i class="fas fa-edit me-2"></i>Edit Customer
                                         </a>
+                                        <a href="upload-medical-record.php?for=patient&patient_id=<?= $customer['id'] ?>" class="btn btn-light">
+                                            <i class="fas fa-file-medical me-2"></i>Upload Medical Record
+                                        </a>
                                     </div>
                                 </div>
                             </div>
@@ -347,6 +359,55 @@ if (!empty($customer['dob']) && $customer['dob'] != '0000-00-00') {
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Medical Records -->
+                            <div class="col-md-12">
+                                <div class="info-card">
+                                    <div class="info-card-header d-flex justify-content-between align-items-center">
+                                        <span><i class="fas fa-file-medical me-2"></i>Medical Records <span class="badge bg-secondary ms-1"><?= $medical_records_count ?></span></span>
+                                        <a href="upload-medical-record.php?for=patient&patient_id=<?= $customer['id'] ?>" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-upload me-1"></i> Upload
+                                        </a>
+                                    </div>
+                                    <div class="info-card-body p-0">
+                                        <?php if ($medical_records_count === 0): ?>
+                                            <p class="text-muted text-center py-4 mb-0">No medical records uploaded yet.</p>
+                                        <?php else: ?>
+                                            <div class="table-responsive">
+                                                <table class="table table-hover mb-0">
+                                                    <thead>
+                                                        <tr>
+                                                            <th style="font-size:.75rem;text-transform:uppercase;">Document</th>
+                                                            <th style="font-size:.75rem;text-transform:uppercase;">Uploaded By</th>
+                                                            <th style="font-size:.75rem;text-transform:uppercase;">Date</th>
+                                                            <th style="font-size:.75rem;text-transform:uppercase;">Actions</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                    <?php while ($doc = $medical_records->fetch_assoc()): ?>
+                                                        <tr>
+                                                            <td style="font-size:.85rem;"><?= htmlspecialchars($doc['document_name']) ?></td>
+                                                            <td style="font-size:.82rem;">
+                                                                <?= $doc['doctor_name'] ? 'Dr. ' . htmlspecialchars($doc['doctor_name']) : '<span class="text-muted">Admin</span>' ?>
+                                                            </td>
+                                                            <td><small class="text-muted"><?= date('d M Y', strtotime($doc['uploaded_at'])) ?></small></td>
+                                                            <td>
+                                                                <a href="../<?= htmlspecialchars($doc['file_path']) ?>" target="_blank" class="btn btn-sm btn-outline-primary"><i class="fas fa-eye"></i></a>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endwhile; ?>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <?php if ($medical_records_count >= 10): ?>
+                                                <div class="text-center py-2">
+                                                    <a href="medical-records.php?tab=patients&q=<?= urlencode($customer['name']) ?>" class="small">View all records &rarr;</a>
+                                                </div>
+                                            <?php endif; ?>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Action Buttons -->
@@ -362,7 +423,7 @@ if (!empty($customer['dob']) && $customer['dob'] != '0000-00-00') {
                                         <a href="edit-customer.php?id=<?= $customer['id'] ?>" class="btn btn-primary me-2">
                                             <i class="fas fa-edit me-2"></i>Edit Customer
                                         </a>
-                                        <a href="customer-management.php?delete=<?= $customer['id'] ?>" 
+                                        <a href="all-customers.php?delete=<?= $customer['id'] ?>"
                                            class="btn btn-danger"
                                            onclick="return confirm('Are you sure you want to delete this customer? This action cannot be undone.');">
                                             <i class="fas fa-trash me-2"></i>Delete Customer

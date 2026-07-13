@@ -3,7 +3,7 @@ session_start();
 include "db-conn.php";
 
 // Check if admin is logged in
-if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
   header("Location: auth/login.php");
   exit();
 }
@@ -36,7 +36,7 @@ if (isset($_GET['delete'])) {
     }
     mysqli_stmt_close($check_stmt);
 
-    header("Location: customer-management.php");
+    header("Location: all-customers.php");
     exit();
 }
 
@@ -67,7 +67,7 @@ if (isset($_GET['toggle_status'])) {
     }
     mysqli_stmt_close($update_stmt);
 
-    header("Location: customer-management.php");
+    header("Location: all-customers.php");
     exit();
 }
 
@@ -86,7 +86,7 @@ if (isset($_GET['verify_email'])) {
     }
     mysqli_stmt_close($verify_stmt);
 
-    header("Location: customer-management.php");
+    header("Location: all-customers.php");
     exit();
 }
 
@@ -368,6 +368,16 @@ $verified_customers = mysqli_fetch_assoc($verified_result)['verified'];
                                                                     <li>
                                                                         <a class="dropdown-item" href="edit-customer.php?id=<?= $row['id'] ?>">
                                                                             <i class="fas fa-edit me-2"></i>Edit Customer
+                                                                        </a>
+                                                                    </li>
+                                                                    <li>
+                                                                        <a class="dropdown-item" href="upload-medical-record.php?for=patient&patient_id=<?= $row['id'] ?>">
+                                                                            <i class="fas fa-file-medical me-2"></i>Upload Medical Record
+                                                                        </a>
+                                                                    </li>
+                                                                    <li>
+                                                                        <a class="dropdown-item" href="medical-records.php?tab=patients&q=<?= urlencode($row['name']) ?>">
+                                                                            <i class="fas fa-folder-open me-2"></i>View Medical Records
                                                                         </a>
                                                                     </li>
                                                                     <li>

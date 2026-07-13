@@ -48,12 +48,24 @@ $schools_result = mysqli_query($conn, "SELECT s.*,
                         <h4 class="mb-0 fw-bold">Schools Management</h4>
                         <small class="text-muted">Manage registered schools, approvals and health modules</small>
                     </div>
-                    <?php if ($pending > 0): ?>
-                    <a href="schools-list.php?status=Pending" class="btn btn-danger btn-sm">
-                        <i class="fas fa-exclamation-circle me-1"></i> <?= $pending ?> Pending
-                    </a>
-                    <?php endif; ?>
+                    <div class="d-flex gap-2">
+                        <?php if ($pending > 0): ?>
+                        <a href="schools-list.php?status=Pending" class="btn btn-danger btn-sm">
+                            <i class="fas fa-exclamation-circle me-1"></i> <?= $pending ?> Pending
+                        </a>
+                        <?php endif; ?>
+                        <a href="add-school.php" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus me-1"></i> Add School
+                        </a>
+                    </div>
                 </div>
+
+                <?php if (isset($_SESSION['success_message'])): ?>
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="fas fa-check-circle me-2"></i><?= htmlspecialchars($_SESSION['success_message']) ?>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                <?php unset($_SESSION['success_message']); endif; ?>
 
                 <!-- Stat Boxes -->
                 <div class="row g-3 mb-4">
@@ -174,6 +186,7 @@ $schools_result = mysqli_query($conn, "SELECT s.*,
                                     <td><small class="text-muted"><?= date('d M Y', strtotime($s['created_at'])) ?></small></td>
                                     <td>
                                         <a href="school-view.php?id=<?= $s['id'] ?>" class="tbl-action-btn bg-primary text-white" title="View"><i class="fas fa-eye"></i></a>
+                                        <a href="edit-school.php?id=<?= $s['id'] ?>" class="tbl-action-btn bg-info text-white" title="Edit"><i class="fas fa-edit"></i></a>
                                         <?php if ($s['status']==='Pending'): ?>
                                             <a href="school-approve.php?id=<?= $s['id'] ?>&action=approve" class="tbl-action-btn bg-success text-white" title="Approve" onclick="return confirm('Approve this school?')"><i class="fas fa-check"></i></a>
                                             <a href="school-approve.php?id=<?= $s['id'] ?>&action=reject"  class="tbl-action-btn bg-danger text-white"  title="Reject"  onclick="return confirm('Reject this school?')"><i class="fas fa-times"></i></a>
@@ -182,6 +195,10 @@ $schools_result = mysqli_query($conn, "SELECT s.*,
                                         <?php elseif ($s['status']==='Inactive'): ?>
                                             <a href="school-approve.php?id=<?= $s['id'] ?>&action=activate" class="tbl-action-btn bg-success text-white" title="Activate" onclick="return confirm('Activate?')"><i class="fas fa-check-circle"></i></a>
                                         <?php endif; ?>
+                                        <button type="button" class="tbl-action-btn bg-danger text-white" title="Delete"
+                                            onclick="confirmDeleteSchool(<?= $s['id'] ?>, '<?= htmlspecialchars(addslashes($s['school_name'])) ?>')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
                                     </td>
                                 </tr>
                                 <?php endwhile; ?>
@@ -194,5 +211,37 @@ $schools_result = mysqli_query($conn, "SELECT s.*,
             </div>
         </div>
         <?php include "footer.php"; ?>
+
+        <!-- Delete School Confirmation Modal -->
+        <div class="modal fade" id="deleteSchoolModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="fas fa-exclamation-triangle text-danger me-2"></i>Delete School</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form method="POST" action="delete-school.php">
+                        <div class="modal-body">
+                            <p>Are you sure you want to permanently delete <strong id="delSchoolName"></strong>?</p>
+                            <div class="alert alert-warning mb-0" style="font-size:.85rem;">
+                                This will also delete its admin account, and <strong>all</strong> teachers, students, staff and their health records. This cannot be undone.
+                            </div>
+                            <input type="hidden" name="id" id="delSchoolId">
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-danger"><i class="fas fa-trash me-1"></i> Delete Permanently</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <script>
+            function confirmDeleteSchool(id, name) {
+                document.getElementById('delSchoolId').value = id;
+                document.getElementById('delSchoolName').textContent = name;
+                new bootstrap.Modal(document.getElementById('deleteSchoolModal')).show();
+            }
+        </script>
 </body>
 </html>

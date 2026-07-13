@@ -304,7 +304,7 @@ $abdm_on = ABDM_CONFIGURED;
             <span class="role-chip"><i class="fas fa-user-graduate text-success"></i>Student</span>
             <span class="role-chip"><i class="fas fa-chalkboard-teacher text-warning"></i>Teacher</span>
             <span class="role-chip"><i class="fas fa-school text-info"></i>School Admin</span>
-            <span class="role-chip"><i class="fas fa-user-md text-danger"></i>Doctor</span>
+            <!-- <span class="role-chip"><i class="fas fa-user-md text-danger"></i>Doctor</span> -->
           </div>
 
           <!-- Method tabs -->
