@@ -12,75 +12,8 @@ $hp_stmt->bind_param('i', $student_id);
 $hp_stmt->execute();
 $hp = $hp_stmt->get_result()->fetch_assoc();
 
-$success = $error = '';
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $height_cm           = !empty($_POST['height_cm'])           ? (float)$_POST['height_cm']           : null;
-    $weight_kg           = !empty($_POST['weight_kg'])           ? (float)$_POST['weight_kg']           : null;
-    $blood_group         = trim($_POST['blood_group']         ?? '');
-    $vision              = trim($_POST['vision']              ?? '');
-    $hearing             = trim($_POST['hearing']             ?? '');
-    $dental              = trim($_POST['dental']              ?? '');
-    $known_allergies     = trim($_POST['known_allergies']     ?? '');
-    $chronic_conditions  = trim($_POST['chronic_conditions']  ?? '');
-    $current_medications = trim($_POST['current_medications'] ?? '');
-    $vaccination_status  = trim($_POST['vaccination_status']  ?? '');
-    $emergency_contact   = trim($_POST['emergency_contact']   ?? '');
-    $emergency_phone     = trim($_POST['emergency_phone']     ?? '');
-    $notes               = trim($_POST['notes']               ?? '');
-
-    /* Validate emergency phone if filled */
-    if ($emergency_phone && !preg_match('/^[6-9]\d{9}$/', $emergency_phone)) {
-        $error = "Emergency phone must be a valid 10-digit mobile number.";
-    } else {
-        if ($hp) {
-            $upd = $conn->prepare("
-                UPDATE member_health_profiles
-                SET height_cm=?, weight_kg=?, vision=?, hearing=?, dental=?,
-                    known_allergies=?, chronic_conditions=?, current_medications=?,
-                    vaccination_status=?, emergency_contact=?, emergency_phone=?,
-                    notes=?, last_updated_by=?, last_updated_role='student', updated_at=NOW()
-                WHERE member_id=? AND school_id=?");
-            $upd->bind_param('ddssssssssssiii',
-                $height_cm, $weight_kg, $vision, $hearing, $dental,
-                $known_allergies, $chronic_conditions, $current_medications,
-                $vaccination_status, $emergency_contact, $emergency_phone,
-                $notes, $student_id, $student_id, $student_school_id);
-            $ok = $upd->execute();
-        } else {
-            $ins = $conn->prepare("
-                INSERT INTO member_health_profiles
-                    (member_id, school_id, height_cm, weight_kg, vision, hearing, dental,
-                     known_allergies, chronic_conditions, current_medications,
-                     vaccination_status, emergency_contact, emergency_phone,
-                     notes, last_updated_by, last_updated_role)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'student')");
-            $ins->bind_param('iiddssssssssssi',
-                $student_id, $student_school_id,
-                $height_cm, $weight_kg, $vision, $hearing, $dental,
-                $known_allergies, $chronic_conditions, $current_medications,
-                $vaccination_status, $emergency_contact, $emergency_phone,
-                $notes, $student_id);
-            $ok = $ins->execute();
-        }
-
-        if ($ok) {
-            $success = "Health profile saved successfully!";
-            $hp_stmt->execute();
-            $hp = $hp_stmt->get_result()->fetch_assoc();
-        } else {
-            $error = "Could not save: {$conn->error}";
-        }
-
-        /* Also update blood_group on school_members */
-        if ($blood_group) {
-            $bg = $conn->prepare("UPDATE school_members SET blood_group=? WHERE id=?");
-            $bg->bind_param('si', $blood_group, $student_id);
-            $bg->execute();
-            $student['blood_group'] = $blood_group;
-        }
-    }
-}
+/* Read-only record — students cannot edit their medical info.
+   Only school admin/teacher (school/members/health-profile.php) or a doctor can update it. */
 
 /* BMI */
 $bmi = null; $bmi_lbl = ''; $bmi_col = '#6b7280'; $bmi_pct = 0;
@@ -92,8 +25,6 @@ if (!empty($hp['height_cm']) && !empty($hp['weight_kg'])) {
     elseif  ($bmi < 30)   { $bmi_lbl = 'Overweight';   $bmi_col = '#ea580c'; }
     else                  { $bmi_lbl = 'Obese';         $bmi_col = '#dc2626'; }
 }
-
-$blood_groups = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -151,19 +82,28 @@ $blood_groups = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
       margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #f3f4f6;
     }
 
-    /* Input tweaks */
-    .form-control, .form-select { font-size: .85rem; }
-    .form-label { font-size: .8rem; font-weight: 600; margin-bottom: 4px; }
+    /* Read-only info grid */
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+    .info-box { background: #f9fafb; border-radius: 8px; padding: 10px 12px; }
+    .info-box .lbl { font-size: .67rem; color: #9ca3af; margin-bottom: 2px; }
+    .info-box .val { font-size: .86rem; font-weight: 600; color: #1f2937; }
+    .info-box .val.empty { font-weight: 400; color: #c1c7d0; }
 
-    /* Blood group chips */
-    .blood-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-    .blood-chip {
-      padding: 6px 14px; border-radius: 20px; font-size: .8rem; font-weight: 600;
-      border: 1.5px solid #e5e7eb; cursor: pointer; transition: .15s;
-      background: #fff; color: #374151; user-select: none;
+    .text-block { font-size: .85rem; color: #374151; background: #f9fafb; border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; }
+    .text-block.empty { color: #c1c7d0; font-style: italic; }
+
+    /* Blood group display chip */
+    .blood-chip-ro {
+      display: inline-flex; align-items: center; padding: 6px 16px; border-radius: 20px;
+      font-size: .85rem; font-weight: 700; background: #dc2626; color: #fff;
     }
-    .blood-chip:hover  { border-color: #dc2626; color: #dc2626; }
-    .blood-chip.sel    { background: #dc2626; color: #fff; border-color: #dc2626; }
+
+    .locked-note {
+      display: flex; align-items: flex-start; gap: 8px;
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px;
+      padding: 10px 14px; font-size: .74rem; color: #92400e; margin-bottom: 16px;
+    }
+    .locked-note i { margin-top: 2px; }
 
     /* Bottom nav */
     .s-bottomnav {
@@ -199,18 +139,10 @@ $blood_groups = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
 
 <div class="s-body">
 
-  <?php if ($success): ?>
-    <div class="alert alert-success alert-dismissible fade show" style="border-radius:12px;font-size:.83rem;">
-      <i class="fas fa-check-circle me-2"></i><?= htmlspecialchars($success) ?>
-      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-  <?php endif; ?>
-  <?php if ($error): ?>
-    <div class="alert alert-danger alert-dismissible fade show" style="border-radius:12px;font-size:.83rem;">
-      <i class="fas fa-exclamation-circle me-2"></i><?= htmlspecialchars($error) ?>
-      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-  <?php endif; ?>
+  <div class="locked-note">
+    <i class="fas fa-lock"></i>
+    <div>This is a <strong>read-only</strong> record. Only your school nurse, teacher or doctor can update it. If something looks wrong, please let them know.</div>
+  </div>
 
   <!-- Health summary tiles -->
   <?php if ($hp || !empty($student['blood_group'])): ?>
@@ -258,129 +190,77 @@ $blood_groups = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
     </div>
   <?php endif; ?>
 
-  <!-- FORM -->
-  <form method="POST" id="healthForm">
+  <?php if (!$hp): ?>
+
+    <div class="s-card text-center" style="padding: 40px 20px;">
+      <i class="fas fa-heartbeat fa-2x mb-3 d-block" style="color:#0C74C5;opacity:.25;"></i>
+      <div class="fw-semibold" style="color:#374151;margin-bottom:6px;">Health Profile Not Set Up</div>
+      <p style="font-size:.82rem;color:#9ca3af;margin-bottom:0;">Your school admin, teacher or doctor hasn't created your health profile yet.</p>
+    </div>
+
+  <?php else: ?>
 
     <!-- Physical Measurements -->
     <div class="s-card">
       <div class="s-card-title"><i class="fas fa-ruler" style="color:#0C74C5;"></i>Physical Measurements</div>
-      <div class="row g-3">
-        <div class="col-6">
-          <label class="form-label">Height (cm)</label>
-          <input type="number" step="0.1" min="50" max="250" class="form-control" name="height_cm"
-            id="inp_height" value="<?= htmlspecialchars($hp['height_cm'] ?? '') ?>"
-            placeholder="e.g. 165" oninput="calcBmi()">
-        </div>
-        <div class="col-6">
-          <label class="form-label">Weight (kg)</label>
-          <input type="number" step="0.1" min="10" max="300" class="form-control" name="weight_kg"
-            id="inp_weight" value="<?= htmlspecialchars($hp['weight_kg'] ?? '') ?>"
-            placeholder="e.g. 60" oninput="calcBmi()">
-        </div>
-        <div class="col-6">
-          <label class="form-label">Vision</label>
-          <input type="text" class="form-control" name="vision"
-            value="<?= htmlspecialchars($hp['vision'] ?? '') ?>" placeholder="e.g. 6/6">
-        </div>
-        <div class="col-6">
-          <label class="form-label">Hearing</label>
-          <input type="text" class="form-control" name="hearing"
-            value="<?= htmlspecialchars($hp['hearing'] ?? '') ?>" placeholder="Normal">
-        </div>
-        <div class="col-12">
-          <label class="form-label">Dental Health</label>
-          <input type="text" class="form-control" name="dental"
-            value="<?= htmlspecialchars($hp['dental'] ?? '') ?>" placeholder="e.g. Good, cavity on lower right">
-        </div>
-      </div>
-
-      <!-- Live BMI preview -->
-      <div id="bmiPreview" style="display:none;margin-top:14px;padding:10px 14px;background:#f9fafb;border-radius:10px;">
-        <div class="d-flex justify-content-between align-items-center mb-1">
-          <span style="font-size:.8rem;font-weight:600;color:#374151;">BMI Preview</span>
-          <span id="bmiVal" style="font-size:.82rem;font-weight:700;"></span>
-        </div>
-        <div style="height:6px;border-radius:3px;background:#e5e7eb;overflow:hidden;">
-          <div id="bmiBar" style="height:100%;border-radius:3px;background:linear-gradient(90deg,#16a34a,#eab308,#ea580c,#dc2626);transition:width .3s;width:0%"></div>
-        </div>
+      <div class="info-grid">
+        <div class="info-box"><div class="lbl">Vision</div><div class="val <?= $hp['vision'] ? '' : 'empty' ?>"><?= $hp['vision'] ? htmlspecialchars($hp['vision']) : 'Not recorded' ?></div></div>
+        <div class="info-box"><div class="lbl">Hearing</div><div class="val <?= $hp['hearing'] ? '' : 'empty' ?>"><?= $hp['hearing'] ? htmlspecialchars($hp['hearing']) : 'Not recorded' ?></div></div>
+        <div class="info-box"><div class="lbl">Dental Health</div><div class="val <?= $hp['dental'] ? '' : 'empty' ?>"><?= $hp['dental'] ? htmlspecialchars($hp['dental']) : 'Not recorded' ?></div></div>
       </div>
     </div>
 
     <!-- Blood Group -->
     <div class="s-card">
       <div class="s-card-title"><i class="fas fa-tint" style="color:#dc2626;"></i>Blood Group</div>
-      <input type="hidden" name="blood_group" id="blood_group_val" value="<?= htmlspecialchars($student['blood_group'] ?? '') ?>">
-      <div class="blood-chips">
-        <?php foreach ($blood_groups as $bg): ?>
-          <div class="blood-chip <?= ($student['blood_group'] ?? '') === $bg ? 'sel' : '' ?>"
-               onclick="selectBlood('<?= $bg ?>')">
-            <?= $bg ?>
-          </div>
-        <?php endforeach; ?>
-      </div>
+      <?php if (!empty($student['blood_group'])): ?>
+        <span class="blood-chip-ro"><?= htmlspecialchars($student['blood_group']) ?></span>
+      <?php else: ?>
+        <span style="font-size:.85rem;color:#c1c7d0;font-style:italic;">Not recorded</span>
+      <?php endif; ?>
     </div>
 
     <!-- Medical History -->
     <div class="s-card">
       <div class="s-card-title"><i class="fas fa-notes-medical" style="color:#dc2626;"></i>Medical History</div>
       <div class="mb-3">
-        <label class="form-label">Known Allergies</label>
-        <textarea class="form-control" name="known_allergies" rows="2"
-          placeholder="e.g. Penicillin, dust, peanuts — or leave blank if none"><?= htmlspecialchars($hp['known_allergies'] ?? '') ?></textarea>
+        <div class="lbl" style="font-size:.72rem;color:#9ca3af;margin-bottom:4px;">Known Allergies</div>
+        <div class="text-block <?= $hp['known_allergies'] ? '' : 'empty' ?>"><?= $hp['known_allergies'] ? nl2br(htmlspecialchars($hp['known_allergies'])) : 'None recorded' ?></div>
       </div>
       <div class="mb-3">
-        <label class="form-label">Chronic Conditions</label>
-        <textarea class="form-control" name="chronic_conditions" rows="2"
-          placeholder="e.g. Asthma, Diabetes — or leave blank"><?= htmlspecialchars($hp['chronic_conditions'] ?? '') ?></textarea>
+        <div class="lbl" style="font-size:.72rem;color:#9ca3af;margin-bottom:4px;">Chronic Conditions</div>
+        <div class="text-block <?= $hp['chronic_conditions'] ? '' : 'empty' ?>"><?= $hp['chronic_conditions'] ? nl2br(htmlspecialchars($hp['chronic_conditions'])) : 'None recorded' ?></div>
       </div>
       <div>
-        <label class="form-label">Current Medications</label>
-        <textarea class="form-control" name="current_medications" rows="2"
-          placeholder="Name, dosage, frequency — or leave blank"><?= htmlspecialchars($hp['current_medications'] ?? '') ?></textarea>
+        <div class="lbl" style="font-size:.72rem;color:#9ca3af;margin-bottom:4px;">Current Medications</div>
+        <div class="text-block <?= $hp['current_medications'] ? '' : 'empty' ?>"><?= $hp['current_medications'] ? nl2br(htmlspecialchars($hp['current_medications'])) : 'None recorded' ?></div>
       </div>
     </div>
 
     <!-- Vaccination -->
     <div class="s-card">
       <div class="s-card-title"><i class="fas fa-syringe" style="color:#16a34a;"></i>Vaccination Status</div>
-      <textarea class="form-control" name="vaccination_status" rows="3"
-        placeholder="List vaccines received e.g. COVID-19: ✓ (Jan 2022), Hepatitis B: ✓, BCG: ✓ …"><?= htmlspecialchars($hp['vaccination_status'] ?? '') ?></textarea>
+      <div class="text-block <?= $hp['vaccination_status'] ? '' : 'empty' ?>"><?= $hp['vaccination_status'] ? nl2br(htmlspecialchars($hp['vaccination_status'])) : 'Not recorded' ?></div>
     </div>
 
     <!-- Emergency Contact -->
     <div class="s-card">
       <div class="s-card-title"><i class="fas fa-phone-alt" style="color:#d97706;"></i>Emergency Contact</div>
-      <div class="row g-3">
-        <div class="col-6">
-          <label class="form-label">Guardian / Parent Name</label>
-          <input type="text" class="form-control" name="emergency_contact"
-            value="<?= htmlspecialchars($hp['emergency_contact'] ?? '') ?>" placeholder="Full name">
-        </div>
-        <div class="col-6">
-          <label class="form-label">Phone Number</label>
-          <input type="text" class="form-control" name="emergency_phone" inputmode="numeric" maxlength="10"
-            value="<?= htmlspecialchars($hp['emergency_phone'] ?? '') ?>" placeholder="10-digit mobile">
-        </div>
+      <div class="info-grid">
+        <div class="info-box"><div class="lbl">Guardian / Parent</div><div class="val <?= $hp['emergency_contact'] ? '' : 'empty' ?>"><?= $hp['emergency_contact'] ? htmlspecialchars($hp['emergency_contact']) : 'Not recorded' ?></div></div>
+        <div class="info-box"><div class="lbl">Phone</div><div class="val <?= $hp['emergency_phone'] ? '' : 'empty' ?>"><?= $hp['emergency_phone'] ? htmlspecialchars($hp['emergency_phone']) : 'Not recorded' ?></div></div>
       </div>
     </div>
 
     <!-- Notes -->
+    <?php if ($hp['notes']): ?>
     <div class="s-card">
       <div class="s-card-title"><i class="fas fa-sticky-note" style="color:#6b7280;"></i>Additional Notes</div>
-      <textarea class="form-control" name="notes" rows="3"
-        placeholder="Anything else your school should know about your health…"><?= htmlspecialchars($hp['notes'] ?? '') ?></textarea>
+      <div class="text-block"><?= nl2br(htmlspecialchars($hp['notes'])) ?></div>
     </div>
+    <?php endif; ?>
 
-    <div class="d-grid mb-3">
-      <button type="submit" class="btn btn-primary fw-semibold py-3" style="border-radius:12px;font-size:.95rem;">
-        <i class="fas fa-save me-2"></i>Save Health Record
-      </button>
-    </div>
-
-    <p style="font-size:.7rem;color:#9ca3af;text-align:center;">
-      <i class="fas fa-info-circle me-1"></i>Your school admin or teacher may also update your health record.
-    </p>
-  </form>
+  <?php endif; ?>
 
 </div>
 
@@ -388,38 +268,11 @@ $blood_groups = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
 <nav class="s-bottomnav">
   <a href="dashboard.php"><i class="fas fa-home"></i>Home</a>
   <a href="health.php" class="active"><i class="fas fa-heartbeat"></i>Health</a>
+  <a href="records.php"><i class="fas fa-file-medical"></i>Records</a>
   <a href="abha.php"><i class="fas fa-id-card"></i>ABHA</a>
   <a href="profile.php"><i class="fas fa-user-circle"></i>Profile</a>
 </nav>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-function selectBlood(bg) {
-  document.querySelectorAll('.blood-chip').forEach(c => c.classList.remove('sel'));
-  event.currentTarget.classList.add('sel');
-  document.getElementById('blood_group_val').value = bg;
-}
-
-function calcBmi() {
-  const h = parseFloat(document.getElementById('inp_height').value);
-  const w = parseFloat(document.getElementById('inp_weight').value);
-  const prev = document.getElementById('bmiPreview');
-  if (!h || !w || h < 50 || w < 10) { prev.style.display = 'none'; return; }
-  const bmi = (w / ((h/100)**2)).toFixed(1);
-  let lbl = '', col = '';
-  if (bmi < 18.5)      { lbl = 'Underweight'; col = '#d97706'; }
-  else if (bmi < 25)   { lbl = 'Normal';       col = '#16a34a'; }
-  else if (bmi < 30)   { lbl = 'Overweight';   col = '#ea580c'; }
-  else                 { lbl = 'Obese';         col = '#dc2626'; }
-  const pct = Math.min(100, Math.max(5, (bmi/40)*100));
-  document.getElementById('bmiVal').textContent = `${bmi} — ${lbl}`;
-  document.getElementById('bmiVal').style.color  = col;
-  document.getElementById('bmiBar').style.width  = pct + '%';
-  prev.style.display = 'block';
-}
-
-/* Init live BMI on load if values already exist */
-calcBmi();
-</script>
 </body>
 </html>
