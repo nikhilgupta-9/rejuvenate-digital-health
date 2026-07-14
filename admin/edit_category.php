@@ -1,13 +1,8 @@
 <?php
-session_start();
-include "db-conn.php";
+require_once __DIR__ . '/db-conn.php';
 include "functions.php";
-
-// Check admin authentication
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header("Location: auth/login.php");
-    exit();
-}
+require_once __DIR__ . '/auth/guard.php';
+admin_jwt_guard();
 
 // Get department id from URL
 if (isset($_GET['id']) && !empty($_GET['id'])) {

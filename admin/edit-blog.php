@@ -1,12 +1,7 @@
 <?php
-include "db-conn.php";
-
-// Check if user is logged in and has admin privileges (add your own auth check)
-// session_start();
-// if (!isset($_SESSION['admin_logged_in'])) {
-//     header("Location: login.php");
-//     exit();
-// }
+require_once __DIR__ . '/db-conn.php';
+require_once __DIR__ . '/auth/guard.php';
+admin_jwt_guard();
 
 // Initialize variables
 $error = '';

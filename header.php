@@ -62,13 +62,7 @@ $logo = get_header_logo();
                 <li>
                     <i class="fal fa-user-md"></i>
                     <a href="<?= BASE_URL ?>doctor-login/">
-                        <?php
-                        if(isset($_SESSION['doctor_logged_in'])){
-                            echo "Dr." . htmlspecialchars($doctor_name);
-                        }else{
-                            echo "Doctors / Login";
-                        }
-                        ?>
+                       Doctors / Login
                     </a>
                 </li>
                 <li class="suport">
@@ -124,6 +118,23 @@ $logo = get_header_logo();
                                             
                                         </ul>
                                     </li>
+                                    
+
+                                    <li>
+                                        <a href="#">
+                                            Book Online
+                                            <i class="fas fa-chevron-down"></i>
+                                        </a>
+                                        <ul class="submenu">
+                                            <?php
+                                            $online_book = get_online_book($limit = 15);
+                                            foreach ($online_book as $ob) {
+                                            ?>
+                                                <li><a href="<?= BASE_URL ?>online-services/<?= $ob['slug_url'] ?>"><?= $ob['pro_name'] ?></a></li>
+                                            <?php } ?>
+                                            
+                                        </ul>
+                                    </li>
                                     <li>
                                         <a href="#">
                                             Our panel
@@ -147,22 +158,6 @@ $logo = get_header_logo();
                                             ?>
                                             
                                             <li><a href="#">Timing of online clinic</a></li>
-                                        </ul>
-                                    </li>
-
-                                    <li>
-                                        <a href="#">
-                                            Book Online
-                                            <i class="fas fa-chevron-down"></i>
-                                        </a>
-                                        <ul class="submenu">
-                                            <?php
-                                            $online_book = get_online_book($limit = 15);
-                                            foreach ($online_book as $ob) {
-                                            ?>
-                                                <li><a href="<?= BASE_URL ?>online-services/<?= $ob['slug_url'] ?>"><?= $ob['pro_name'] ?></a></li>
-                                            <?php } ?>
-                                            
                                         </ul>
                                     </li>
                                     <li> <a href="<?= BASE_URL ?>about-us.php">About Us </a></li>

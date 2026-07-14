@@ -1,14 +1,10 @@
 <?php
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
-if (session_status() === PHP_SESSION_NONE) session_start();
 require_once dirname(__DIR__) . '/util/function.php';
-require_once 'db-conn.php';
-
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: auth/login.php');
-    exit();
-}
+require_once __DIR__ . '/db-conn.php';
+require_once __DIR__ . '/auth/guard.php';
+admin_jwt_guard();
 
 $my_id = (int)$_SESSION['admin_id'];
 

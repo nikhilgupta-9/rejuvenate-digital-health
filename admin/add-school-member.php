@@ -1,7 +1,7 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
-if (!isset($_SESSION['admin_logged_in'])) { header("Location: auth/login.php"); exit(); }
-include "db-conn.php";
+require_once __DIR__ . '/db-conn.php';
+require_once __DIR__ . '/auth/guard.php';
+admin_jwt_guard();
 
 $school_id = intval($_GET['school_id'] ?? $_POST['school_id'] ?? 0);
 $default_type = in_array($_GET['type'] ?? '', ['Teacher','Student','Staff']) ? $_GET['type'] : 'Student';

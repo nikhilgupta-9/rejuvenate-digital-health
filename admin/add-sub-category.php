@@ -1,16 +1,7 @@
 <?php
-include "db-conn.php";
-
-// Start session at the very top
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-// Check admin authentication
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header("Location: login.php");
-    exit();
-}
+require_once __DIR__ . '/db-conn.php';
+require_once __DIR__ . '/auth/guard.php';
+admin_jwt_guard();
 
 $sql = "SELECT * FROM `categories` WHERE status = 1 ORDER BY categories ASC";
 $check = mysqli_query($conn, $sql);

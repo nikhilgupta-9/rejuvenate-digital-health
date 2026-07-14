@@ -1,9 +1,7 @@
 <?php
-session_start();
 include_once "../config/connect.php";
-
-// Check admin login
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+require_once __DIR__ . '/auth/guard.php';
+if (!admin_jwt_guard(true)) {
     header('HTTP/1.1 403 Forbidden');
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
     exit();

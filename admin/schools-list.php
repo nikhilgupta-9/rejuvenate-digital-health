@@ -1,7 +1,7 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
-if (!isset($_SESSION['admin_logged_in'])) { header("Location: auth/login.php"); exit(); }
-include "db-conn.php";
+require_once __DIR__ . '/db-conn.php';
+require_once __DIR__ . '/auth/guard.php';
+admin_jwt_guard();
 
 $total    = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM schools"))['c'];
 $pending  = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM schools WHERE status='Pending'"))['c'];

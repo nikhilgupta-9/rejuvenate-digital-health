@@ -1,12 +1,9 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
 require_once dirname(__DIR__) . '/util/function.php';
-require_once 'db-conn.php';
+require_once __DIR__ . '/db-conn.php';
 // require_once dirname(__DIR__) . '/util/mail_config.php';
-
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: auth/login.php'); exit();
-}
+require_once __DIR__ . '/auth/guard.php';
+admin_jwt_guard();
 
 // Only super_admin can create admin accounts
 $my_id = (int)$_SESSION['admin_id'];

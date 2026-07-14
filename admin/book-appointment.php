@@ -1,13 +1,8 @@
 <?php
-session_start();
 include_once "../config/connect.php";
 include_once "../util/function.php";
-
-// Check admin login
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header("Location: auth/login.php");
-    exit();
-}
+require_once __DIR__ . '/auth/guard.php';
+admin_jwt_guard();
 
 $error_message = "";
 $success_message = "";
