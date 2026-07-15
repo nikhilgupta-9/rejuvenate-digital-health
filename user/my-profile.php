@@ -62,29 +62,18 @@ if (!empty($user_data['dob']) && $user_data['dob'] != '0000-00-00') {
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/swiper-bundle.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/nice-select.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
     <style>
         .error { color: #dc3545; font-size: 0.875em; margin-top: 0.25rem; }
         .is-invalid { border-color: #dc3545; }
         .alert { border-radius: 8px; }
-        .profile-card { padding: 2rem; }
         .form-label { font-weight: 500; color: #333; margin-bottom: 0.5rem; }
-        .sidebar { position: sticky; top: 20px; }
     </style>
 </head>
 
 <body>
-    <?php include("../header.php") ?>
-    <section class="contact-appointment-section section-padding fix">
-        <div class="container">
-            <div class="row mb-5">
-                <div class="col-md-3">
-                   <?php include("sidebar.php") ?>
-                </div>
-                <!-- Main Content -->
-                <div class="col-lg-9">
-                    <!-- Mobile Toggle Button -->
-                    <span class="menu-btn d-lg-none mb-3" onclick="toggleMenu()">☰ Menu</span>
-                    
+    <?php $sidebar_active = 'profile'; include("sidebar.php"); ?>
+    <main class="patient-content">
                     <div class="profile-card shadow">
                         <h4 class="mb-4">Edit Profile</h4>
                         
@@ -213,18 +202,10 @@ if (!empty($user_data['dob']) && $user_data['dob'] != '0000-00-00') {
                             </div>
                         </form>
                     </div>
-                </div>
-            </div>
-        </div>
-    </section>
-    <?php include("../footer.php") ?>
-    
-    <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
+    </main>
+    <?php include("inc/scripts.php") ?>
+
     <script>
-        function toggleMenu() {
-            document.getElementById("sidebarMenu").classList.toggle("show");
-        }
-        
         // Auto-calculate age when date of birth changes
         document.querySelector('input[name="dob"]').addEventListener('change', function() {
             const dob = new Date(this.value);

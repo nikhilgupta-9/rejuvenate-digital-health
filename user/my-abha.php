@@ -96,6 +96,7 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/animate.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
   <style>
     :root {
       --ab: #00875a;
@@ -372,17 +373,8 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
 </head>
 
 <body>
-  <?php include("../header.php") ?>
-
-  <section class="contact-appointment-section section-padding fix">
-    <div class="container">
-      <div class="row mb-5">
-        <div class="col-md-3">
-          <?php include("sidebar.php") ?>
-        </div>
-
-        <div class="col-lg-9">
-          <span class="menu-btn d-lg-none mb-3" onclick="toggleMenu()">☰ Menu</span>
+  <?php $sidebar_active = 'abha'; include("sidebar.php"); ?>
+  <main class="patient-content">
 
           <?php if ($success): ?>
             <div class="alert alert-success alert-dismissible fade show">
@@ -941,12 +933,8 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
             </div><!-- /col-5 -->
 
           </div><!-- /row -->
-        </div><!-- /col-9 -->
-      </div>
-    </div>
-  </section>
-
-  <?php include("../footer.php") ?>
+  </main>
+  <?php include("inc/scripts.php") ?>
   <script>
     /* ── Formatters ──────────────────────────────────────────────────── */
     function fmtAbha(el, previewId) {
@@ -968,10 +956,6 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
         const p = document.getElementById(previewId);
         if (p) p.textContent = addr ? addr + '@abdm' : 'address@abdm';
       }
-    }
-
-    function toggleMenu() {
-      document.getElementById("sidebarMenu").classList.toggle("show");
     }
 
     /* ── Eye toggle ── */
