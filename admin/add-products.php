@@ -12,7 +12,7 @@ $check = mysqli_query($conn, $sql);
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-    <title>Add New Product | Sales Dashboard</title>
+    <title>Add Medical Service | Admin Panel</title>
     <link rel="icon" href="assets/img/logo.png" type="image/png">
 
     <?php include "links.php"; ?>
@@ -187,8 +187,8 @@ $check = mysqli_query($conn, $sql);
                             <div class="white_card_header">
                                 <div class="box_header m-0">
                                     <div class="main-title">
-                                        <h2 class="m-0">Add New Product</h2>
-                                        <p class="m-0 text-muted">Fill in the details below to add a new product to your inventory</p>
+                                        <h2 class="m-0">Add Medical Service</h2>
+                                        <p class="m-0 text-muted">Fill in the details below to add a new medical service or listing</p>
                                     </div>
                                 </div>
                             </div>
@@ -203,22 +203,22 @@ $check = mysqli_query($conn, $sql);
                                             </div>
                                             <div class="row">
                                                 <div class="col-md-6 mb-3">
-                                                    <label class="form-label required-field" for="proName">Product Name</label>
-                                                    <input type="text" class="form-control" name="pro_name" id="proName" placeholder="Enter product name" required />
+                                                    <label class="form-label required-field" for="proName">Service Name</label>
+                                                    <input type="text" class="form-control" name="pro_name" id="proName" placeholder="e.g. General Consultation, Blood Test, ECG" required />
                                                 </div>
                                                 <div class="col-md-6 mb-3">
-                                                    <label class="form-label required-field" for="brandName">Qualification</label>
-                                                    <input type="text" class="form-control" name="brand_name" id="brandName" placeholder="Enter Qualification eg- M.B.B.S., ..." required />
+                                                    <label class="form-label required-field" for="brandName">Doctor's Qualification</label>
+                                                    <input type="text" class="form-control" name="brand_name" id="brandName" placeholder="e.g. M.B.B.S., M.D., M.S." required />
                                                 </div>
                                             </div>
 
                                             <div class="col-md-12 mb-3">
-                                                <label class="form-label" for="inputEmail4">Short Description</label>
-                                                <textarea class="form-control" name="short_desc" required></textarea>
+                                                <label class="form-label required-field">Service Summary</label>
+                                                <textarea class="form-control" name="short_desc" placeholder="Brief summary shown in listings and search results" required></textarea>
                                             </div>
                                             <div class="col-md-12 mb-3">
-                                                <label class="form-label" for="inputEmail4">Product Description</label>
-                                                <textarea class="form-control" name="pro_desc" required></textarea>
+                                                <label class="form-label required-field">Full Service Description</label>
+                                                <textarea class="form-control" name="pro_desc" placeholder="Detailed description: what the service includes, procedure, expected outcomes, etc." required></textarea>
                                             </div>
                                         </div>
 
@@ -231,7 +231,7 @@ $check = mysqli_query($conn, $sql);
                                             <!-- Main Categories -->
                                             <div class="row mb-4">
                                                 <div class="col-md-12 mb-3">
-                                                    <label class="form-label required-field">Product Categories</label>
+                                                    <label class="form-label required-field">Service Category</label>
                                                     <div class="select-wrapper">
                                                         <input type="text" class="form-control" id="categorySearch"
                                                             placeholder="Search and select main categories..."
@@ -260,7 +260,7 @@ $check = mysqli_query($conn, $sql);
                                             <div class="row">
                                                 <div class="col-md-12 mb-3">
                                                     <div class="subcategory-section" id="subcategorySection">
-                                                        <label class="form-label">Product Subcategories</label>
+                                                        <label class="form-label">Service Sub-Category</label>
                                                         <div class="select-wrapper">
                                                             <input type="text" class="form-control" id="subcategorySearch"
                                                                 placeholder="Search and select subcategories..."
@@ -278,8 +278,8 @@ $check = mysqli_query($conn, $sql);
 
                                             <div class="row">
                                                 <div class="col-md-6 mb-3">
-                                                    <label class="form-label required-field" for="stock">Stock Quantity</label>
-                                                    <input type="number" class="form-control" name="stock" id="stock" placeholder="Available quantity" min="0" required />
+                                                    <label class="form-label required-field" for="stock">Total Slots / Stock</label>
+                                                    <input type="number" class="form-control" name="stock" id="stock" placeholder="Max slots available" min="0" required />
                                                 </div>
 
                                                 <div class="col-md-6 mb-3">
@@ -299,7 +299,7 @@ $check = mysqli_query($conn, $sql);
                                             </div>
                                             <div class="row">
                                                 <div class="col-md-4 mb-3">
-                                                    <label class="form-label required-field" for="mrp">Manufacturer's Price (MRP)</label>
+                                                    <label class="form-label required-field" for="mrp">Standard Price (MRP)</label>
                                                     <div class="input-group">
                                                         <span class="input-group-text">$</span>
                                                         <input type="number" class="form-control" name="mrp" id="mrp" placeholder="0.00" step="0.01" min="0" required />
@@ -307,7 +307,7 @@ $check = mysqli_query($conn, $sql);
                                                 </div>
 
                                                 <div class="col-md-4 mb-3">
-                                                    <label class="form-label required-field" for="sellingPrice">Selling Price</label>
+                                                    <label class="form-label required-field" for="sellingPrice">Discounted / Sale Price</label>
                                                     <div class="input-group">
                                                         <span class="input-group-text">$</span>
                                                         <input type="number" class="form-control" name="selling_price" id="sellingPrice" placeholder="0.00" step="0.01" min="0" required />
@@ -316,8 +316,8 @@ $check = mysqli_query($conn, $sql);
 
                                                 <!-- Add this in the Pricing Section after the wholesale price field -->
                                                 <div class="col-md-4 mb-3">
-                                                    <label class="form-label required-field" for="qty">Quantity</label>
-                                                    <input type="number" class="form-control" name="qty" id="qty" placeholder="Enter quantity" min="0" required />
+                                                    <label class="form-label required-field" for="qty">Quantity per Booking</label>
+                                                    <input type="number" class="form-control" name="qty" id="qty" placeholder="Units per booking" min="0" required />
                                                 </div>
                                             </div>
 
@@ -347,9 +347,9 @@ $check = mysqli_query($conn, $sql);
                                             </div>
                                             <div class="row">
                                                 <div class="col-md-12 mb-3">
-                                                    <label class="form-label required-field" for="pro_img">Upload Product Images</label>
+                                                    <label class="form-label required-field" for="pro_img">Upload Service Image</label>
                                                     <input type="file" class="form-control" name="pro_img[]" id="pro_img" multiple required />
-                                                    <small class="text-muted">You can select multiple images (JPEG, PNG, max 5MB each)</small>
+                                                    <small class="text-muted">Upload a representative image for this service (JPEG, PNG, max 5 MB)</small>
                                                     <div class="preview-image-container" id="imagePreview"></div>
                                                 </div>
                                             </div>
@@ -384,7 +384,7 @@ $check = mysqli_query($conn, $sql);
                                                 <i class="fas fa-undo me-2"></i>Reset Form
                                             </button>
                                             <button type="submit" class="btn btn-primary btn-submit" name="add-product">
-                                                <i class="fas fa-plus-circle me-2"></i>Add Product
+                                                <i class="fas fa-plus-circle me-2"></i>Add Medical Service
                                             </button>
                                         </div>
                                     </form>
