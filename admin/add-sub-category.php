@@ -151,6 +151,18 @@ function SlugUrl($string) {
                                             </div>
                                             
                                             <div class="row mb-3">
+                                                <!-- Department Description -->
+                                                <div class="col-md-12">
+                                                    <div class="common_input mb_15">
+                                                        <label class="form-label">Department Description</label>
+                                                        <textarea class="form-control" name="description" rows="6"
+                                                            placeholder="Describe this department for visitors — what it treats, key services, when to consult a specialist here…"></textarea>
+                                                        <small class="form-text text-muted">Shown on the public department page. This is different from the Meta Description below, which is only used by search engines.</small>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="row mb-3">
                                                 <!-- Meta Title -->
                                                 <div class="col-md-6">
                                                     <div class="common_input mb_15">
@@ -176,8 +188,8 @@ function SlugUrl($string) {
                                                 <!-- Meta Description -->
                                                 <div class="col-md-12">
                                                     <div class="common_input mb_15">
-                                                        <label class="form-label">Meta Description</label>
-                                                        <textarea class="form-control" name="meta_desc" rows="3" 
+                                                        <label class="form-label">Meta Description <span class="text-muted fw-normal">(SEO only — not shown to visitors)</span></label>
+                                                        <textarea class="form-control" name="meta_desc" rows="3"
                                                             placeholder="Brief description of the sub-department for search engines"></textarea>
                                                         <small class="form-text text-muted">Recommended: 150-160 characters</small>
                                                     </div>

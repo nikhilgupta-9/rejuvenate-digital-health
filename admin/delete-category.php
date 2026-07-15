@@ -1,5 +1,7 @@
 <?php
-include "db-conn.php";
+require_once __DIR__ . '/db-conn.php';
+require_once __DIR__ . '/auth/guard.php';
+admin_jwt_guard();
 
 if (isset($_GET['id'])) {
     $id = intval($_GET['id']); // Prevent SQL Injection

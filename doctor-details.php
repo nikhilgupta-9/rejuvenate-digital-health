@@ -5,6 +5,22 @@ include_once "util/function.php";
 
 $profile = getDoctorsBySlug();
 
+// Doctor's primary department — used to deep-link straight into the booking
+// wizard with both department and doctor pre-selected.
+$booking_department_slug = '';
+if (!empty($profile['id'])) {
+    $deptStmt = $conn->prepare("
+        SELECT sc.slug_url FROM doctor_departments dd
+        JOIN sub_categories sc ON sc.cate_id = dd.category_id
+        WHERE dd.doctor_id = ? AND sc.parent_id = 20873
+        LIMIT 1
+    ");
+    $deptStmt->bind_param('i', $profile['id']);
+    $deptStmt->execute();
+    $deptRow = $deptStmt->get_result()->fetch_assoc();
+    $booking_department_slug = $deptRow['slug_url'] ?? '';
+}
+
 if ($profile['is_verified'] == 1) {
   $verified = "Verified Profile";
   $verified_class = "verified-badge";
@@ -92,7 +108,7 @@ if ($profile['is_verified'] == 1) {
             </p>
           </div>
         </div>
-        <a href="<?= BASE_URL ?>contact/" class="appointment-btn">Book an Appointment</a>
+        <a href="<?= BASE_URL ?>book-appointment/?department=<?= urlencode($booking_department_slug) ?>&doctor_id=<?= (int) $profile['id'] ?>" class="appointment-btn">Book an Appointment</a>
       </div>
 
       <!-- Body Section -->

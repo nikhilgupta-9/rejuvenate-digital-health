@@ -39,8 +39,8 @@ $logo    = get_header_logo();
 
       <!-- Col 1: Brand -->
       <div class="col-xxl-4 col-xl-4 col-lg-5 col-md-6">
-        <a href="<?= BASE_URL ?>" class="rjv-footer-logo1" >
-          <img src="<?= BASE_URL . $logo ?>" alt="Rejuvenate Digital Health" style="max-width: 100%;">
+        <a href="<?= BASE_URL ?>" class="rjv-footer-logo">
+          <img src="<?= BASE_URL . $logo ?>" alt="Rejuvenate Digital Health">
         </a>
         <p class="rjv-footer-about">
           Providing high-quality medical care with a patient-centered approach — combining expert doctors, modern equipment, and advanced digital health solutions for better outcomes.
@@ -225,7 +225,3 @@ $logo    = get_header_logo();
   });
 })();
 </script>
-</script>
-<script src="<?= BASE_URL ?>assets/js/splitType.js"></script>
-<script src="<?= BASE_URL ?>assets/js/main.js"></script>
-<script src="<?= BASE_URL ?>assets/js/custom.js"></script>

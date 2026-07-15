@@ -1,8 +1,7 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
-include "db-conn.php";
-include_once "auth/login-sessions.php";
-if (!$is_admin) { header("Location: index.php"); exit(); }
+require_once __DIR__ . '/db-conn.php';
+require_once __DIR__ . '/auth/guard.php';
+admin_jwt_guard();
 
 $portal = $_GET['portal'] ?? 'all';   // all | patients | school
 $tab    = $_GET['tab']    ?? 'list';  // list | linked | unlinked | requests

@@ -1,6 +1,7 @@
 <?php
-session_start();
-include "db-conn.php";
+require_once __DIR__ . '/db-conn.php';
+require_once __DIR__ . '/auth/guard.php';
+admin_jwt_guard();
 include "functions.php";
 
 // Validate and get sub-category ID
@@ -17,6 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $parent_id = mysqli_real_escape_string($conn, $_POST['parent_id']);
     $cate_id = mysqli_real_escape_string($conn, $_POST['cate_id']);
     $categories = mysqli_real_escape_string($conn, $_POST['categories']);
+    $description = mysqli_real_escape_string($conn, $_POST['description']);
     $meta_title = mysqli_real_escape_string($conn, $_POST['meta_title']);
     $meta_desc = mysqli_real_escape_string($conn, $_POST['meta_desc']);
     $meta_key = mysqli_real_escape_string($conn, $_POST['meta_key']);
@@ -53,10 +55,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
     // Update query
-    $updateQuery = "UPDATE sub_categories SET 
+    $updateQuery = "UPDATE sub_categories SET
         parent_id = '$parent_id',
         cate_id = '$cate_id',
         categories = '$categories',
+        description = '$description',
         meta_title = '$meta_title',
         meta_desc = '$meta_desc',
         meta_key = '$meta_key',
@@ -258,10 +261,18 @@ while ($row = mysqli_fetch_assoc($parentResult)) {
                                     <!-- Slug URL -->
                                     <div class="col-md-6 mb-4">
                                         <label class="form-label">Slug URL <span class="text-danger">*</span></label>
-                                        <input type="text" class="form-control" name="slug_url" 
+                                        <input type="text" class="form-control" name="slug_url"
                                             value="<?= htmlspecialchars($subcategory['slug_url']) ?>" required>
                                     </div>
-                                    
+
+                                    <!-- Department Description -->
+                                    <div class="col-md-12 mb-4">
+                                        <label class="form-label">Department Description</label>
+                                        <textarea class="form-control" name="description" rows="6"
+                                            placeholder="Describe this department for visitors — what it treats, key services, when to consult a specialist here…"><?= htmlspecialchars($subcategory['description'] ?? '') ?></textarea>
+                                        <small class="text-muted">Shown on the public department page. This is different from the Meta Description below, which is only used by search engines.</small>
+                                    </div>
+
                                     <!-- Meta Title -->
                                     <div class="col-md-6 mb-4">
                                         <label class="form-label">Meta Title</label>
@@ -280,9 +291,9 @@ while ($row = mysqli_fetch_assoc($parentResult)) {
                                     
                                     <!-- Meta Description -->
                                     <div class="col-md-12 mb-4">
-                                        <label class="form-label">Meta Description</label>
+                                        <label class="form-label">Meta Description <span class="text-muted fw-normal">(SEO only — not shown to visitors)</span></label>
                                         <textarea class="form-control" name="meta_desc" rows="3"><?= htmlspecialchars($subcategory['meta_desc']) ?></textarea>
-                                        <small class="text-muted">Recommended: 150-160 characters</small>
+                                        <small class="text-muted">Recommended: 150-160 characters. This is the snippet Google shows in search results.</small>
                                     </div>
                                     
                                     <!-- Image Upload -->

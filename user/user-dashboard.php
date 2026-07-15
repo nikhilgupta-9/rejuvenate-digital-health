@@ -106,98 +106,25 @@ $stmt->close();
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/swiper-bundle.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/nice-select.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
   <style>
     .dashboard-stats {
         margin-bottom: 2rem;
     }
-    .stat-card {
-        background: white;
-        border-radius: 10px;
-        padding: 1.5rem;
-        box-shadow: 0 0 15px rgba(0,0,0,0.1);
-        margin-bottom: 1.5rem;
-        border-left: 4px solid #2c5aa0;
-    }
-    .stat-card h3 {
-        color: #2c5aa0;
-        margin-bottom: 0.5rem;
-        font-size: 2rem;
-    }
-    .stat-card p {
-        color: #666;
-        margin-bottom: 0;
-        font-weight: 500;
-    }
-    .user_dash_box {
-        background: white;
-        border-radius: 10px;
-        padding: 1.5rem;
-        text-align: center;
-        box-shadow: 0 0 15px rgba(0,0,0,0.1);
-        margin-bottom: 1.5rem;
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
-        border: 1px solid #e9ecef;
-    }
-    .user_dash_box:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 5px 25px rgba(0,0,0,0.15);
-    }
-    .user_dash_box img {
-        width: 60px;
-        height: 60px;
-        object-fit: cover;
-        border-radius: 50%;
-        margin-bottom: 1rem;
-    }
-    .user_dash_box h5 {
-        color: #2c5aa0;
-        margin-bottom: 0.5rem;
-        font-weight: 600;
-    }
-    .user_dash_box a {
-        text-decoration: none;
-        color: inherit;
-    }
     .recent-appointments {
         background: white;
-        border-radius: 10px;
+        border-radius: 12px;
         padding: 1.5rem;
-        box-shadow: 0 0 15px rgba(0,0,0,0.1);
+        box-shadow: 0 1px 6px rgba(0,0,0,.06);
         margin-top: 2rem;
-    }
-    .status-badge {
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 600;
-    }
-    .status-pending { background: #fff3cd; color: #856404; }
-    .status-confirmed { background: #d1ecf1; color: #0c5460; }
-    .status-completed { background: #d4edda; color: #155724; }
-    .status-cancelled { background: #f8d7da; color: #721c24; }
-    .welcome-message {
-        background: linear-gradient(135deg, #0C74C5, #0C74C5);
-        color: white;
-        padding: 2rem;
-        border-radius: 10px;
-        margin-bottom: 2rem;
     }
   </style>
 </head>
 
 <body>
-  <?php include("../header.php") ?>
-  <section class="contact-appointment-section section-padding fix">
-    <div class="container">
-      <div class="row mb-5">
-        <div class="col-md-3">
-          <?php include("sidebar.php") ?>
-        </div>
-        <!-- Main Content -->
-        <div class="col-lg-9">
-          <!-- Mobile Toggle Button -->
-          <span class="menu-btn d-lg-none mb-3" onclick="toggleMenu()">☰ Menu</span>
-          
+  <?php $sidebar_active = 'dashboard'; include("sidebar.php"); ?>
+  <main class="patient-content">
+
           <!-- Welcome Message -->
           <div class="welcome-message">
             <h3>Welcome back, <?= htmlspecialchars($_SESSION['user_name']) ?>! 👋</h3>
@@ -243,25 +170,29 @@ $stmt->close();
           <div class="dashboard-stats">
             <div class="row">
               <div class="col-md-3">
-                <div class="stat-card">
+                <div class="stat-card card-primary">
+                  <i class="fa fa-calendar bg-icon"></i>
                   <h3><?= $appointment_count ?></h3>
                   <p>Total Appointments</p>
                 </div>
               </div>
               <div class="col-md-3">
-                <div class="stat-card">
+                <div class="stat-card card-orange">
+                  <i class="fa fa-hourglass-half bg-icon"></i>
                   <h3><?= $pending_appointments ?></h3>
                   <p>Pending Appointments</p>
                 </div>
               </div>
               <div class="col-md-3">
-                <div class="stat-card">
+                <div class="stat-card card-teal2">
+                  <i class="fa fa-file-text-o bg-icon"></i>
                   <h3><?= $reports_count ?></h3>
                   <p>Medical Reports</p>
                 </div>
               </div>
               <div class="col-md-3">
-                <div class="stat-card">
+                <div class="stat-card card-purple">
+                  <i class="fa fa-shopping-bag bg-icon"></i>
                   <h3><?= $orders_count ?></h3>
                   <p>Supplement Orders</p>
                 </div>
@@ -367,15 +298,7 @@ $stmt->close();
             </div>
           </div>
           <?php endif; ?>
-        </div>
-      </div>
-    </div>
-  </section>
-  <?php include("../footer.php") ?>
-  <script>
-    function toggleMenu() {
-      document.getElementById("sidebarMenu").classList.toggle("show");
-    }
-  </script>
+  </main>
+  <?php include("inc/scripts.php") ?>
 </body>
 </html>

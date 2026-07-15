@@ -11,6 +11,8 @@ RewriteRule ^sitemap\.xml$ sitemap.php [L,QSA]
 
 # Rewrite Product Details URL
 RewriteRule ^department/([^/]+)/?$ e-cardiology.php?alias=$1 [L,QSA]
+RewriteRule ^departments/?$ departments.php? [L,QSA]
+RewriteRule ^book-appointment/?$ book-appointment.php? [L,QSA]
 RewriteRule ^online-services/([^/]+)/?$ book-your-medicine.php?alias=$1 [L,QSA]
 
 #for doctor profile detail page

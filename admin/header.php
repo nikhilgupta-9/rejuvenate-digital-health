@@ -66,24 +66,6 @@ if ($is_admin && isset($conn)) {
         </li>
 
         <li>
-            <a class="has-arrow" href="#"><i class="fas fa-layer-group" style="color: #2ecc71;"></i> <span>Categories</span></a>
-            <ul>
-                <li><a href="view-categories.php">Service Categories</a></li>
-                <li><a href="view-sub-categories.php">Departments</a></li>
-                <li><a href="manage-onilne-services.php">Online Services</a></li>
-            </ul>
-        </li>
-
-        <li>
-            <a class="has-arrow" href="#"><i class="fas fa-box-open" style="color: #f39c12;"></i> <span>Products</span></a>
-            <ul>
-                <li><a href="add-products.php">Add Products</a></li>
-                <li><a href="show-products.php">Show Products</a></li>
-                <li><a href="show-products-review.php">Product Reviews</a></li>
-            </ul>
-        </li>
-
-        <li>
             <a class="has-arrow" href="#"><i class="fas fa-blog" style="color: #ff7f50;"></i> <span>Blog</span></a>
             <ul>
                 <li><a href="view-all-blog.php">All Posts</a></li>
@@ -115,6 +97,24 @@ if ($is_admin && isset($conn)) {
         <li class="menu-label">Healthcare Operations</li>
 
         <?php if ($is_admin): ?>
+        <li>
+            <a class="has-arrow" href="#"><i class="fas fa-stethoscope" style="color: #2ecc71;"></i> <span>Medical Departments</span></a>
+            <ul>
+                <li><a href="view-categories.php">Categories</a></li>
+                <li><a href="view-sub-categories.php">Doctor Departments</a></li>
+            </ul>
+        </li>
+
+        <li>
+            <a class="has-arrow" href="#"><i class="fas fa-briefcase-medical" style="color: #f39c12;"></i> <span>Hospital Services</span></a>
+            <ul>
+                <li><a href="show-products.php">All Services</a></li>
+                <li><a href="add-products.php">Add New Service</a></li>
+                <li><a href="manage-onilne-services.php">HMIS Digital Services</a></li>
+                <!-- <li><a href="show-products-review.php">Service Reviews</a></li> -->
+            </ul>
+        </li>
+
         <li>
             <a class="has-arrow" href="#"><i class="fas fa-user-md" style="color: #44a6ad;"></i> <span>Doctors</span></a>
             <ul>
@@ -167,6 +167,8 @@ if ($is_admin && isset($conn)) {
                 <li><a href="e-prescriptions.php">E-Prescriptions</a></li>
             </ul>
         </li>
+
+       
 
         <li>
             <a class="has-arrow" href="#"><i class="fas fa-users" style="color: #c0392b;"></i> <span>Patients</span></a>

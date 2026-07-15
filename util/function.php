@@ -298,6 +298,20 @@ function get_online_eServices()
     return $sub_category;
 }
 
+// Single department lookup by slug — used for the department detail page banner
+function get_department_by_slug($slug)
+{
+    global $conn;
+
+    $stmt = $conn->prepare("SELECT * FROM `sub_categories` WHERE `slug_url` = ? AND `parent_id` = 20873 AND `status` = 1 LIMIT 1");
+    $stmt->bind_param('s', $slug);
+    $stmt->execute();
+    $department = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    return $department ?: null;
+}
+
 function get_doctor_byDepartment()
 {
     global $conn;
@@ -307,31 +321,28 @@ function get_doctor_byDepartment()
         exit();
     }
 
-    $alias = mysqli_real_escape_string($conn, $_GET['alias']);
+    $alias = $_GET['alias'];
     $doctors = [];
 
-    $sql = "SELECT d.*, dd.doctor_id, dd.category_id, 
-            sc.categories as depart_name, sc.cate_id, 
+    $stmt = $conn->prepare("SELECT d.*, dd.doctor_id, dd.category_id,
+            sc.categories as depart_name, sc.cate_id,
             sc.slug_url as department_slug
             FROM doctors d
-            LEFT JOIN doctor_departments dd 
+            LEFT JOIN doctor_departments dd
                 ON d.id = dd.doctor_id
-            LEFT JOIN sub_categories sc 
+            LEFT JOIN sub_categories sc
                 ON dd.category_id = sc.cate_id
-            WHERE sc.slug_url = '$alias'
+            WHERE sc.slug_url = ?
             AND d.status = 'Active'
-            ORDER BY d.id";
-
-    $result = mysqli_query($conn, $sql);
-
-    if (!$result) {
-        error_log("Database error: " . mysqli_error($conn));
-        return $doctors;
-    }
+            ORDER BY d.id");
+    $stmt->bind_param('s', $alias);
+    $stmt->execute();
+    $result = $stmt->get_result();
 
     while ($row = mysqli_fetch_assoc($result)) {
         $doctors[] = $row;
     }
+    $stmt->close();
 
     return $doctors;
 }
@@ -811,9 +822,16 @@ function send_verification_otp($email, $mobile, $otp_code) {
     return $results;
 }
 
+/**
+ * Insert the appointment and (best-effort) email a notification.
+ * Returns the new appointment's insert ID on success, or false if the
+ * booking itself could not be saved. A failed notification email does
+ * NOT cause this to return false — see the catch block below.
+ */
 function send_appointment_email( $data) {
      // 1️⃣ Insert appointment into DB
-    if (!insert_appointment( $data)) {
+    $appointmentId = insert_appointment( $data);
+    if (!$appointmentId) {
         return false;
     }
     $mail = new PHPMailer(true);
@@ -858,7 +876,8 @@ function send_appointment_email( $data) {
                     <tr><td class='label'>Name</td><td>{$data['name']}</td></tr>
                     <tr><td class='label'>Email</td><td>{$data['email']}</td></tr>
                     <tr><td class='label'>Phone</td><td>{$data['phone']}</td></tr>
-                    <tr><td class='label'>Department</td><td>{$data['department']}</td></tr>
+                    <tr><td class='label'>Department</td><td>{$data['department']}</td></tr>" .
+                    (!empty($data['doctor_name']) ? "<tr><td class='label'>Preferred Doctor</td><td>{$data['doctor_name']}</td></tr>" : "") . "
                     <tr><td class='label'>Date</td><td>{$data['date']}</td></tr>
                     <tr><td class='label'>Time</td><td>{$data['time']}</td></tr>
                 </table>
@@ -877,33 +896,79 @@ function send_appointment_email( $data) {
             "Email: {$data['email']}\n" .
             "Phone: {$data['phone']}\n" .
             "Department: {$data['department']}\n" .
+            (!empty($data['doctor_name']) ? "Preferred Doctor: {$data['doctor_name']}\n" : "") .
             "Date: {$data['date']}\n" .
             "Time: {$data['time']}\n";
 
         $mail->send();
-        return true;
+        return $appointmentId;
 
     } catch (Exception $e) {
+        // The appointment is already saved in the database at this point (step 1
+        // above) — that's the part that actually matters. A failed notification
+        // email is a delivery problem, not a booking failure, so it must not make
+        // the patient think their appointment didn't go through.
         error_log("Appointment Mail Error: " . $mail->ErrorInfo);
-        return false;
+        return $appointmentId;
     }
 }
 
+/**
+ * Insert a new appointment request.
+ * Returns the new appointment's insert ID on success, or false on failure.
+ *
+ * Required $data keys: name, email, phone, department, date, time
+ * Optional: doctor_id, doctor_name, abha_number, user_id, notes,
+ *           appointment_type ('online'|'clinic', default 'online'),
+ *           visit_person ('self'|'other', default 'self'), visited_person_name,
+ *           consent_given (bool)
+ */
 function insert_appointment($data) {
     global $conn;
+
+    // doctor_id is optional — set when the request came from a specific doctor's
+    // "Book an Appointment" button so the request is actually tied to that doctor,
+    // not just a free-text department name.
+    $doctorId = !empty($data['doctor_id']) ? (int) $data['doctor_id'] : null;
+
+    if ($doctorId) {
+        // Confirm it's a real, active doctor before trusting client input
+        $chk = mysqli_prepare($conn, "SELECT id FROM doctors WHERE id = ? AND status = 'Active' LIMIT 1");
+        mysqli_stmt_bind_param($chk, "i", $doctorId);
+        mysqli_stmt_execute($chk);
+        if (!mysqli_stmt_get_result($chk)->fetch_assoc()) {
+            $doctorId = null;
+        }
+        mysqli_stmt_close($chk);
+    }
+
+    $userId = !empty($data['user_id']) ? (int) $data['user_id'] : null;
+
+    $visitPerson = ($data['visit_person'] ?? 'self') === 'other' ? 'other' : 'self';
+    $visitedPersonName = $visitPerson === 'other' ? trim($data['visited_person_name'] ?? '') : null;
+
+    $consentGiven = !empty($data['consent_given']) ? 1 : 0;
+    $consentAt    = $consentGiven ? date('Y-m-d H:i:s') : null;
 
     $sql = "INSERT INTO appointments (
                 patient_name,
                 patient_email,
                 patient_phone,
+                abha_number,
+                user_id,
+                doctor_id,
                 appointment_date,
                 appointment_time,
                 purpose,
+                notes,
                 appointment_type,
                 visit_person,
+                visited_person_name,
+                consent_given,
+                consent_at,
                 status,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'self', 'pending', NOW())";
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())";
 
     $stmt = mysqli_prepare($conn, $sql);
 
@@ -916,26 +981,37 @@ function insert_appointment($data) {
     $name            = $data['name'];
     $email           = $data['email'];
     $phone           = $data['phone'];
+    $abhaNumber      = !empty($data['abha_number']) ? $data['abha_number'] : null;
     $date            = $data['date'];
     $time            = $data['time'];
     $department      = $data['department'];
-    $appointmentType = 'online';
+    $notes           = trim($data['notes'] ?? '');
+    $appointmentType = ($data['appointment_type'] ?? 'online') === 'clinic' ? 'clinic' : 'online';
 
     // ✅ THEN BIND
     mysqli_stmt_bind_param(
         $stmt,
-        "sssssss",
+        "ssssiisssssssis",
         $name,
         $email,
         $phone,
+        $abhaNumber,
+        $userId,
+        $doctorId,
         $date,
         $time,
         $department,
-        $appointmentType
+        $notes,
+        $appointmentType,
+        $visitPerson,
+        $visitedPersonName,
+        $consentGiven,
+        $consentAt
     );
 
     // ✅ EXECUTE
     $result = mysqli_stmt_execute($stmt);
+    $insertId = $result ? mysqli_insert_id($conn) : false;
 
     if (!$result) {
         error_log("Execute failed: " . mysqli_stmt_error($stmt));
@@ -943,10 +1019,93 @@ function insert_appointment($data) {
 
     mysqli_stmt_close($stmt);
 
-    return $result;
+    return $insertId;
 }
 
+/**
+ * Active doctors practising in a given department (by department slug).
+ * Used by the public "Book an Appointment" page's department -> doctor step.
+ */
+function get_doctors_by_department_slug($slug) {
+    global $conn;
+    $doctors = [];
 
+    $stmt = mysqli_prepare($conn, "
+        SELECT DISTINCT d.id, d.name, d.slug_url, d.degrees, d.specialization,
+               d.experience_years, d.rating, d.languages, d.profile_image,
+               d.consultation_fee, d.hpr_verified
+        FROM doctors d
+        JOIN doctor_departments dd ON dd.doctor_id = d.id
+        JOIN sub_categories sc ON sc.cate_id = dd.category_id
+        WHERE sc.slug_url = ? AND sc.parent_id = 20873 AND d.status = 'Active'
+        ORDER BY d.name ASC
+    ");
+    if (!$stmt) {
+        error_log("Prepare failed: " . mysqli_error($conn));
+        return $doctors;
+    }
+    mysqli_stmt_bind_param($stmt, 's', $slug);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    while ($row = mysqli_fetch_assoc($result)) {
+        $doctors[] = $row;
+    }
+    mysqli_stmt_close($stmt);
 
+    return $doctors;
+}
+
+/**
+ * Available appointment slots for a doctor on a given date.
+ * Standard clinic hours 9:00–17:30 in 30-minute steps with a 12:00–14:00
+ * lunch break, minus whatever is already booked (pending/approved) for
+ * that doctor on that date. Past times on today's date are excluded.
+ *
+ * Returns [ ['time' => '09:00:00', 'display' => '09:00 AM', 'booked' => bool], ... ]
+ */
+function get_available_slots($doctorId, $date) {
+    global $conn;
+
+    $doctorId = (int) $doctorId;
+    $slots = [];
+
+    $timeSlots = [
+        '09:00:00' => '09:00 AM', '09:30:00' => '09:30 AM',
+        '10:00:00' => '10:00 AM', '10:30:00' => '10:30 AM',
+        '11:00:00' => '11:00 AM', '11:30:00' => '11:30 AM',
+        '12:00:00' => '12:00 PM',
+        '14:00:00' => '02:00 PM', '14:30:00' => '02:30 PM',
+        '15:00:00' => '03:00 PM', '15:30:00' => '03:30 PM',
+        '16:00:00' => '04:00 PM', '16:30:00' => '04:30 PM',
+        '17:00:00' => '05:00 PM', '17:30:00' => '05:30 PM',
+    ];
+
+    $bookedSlots = [];
+    $stmt = mysqli_prepare($conn, "
+        SELECT appointment_time FROM appointments
+        WHERE doctor_id = ? AND appointment_date = ? AND status IN ('pending', 'approved')
+    ");
+    mysqli_stmt_bind_param($stmt, 'is', $doctorId, $date);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    while ($row = mysqli_fetch_assoc($result)) {
+        $bookedSlots[] = $row['appointment_time'];
+    }
+    mysqli_stmt_close($stmt);
+
+    $isToday = $date === date('Y-m-d');
+    $now = date('H:i:s');
+
+    foreach ($timeSlots as $time => $display) {
+        if ($isToday && $time <= $now) continue; // don't offer times already past today
+        $slots[] = [
+            'time'   => $time,
+            'display' => $display,
+            'booked' => in_array($time, $bookedSlots, true),
+        ];
+    }
+
+    return $slots;
+}
 
 ?>

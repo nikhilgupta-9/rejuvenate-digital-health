@@ -682,7 +682,11 @@
                     scrub: 2,
                     start: "top 90%",
                     end: "top 70%",
-                    toggleActions: "play none none reverse",
+                    // toggleActions is ignored by GSAP whenever scrub is set, so it did
+                    // nothing here — removed. fastScrollEnd snaps the scrub tween to its
+                    // final state when a fast scroll skips past `end` before the 2s-eased
+                    // scrub catches up, instead of leaving the card stuck mid-transform.
+                    fastScrollEnd: true,
                     markers: false,
                 },
             });
@@ -712,7 +716,7 @@
                     scrub: 2,
                     start: "top 90%",
                     end: "top 70%",
-                    toggleActions: "play none none reverse",
+                    fastScrollEnd: true,
                     markers: false,
                 },
             });

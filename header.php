@@ -15,7 +15,7 @@ $logo = get_header_logo();
                 <div class="offcanvas__top mb-5 d-flex justify-content-between align-items-center">
                     <div class="offcanvas__logo">
                         <a href="<?= BASE_URL ?>">
-                            <img src="<?= BASE_URL.$logoo ?>" alt="logo-img">
+                            <img src="<?= BASE_URL.$logo ?>" alt="logo-img">
                         </a>
                     </div>
                     <div class="offcanvas__close">
@@ -26,7 +26,7 @@ $logo = get_header_logo();
                 </div>
 
                 <div class="mobile-menu fix mt-3"></div>
-                <a href="<?= BASE_URL ?>contact-us.php" class="theme-btn">
+                <a href="<?= BASE_URL ?>book-appointment/" class="theme-btn">
                     <i class="far fa-chevron-right"></i>
                     Appointment
                 </a>
@@ -107,6 +107,7 @@ $logo = get_header_logo();
                                             <i class="fas fa-chevron-down"></i>
                                         </a>
                                         <ul class="submenu">
+                                            <li><a href="<?=BASE_URL?>departments">All Departments</a></li>
                                             <?php
                                             $department = get_sub_category();
                                             foreach ($department as $dep) {

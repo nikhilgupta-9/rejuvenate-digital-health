@@ -9,6 +9,13 @@ use PHPMailer\PHPMailer\Exception;
 
 require_once( __DIR__ . "/../vendor/autoload.php"); // Adjust path based on your project structure
 
+// This file is both a library of read-only helpers (get_Category, get_Sub_Category, ...)
+// AND a direct POST target (forms submit straight to functions.php). Guard it here once so
+// every page that includes it — and every direct POST to it — requires a valid admin session,
+// instead of relying on each of the ~15 pages that use this file to remember to check separately.
+require_once __DIR__ . '/auth/guard.php';
+admin_jwt_guard();
+
 if (isset($_POST["add-categories"])) {
     // Initialize variables
     $errors = [];
@@ -148,6 +155,7 @@ if (isset($_POST["add-sub-categories"])) {
 
     $cate_id = mt_rand(11111, 99999);
     $cate_name = mysqli_real_escape_string($conn, $_POST["cate_name"]);
+    $description = mysqli_real_escape_string($conn, $_POST["description"] ?? '');
     $meta_title = mysqli_real_escape_string($conn, $_POST["meta_title"]);
     $meta_key = mysqli_real_escape_string($conn, $_POST["meta_key"]);
     $meta_desc = mysqli_real_escape_string($conn, $_POST["meta_desc"]);
@@ -155,8 +163,8 @@ if (isset($_POST["add-sub-categories"])) {
     $parent_id = mysqli_real_escape_string($conn, $_POST['parent_id']);
     $slug_url = strtolower(str_replace(" ", "-", $cate_name));
 
-    $sql = "INSERT INTO `sub_categories`( `parent_id`,`cate_id`, `categories`, `meta_title`, `meta_desc`, `meta_key`, `sub_cat_img`, `slug_url`, `status`, `added_on`) 
-            VALUES ('$parent_id','$cate_id','$cate_name','$meta_title','$meta_desc','$meta_key', '$uploadedImage', '$slug_url', 1, '$added_on')";
+    $sql = "INSERT INTO `sub_categories`( `parent_id`,`cate_id`, `categories`, `description`, `meta_title`, `meta_desc`, `meta_key`, `sub_cat_img`, `slug_url`, `status`, `added_on`)
+            VALUES ('$parent_id','$cate_id','$cate_name','$description','$meta_title','$meta_desc','$meta_key', '$uploadedImage', '$slug_url', 1, '$added_on')";
 
     $check = mysqli_query($conn, $sql);
     if ($check) {
@@ -180,25 +188,28 @@ function get_Category() {
     
     // Check if query was successful
     if (!$check) {
-        return "<tr><td colspan='7' class='text-center text-danger'>Error: " . mysqli_error($conn) . "</td></tr>";
+        return "<tr><td colspan='8' class='text-center text-danger'>Error: " . mysqli_error($conn) . "</td></tr>";
     }
-    
+
     // Check if有任何记录
     if (mysqli_num_rows($check) == 0) {
-        return "<tr><td colspan='7' class='text-center'>No categories found. <a href='add-categories.php'>Add your first category</a></td></tr>";
+        return "<tr><td colspan='8' class='text-center'>No categories found. <a href='add-categories.php'>Add your first category</a></td></tr>";
     }
-    
+
     $output = '';
     while ($result = mysqli_fetch_assoc($check)) {
         // Format status with badge
-        $status = $result['status'] == '1' 
+        $status = $result['status'] == '1'
             ? '<span class="badge_1">Active</span>'
             : '<span class="badge_2">Inactive</span>';
-        
+
         // Format date
         $added_on = date('d M Y', strtotime($result['added_on']));
-        
+
         $output .= "<tr>
+            <td class='text-center'>
+                <input type='checkbox' class='form-check-input row-checkbox' name='selected_ids[]' value='" . (int) $result['id'] . "'>
+            </td>
             <td class='text-center'>" . $sno++ . "</td>
             <td class='fw-semibold'>" . htmlspecialchars($result['cate_id']) . "</td>
             <td class='text-capitalize'>" . htmlspecialchars($result['categories']) . "</td>
@@ -312,36 +323,31 @@ if (isset($_POST["add-product"])) {
 function get_Sub_Category() {
     include "db-conn.php";
 
-    // Search functionality
-    $searchQuery = "";
-    if (isset($_GET['search']) && !empty($_GET['search'])) {
-        $search = mysqli_real_escape_string($conn, $_GET['search']);
-        $searchQuery = " WHERE sc.`categories` LIKE '%$search%' 
-                        OR sc.`slug_url` LIKE '%$search%' 
-                        OR c.`categories` LIKE '%$search%'";
-    }
-
-    // Optimized query with JOIN to get parent category in one query
-    $sql = "SELECT sc.*, c.categories as parent_category 
+    // Scoped to the "Medical Departments" parent category (cate_id 20873) —
+    // the specialties shown on the public department grid, not product/service categories.
+    $sql = "SELECT sc.*, c.categories as parent_category
             FROM `sub_categories` sc
             LEFT JOIN `categories` c ON sc.parent_id = c.cate_id
             where c.cate_id = 20873
             ORDER BY sc.id DESC";
-    
+
     $check = mysqli_query($conn, $sql);
     $sno = 1;
 
     if ($check && mysqli_num_rows($check) > 0) {
         while ($result = mysqli_fetch_assoc($check)) {
             // Status badge
-            $status = $result['status'] == '1' 
-                ? '<span class="badge bg-success bg-opacity-10 text-success text-light">Active</span>'
-                : '<span class="badge bg-danger bg-opacity-10 text-danger text-light">Inactive</span>';
-            
+            $status = $result['status'] == '1'
+                ? '<span class="badge_1">Active</span>'
+                : '<span class="badge_2">Inactive</span>';
+
             // Format date
             $added_on = date('d M Y', strtotime($result['added_on']));
-            
+
             echo "<tr>
+                    <td class='text-center'>
+                        <input type='checkbox' class='form-check-input row-checkbox' name='selected_ids[]' value='" . (int) $result['id'] . "'>
+                    </td>
                     <td class='text-center'>" . $sno++ . "</td>
                     <td class='fw-semibold'>" . htmlspecialchars($result['cate_id']) . "</td>
                     <td class='text-capitalize'>" . htmlspecialchars(ucwords($result['categories'])) . "</td>
@@ -351,13 +357,13 @@ function get_Sub_Category() {
                     <td class='text-center'>" . $added_on . "</td>
                     <td class='text-center'>
                         <div class='d-flex justify-content-center gap-2'>
-                            <a href='edit_sub_category.php?id=" . $result['cate_id'] . "' 
-                               class='btn btn-sm btn-outline-primary rounded-circle p-2' 
+                            <a href='edit_sub_category.php?id=" . $result['cate_id'] . "'
+                               class='btn btn-sm btn-outline-primary rounded-circle p-2'
                                data-bs-toggle='tooltip' title='Edit'>
                                 <i class='fas fa-pen fs-6'></i>
                             </a>
-                            <a href='delete_sub_category.php?id=" . $result['cate_id'] . "' 
-                               onclick='return confirm(\"Are you sure you want to delete this sub-category?\")' 
+                            <a href='delete_sub_category.php?id=" . $result['cate_id'] . "'
+                               onclick='return confirm(\"Are you sure you want to delete this sub-category?\")'
                                class='btn btn-sm btn-outline-danger rounded-circle p-2'
                                data-bs-toggle='tooltip' title='Delete'>
                                 <i class='fas fa-trash fs-6'></i>

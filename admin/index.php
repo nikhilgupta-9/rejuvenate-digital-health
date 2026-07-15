@@ -1,7 +1,7 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
-include "db-conn.php";
-include_once "auth/login-sessions.php";
+require_once __DIR__ . '/db-conn.php';
+require_once __DIR__ . '/auth/guard.php';
+admin_jwt_guard();
 
 // Core stats
 // $total_revenue   = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(order_total),0) as t FROM orders_new WHERE status='completed'"))['t'];
