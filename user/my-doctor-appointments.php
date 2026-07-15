@@ -356,13 +356,52 @@ if (isset($_GET['success'])) {
         margin-bottom: 20px;
         width: 100%;
     }
-    
+
+    @media (max-width: 991px) {
+        /* Stack sidebar below content on tablet */
+        .col-md-3 { order: 2; }
+        .col-lg-9 { order: 1; }
+    }
+
     @media (max-width: 768px) {
         .mobile-menu-btn { display: block; }
         .sidebar { display: none; }
         .sidebar.show { display: block; }
-        .booking-table .table-responsive { overflow-x: auto; }
-        .stat-card { margin-bottom: 10px; }
+
+        /* Profile card padding */
+        .profile-card { padding: 1rem; }
+
+        /* Stat cards: 2 per row, compact */
+        .stat-card { margin-bottom: 10px; padding: .75rem .5rem; }
+        .stat-number { font-size: 1.5rem; }
+
+        /* Filter card */
+        .filter-card { padding: 1rem; }
+        .status-tabs .nav-link {
+            padding: 7px 12px;
+            font-size: .8rem;
+            margin-right: 3px;
+            margin-bottom: 4px;
+        }
+
+        /* Appointment card mobile tweaks */
+        .appointment-card { padding: 1rem; }
+        .appointment-card .doctor-avatar { width: 48px; height: 48px; }
+
+        /* Action buttons: full row on mobile */
+        .appointment-card .appointment-actions { display: flex; gap: 6px; }
+        .appointment-card .d-flex.justify-content-between { flex-wrap: wrap; gap: 8px; }
+
+        /* Table: hide on mobile handled by d-none d-md-block */
+        /* Header button stacking */
+        .profile-card .d-flex.justify-content-between { flex-direction: column; gap: 10px; }
+        .profile-card .d-flex.justify-content-between .btn { width: 100%; text-align: center; }
+    }
+
+    @media (max-width: 480px) {
+        .status-tabs .nav { flex-wrap: wrap; }
+        .status-tabs .nav-link { font-size: .75rem; padding: 6px 10px; }
+        .search-box .form-control { font-size: .88rem; }
     }
     
     /* Empty State */
