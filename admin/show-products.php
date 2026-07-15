@@ -117,16 +117,21 @@ include "db-conn.php";
                                 <div class="QA_section">
                                     <div class="QA_table mb_30">
                                         <div class="table-responsive">
-                                            <table class="table table-striped table-bordered align-middle text-center">
+                                            <table class="table table-striped table-bordered align-middle text-center" style="font-size:.88rem;">
                                                 <thead class="table-light">
                                                     <tr>
                                                         <th>#</th>
                                                         <th>ID</th>
-                                                        <th>Product</th>
+                                                        <th>Product Name</th>
+                                                        <th>Qualification</th>
                                                         <th>Category</th>
                                                         <th>Image</th>
                                                         <th>MRP</th>
                                                         <th>Sale Price</th>
+                                                        <th>Stock</th>
+                                                        <th>Qty</th>
+                                                        <th>Inquiry</th>
+                                                        <th>Special Offer</th>
                                                         <th>Status</th>
                                                         <th>Actions</th>
                                                     </tr>
@@ -144,8 +149,8 @@ include "db-conn.php";
 
                                                     if (!empty($search)) {
                                                         $searchTerm = mysqli_real_escape_string($conn, $search);
-                                                        $sql .= " WHERE pro_name LIKE '%$searchTerm%' OR pro_id LIKE '%$searchTerm%'";
-                                                        $countSql .= " WHERE pro_name LIKE '%$searchTerm%' OR pro_id LIKE '%$searchTerm%'";
+                                                        $sql .= " WHERE pro_name LIKE '%$searchTerm%' OR pro_id LIKE '%$searchTerm%' OR brand_name LIKE '%$searchTerm%'";
+                                                        $countSql .= " WHERE pro_name LIKE '%$searchTerm%' OR pro_id LIKE '%$searchTerm%' OR brand_name LIKE '%$searchTerm%'";
                                                     }
 
                                                     $sql .= " ORDER BY pro_id DESC LIMIT $offset, $perPage";
@@ -157,44 +162,63 @@ include "db-conn.php";
 
                                                     if (mysqli_num_rows($result) > 0) {
                                                         while ($row = mysqli_fetch_assoc($result)) {
-                                                            $status_text = $row['status'] == "1" ? "Active" : "Inactive";
-                                                            $status_color = $row['status'] == "1" ? "text-success" : "text-danger";
-
-
-
+                                                            $status_text  = $row['status'] == "1" ? "Active"   : "Inactive";
+                                                            $status_color = $row['status'] == "1" ? "success"  : "danger";
+                                                            $inquiry      = $row['new_arrival'] == "1" ? "Yes" : "No";
+                                                            $special      = $row['trending']    == "1" ? "Yes" : "No";
                                                     ?>
                                                             <tr>
                                                                 <td><?= $sno++ ?></td>
                                                                 <td class="fw-bold"><?= htmlspecialchars($row['pro_id']) ?></td>
-                                                                <td><?= htmlspecialchars($row['pro_name']) ?></td>
+                                                                <td class="text-start">
+                                                                    <strong><?= htmlspecialchars($row['pro_name']) ?></strong>
+                                                                    <?php if (!empty($row['short_desc'])): ?>
+                                                                        <br><small class="text-muted"><?= htmlspecialchars(mb_strimwidth(strip_tags($row['short_desc']), 0, 60, '…')) ?></small>
+                                                                    <?php endif; ?>
+                                                                </td>
+                                                                <td><?= htmlspecialchars($row['brand_name'] ?? '—') ?></td>
                                                                 <?php
-                                                                $sql_cat = "SELECT * FROM `categories` where `cate_id` = {$row['pro_cate']} ORDER BY id DESC";
-                                                                $res_cat = mysqli_query($conn, $sql_cat);
-                                                                if($res_cat){
-                                                                    $row_cat = mysqli_fetch_assoc($res_cat);
-                                                                    $cat_name = $row_cat['categories'];
-                                                                }else{
-                                                                    $cat_name = $row['pro_cate'];
-                                                                }
+                                                                $cateId  = (int)$row['pro_cate'];
+                                                                $s_cat   = $conn->prepare("SELECT categories FROM categories WHERE cate_id = ? LIMIT 1");
+                                                                $s_cat->bind_param('i', $cateId);
+                                                                $s_cat->execute();
+                                                                $r_cat   = $s_cat->get_result()->fetch_assoc();
+                                                                $s_cat->close();
+                                                                $cat_name = $r_cat['categories'] ?? $row['pro_cate'];
                                                                 ?>
                                                                 <td><?= htmlspecialchars($cat_name) ?></td>
                                                                 <td>
                                                                     <img src="assets/img/uploads/<?= htmlspecialchars($row['pro_img']) ?>"
                                                                         alt="<?= htmlspecialchars($row['pro_name']) ?>"
-                                                                        style="width: 80px;" class="img-thumbnail">
+                                                                        style="width: 60px; height: 60px; object-fit:cover;" class="img-thumbnail">
                                                                 </td>
-                                                                <td><del>₹<?= number_format($row['mrp'], 2) ?></del></td>
-                                                                <td class="text-primary">
-                                                                    ₹<?= number_format($row['selling_price'], 2) ?></td>
-                                                                <td class="<?= $status_color ?>"><?= $status_text ?></td>
+                                                                <td><del class="text-muted">₹<?= number_format($row['mrp'], 2) ?></del></td>
+                                                                <td class="text-primary fw-semibold">₹<?= number_format($row['selling_price'], 2) ?></td>
+                                                                <td><?= (int)($row['stock'] ?? 0) ?></td>
+                                                                <td><?= (int)($row['qty']   ?? 0) ?></td>
+                                                                <td>
+                                                                    <span class="badge bg-<?= $inquiry === 'Yes' ? 'info' : 'secondary' ?>">
+                                                                        <?= $inquiry ?>
+                                                                    </span>
+                                                                </td>
+                                                                <td>
+                                                                    <span class="badge bg-<?= $special === 'Yes' ? 'warning text-dark' : 'secondary' ?>">
+                                                                        <?= $special ?>
+                                                                    </span>
+                                                                </td>
+                                                                <td>
+                                                                    <span class="badge bg-<?= $status_color ?>">
+                                                                        <?= $status_text ?>
+                                                                    </span>
+                                                                </td>
                                                                 <td>
                                                                     <div class="d-flex justify-content-center">
                                                                         <a href="edit_products.php?edit_product_details=<?= $row['pro_id'] ?>"
-                                                                            class="btn btn-outline-info btn-sm me-2">
+                                                                            class="btn btn-outline-info btn-sm me-2" title="Edit">
                                                                             <i class="fas fa-edit"></i>
                                                                         </a>
                                                                         <a href="product_delete.php?delete=<?= $row['pro_id'] ?>"
-                                                                            class="btn btn-outline-danger btn-sm"
+                                                                            class="btn btn-outline-danger btn-sm" title="Delete"
                                                                             onclick="return confirm('Are you sure you want to delete this product?')">
                                                                             <i class="fas fa-trash-alt"></i>
                                                                         </a>
@@ -204,7 +228,7 @@ include "db-conn.php";
                                                     <?php
                                                         }
                                                     } else {
-                                                        echo '<tr><td colspan="9" class="text-center text-muted py-4">No products found</td></tr>';
+                                                        echo '<tr><td colspan="14" class="text-center text-muted py-4">No products found</td></tr>';
                                                     }
                                                     ?>
                                                 </tbody>
@@ -258,10 +282,13 @@ include "db-conn.php";
             return new bootstrap.Tooltip(tooltipTriggerEl);
         });
 
-        // Focus search input when search icon is clicked
-        document.querySelector('.search-box i').addEventListener('click', function() {
-            this.parentElement.querySelector('input').focus();
-        });
+        // Focus search input on icon click (if icon present)
+        var searchIcon = document.querySelector('.search-box i');
+        if (searchIcon) {
+            searchIcon.addEventListener('click', function() {
+                this.parentElement.querySelector('input').focus();
+            });
+        }
     </script>
 </body>
 
