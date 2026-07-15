@@ -279,6 +279,7 @@ $max_date = date('Y-m-d', strtotime('+30 days'));
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
     <style>
         /* Global Styles */
         * {
@@ -826,18 +827,8 @@ $max_date = date('Y-m-d', strtotime('+30 days'));
 </head>
 
 <body>
-    <?php include("../header.php") ?>
-    
-    <section class="contact-appointment-section section-padding fix">
-        <div class="container">
-            <div class="row mb-5">
-                 <!-- Sidebar -->
-               <div class="col-md-3">
-                   <?php include("sidebar.php") ?>
-                </div>
-                
-                <!-- Main Content -->
-                <div class="col-lg-9">
+    <?php $sidebar_active = 'bookings'; include("sidebar.php"); ?>
+    <main class="patient-content">
                     <div class="main-content">
                         <!-- Page Header -->
                         <div class="mb-4">
@@ -927,7 +918,7 @@ $max_date = date('Y-m-d', strtotime('+30 days'));
                                 <?php foreach ($popular_doctors as $doctor): ?>
                                     <div class="doctor-card">
                                         <div class="doctor-header">
-                                            <?php if (!empty($doctor['profile_image'])): ?>
+                                            <?php if (!empty($doctor['profile_image']) && file_exists('../admin/' . $doctor['profile_image'])): ?>
                                                 <img src="<?= BASE_URL . 'admin/' . htmlspecialchars($doctor['profile_image']) ?>" 
                                                      alt="Dr. <?= htmlspecialchars($doctor['name']) ?>" 
                                                      class="doctor-avatar">
@@ -947,7 +938,7 @@ $max_date = date('Y-m-d', strtotime('+30 days'));
                                             </div>
                                             <div class="doctor-info">
                                                 <i class="fa fa-star"></i>
-                                                <span><?= number_format($doctor['rating'], 1) ?> Rating</span>
+                                                <span><?= $doctor['rating'] ? number_format($doctor['rating'], 1) : 'N/A'?> Rating</span>
                                             </div>
                                             <div class="doctor-info">
                                                 <i class="fa fa-language"></i>
@@ -961,9 +952,9 @@ $max_date = date('Y-m-d', strtotime('+30 days'));
                                         
                                         <div class="doctor-footer">
                                             <div class="consultation-fee">
-                                                ₹<?= number_format($doctor['consultation_fee']) ?>
+                                                ₹ <?= $doctor['consultation_fee'] ? number_format($doctor['consultation_fee']) : 'N/A' ?>
                                             </div>
-                                            <button class="btn-select" onclick="selectDoctor(<?= $doctor['id'] ?>, '<?= htmlspecialchars($doctor['name']) ?>', <?= $doctor['consultation_fee'] ?>)">
+                                            <button class="btn-select" onclick="selectDoctor(<?= $doctor['id'] ?>, '<?= htmlspecialchars($doctor['name']) ?>', <?= $doctor['consultation_fee'] ?$doctor['consultation_fee'] : 'N/A' ?>)">
                                                 <i class="fa fa-check"></i> Select
                                             </button>
                                         </div>
@@ -1012,13 +1003,9 @@ $max_date = date('Y-m-d', strtotime('+30 days'));
                             </div>
                         <?php endif; ?>
                     </div>
-                </div>
-            </div>
-        </div>
-    </section>
-    
-    <?php include("../footer.php") ?>
-    
+    </main>
+    <?php include("inc/scripts.php") ?>
+
     <!-- Success Modal -->
     <div class="modal fade" id="successModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
@@ -1047,30 +1034,10 @@ $max_date = date('Y-m-d', strtotime('+30 days'));
         </div>
     </div>
     
-    <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
     <script>
         let selectedDoctor = null;
         let selectedTimeValue = null;
-        
-        // Toggle mobile menu
-        function toggleMenu() {
-            const sidebar = document.querySelector('.sidebar');
-            sidebar.classList.toggle('show');
-        }
-        
-        // Close sidebar when clicking outside on mobile
-        document.addEventListener('click', function(event) {
-            const sidebar = document.querySelector('.sidebar');
-            const menuBtn = document.querySelector('.mobile-menu-btn');
-            
-            if (window.innerWidth <= 768 && 
-                !sidebar.contains(event.target) && 
-                !menuBtn.contains(event.target) && 
-                sidebar.classList.contains('show')) {
-                sidebar.classList.remove('show');
-            }
-        });
-        
+
         // Select doctor from popular doctors list
         function selectDoctor(doctorId, doctorName, fee) {
             const doctorSelect = document.getElementById('doctorSelect');

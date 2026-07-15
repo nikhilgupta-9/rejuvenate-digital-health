@@ -145,6 +145,7 @@ $contact = contact_us();
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
     <style>
         .user_dash_box img {
             width: 100%;
@@ -289,21 +290,8 @@ $contact = contact_us();
 </head>
 
 <body>
-    <?php include("../header.php") ?>
-    
-    <section class="contact-appointment-section section-padding fix">
-        <div class="container">
-            <div class="row mb-5">
-                <!-- Sidebar -->
-               <div class="col-md-3">
-                   <?php include("sidebar.php") ?>
-                </div>
-                
-                <!-- Main Content -->
-                <div class="col-lg-9">
-                    <!-- Mobile Toggle Button -->
-                    <span class="menu-btn d-lg-none mb-3" onclick="toggleMenu()">☰ Menu</span>
-                    
+    <?php $sidebar_active = 'reports'; include("sidebar.php"); ?>
+    <main class="patient-content">
                     <!-- Page Header -->
                     <div class="profile-card shadow mb-4">
                         <div class="d-flex justify-content-between align-items-center">
@@ -579,13 +567,9 @@ $contact = contact_us();
                             </div>
                         <?php endif; ?>
                     </div>
-                </div>
-            </div>
-        </div>
-    </section>
-    
-    <?php include("../footer.php") ?>
-    
+    </main>
+    <?php include("inc/scripts.php") ?>
+
     <!-- Help Modal -->
     <div class="modal fade" id="helpModal" tabindex="-1">
         <div class="modal-dialog">
@@ -616,23 +600,6 @@ $contact = contact_us();
     </div>
     
     <script>
-        function toggleMenu() {
-            document.getElementById("sidebarMenu").classList.toggle("show");
-        }
-        
-        // Close sidebar when clicking outside on mobile
-        document.addEventListener('click', function(event) {
-            const sidebar = document.getElementById('sidebarMenu');
-            const menuBtn = document.querySelector('.menu-btn');
-            
-            if (window.innerWidth <= 768 && 
-                !sidebar.contains(event.target) && 
-                !menuBtn.contains(event.target) && 
-                sidebar.classList.contains('show')) {
-                sidebar.classList.remove('show');
-            }
-        });
-        
         function printReports() {
             const printContent = document.getElementById('documentsGrid').innerHTML;
             const originalContent = document.body.innerHTML;

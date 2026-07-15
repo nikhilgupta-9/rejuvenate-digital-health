@@ -23,6 +23,7 @@ $contact = contact_us();
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/swiper-bundle.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/nice-select.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
     <style>
         .help-section {
             margin-bottom: 3rem;
@@ -109,18 +110,8 @@ $contact = contact_us();
 </head>
 
 <body>
-    <?php include("../header.php") ?>
-    <section class="contact-appointment-section section-padding fix">
-        <div class="container">
-            <div class="row mb-5">
-                <div class="col-md-3">
-                   <?php include("sidebar.php") ?>
-                </div>
-                <!-- Main Content -->
-                <div class="col-lg-9">
-                    <!-- Mobile Toggle Button -->
-                    <span class="menu-btn d-lg-none mb-3" onclick="toggleMenu()">☰ Menu</span>
-                    
+    <?php $sidebar_active = 'help'; include("sidebar.php"); ?>
+    <main class="patient-content">
                     <!-- Contact Details Section -->
                     <div class="help-section">
                         <div class="contact-card">
@@ -349,18 +340,10 @@ $contact = contact_us();
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
-    </section>
-    <?php include("../footer.php") ?>
-    
-    <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
+    </main>
+    <?php include("inc/scripts.php") ?>
+
     <script>
-        function toggleMenu() {
-            document.getElementById("sidebarMenu").classList.toggle("show");
-        }
-        
         // Add smooth scrolling for FAQ items
         document.addEventListener('DOMContentLoaded', function() {
             const faqButtons = document.querySelectorAll('.faq-question');

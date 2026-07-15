@@ -15,7 +15,7 @@ $_u_stmt->bind_param('i', $user_id);
 $_u_stmt->execute();
 $_u = $_u_stmt->get_result()->fetch_assoc();
 
-$_u_name    = htmlspecialchars(trim(($_u['name'] ?? 'Patient') . ' ' . ($_u['last_name'] ?? '')));
+$_u_name    = htmlspecialchars($_u['name'] ?? 'Patient');
 $_u_email   = htmlspecialchars($_u['email'] ?? '');
 $_u_pic     = !empty($_u['profile_pic']) ? BASE_URL . 'assets/img/' . htmlspecialchars($_u['profile_pic']) : null;
 $_u_initial = strtoupper(substr($_u_name, 0, 1)) ?: 'P';
@@ -45,9 +45,9 @@ $_page_title = $_page_titles[$sidebar_active] ?? 'Patient Portal';
 $_menu = [
     'dashboard'    => ['icon' => 'fa fa-th-large',   'label' => 'Dashboard',              'url' => BASE_URL . 'user/user-dashboard.php',         'section' => 'Main'],
     'appointments' => ['icon' => 'fa fa-stethoscope', 'label' => 'My Doctor Appointments', 'url' => BASE_URL . 'user/my-doctor-appointments.php', 'section' => 'Health'],
-    'bookings'     => ['icon' => 'fa fa-calendar-check-o', 'label' => 'My Bookings',       'url' => BASE_URL . 'user/my-bookings.php',            'section' => 'Health'],
+    'bookings'     => ['icon' => 'fa fa-calendar', 'label' => 'My Bookings',       'url' => BASE_URL . 'user/my-bookings.php',            'section' => 'Health'],
     'abha'         => ['icon' => 'fa fa-id-card',    'label' => 'My ABHA Health ID',       'url' => BASE_URL . 'user/my-abha.php',                'section' => 'Health'],
-    'reports'      => ['icon' => 'fa fa-file-text-o', 'label' => 'My Reports',             'url' => BASE_URL . 'user/my-reports.php',             'section' => 'Health'],
+    'reports'      => ['icon' => 'fa fa-chart-area', 'label' => 'My Reports',             'url' => BASE_URL . 'user/my-reports.php',             'section' => 'Health'],
     'orders'       => ['icon' => 'fa fa-shopping-bag', 'label' => 'My Supplement Order',   'url' => BASE_URL . 'user/my-supplement-order.php',    'section' => 'Shop'],
     'address'      => ['icon' => 'fa fa-map-marker', 'label' => 'Manage Addresses',        'url' => BASE_URL . 'user/manage-address.php',         'section' => 'Shop'],
     'profile'      => ['icon' => 'fa fa-user',       'label' => 'My Profile',              'url' => BASE_URL . 'user/my-profile.php',             'section' => 'Account'],
@@ -72,7 +72,7 @@ $_menu = [
         <div class="s-name"><?= $_u_name ?></div>
         <div class="s-sub">Patient</div>
         <?php if ($_u_abha_linked): ?>
-            <div style="margin-top:5px;">
+            <div style="">
                 <span style="background:#02c9b8;border-radius:10px;padding:1px 6px;font-size:.6rem;font-weight:700;color:#fff;">
                     <i class="fa fa-check"></i> ABHA Linked
                 </span>
@@ -127,7 +127,7 @@ $_menu = [
             <i class="fa fa-bars"></i>
         </button>
         <div>
-            <div style="font-size:.95rem;font-weight:600;color:#1f2937;"><?= htmlspecialchars($_page_title) ?></div>
+            <div style="font-size:.95rem;font-weight:600;color:#1f2937; line-height:5px; margin-top: 15px;" class=""><?= htmlspecialchars($_page_title) ?></div>
             <div style="font-size:.72rem;color:#9ca3af;"><?= date('l, d M Y') ?></div>
         </div>
     </div>

@@ -1,4 +1,5 @@
 <?php
+session_start();
 include_once "../config/connect.php";
 include_once "../util/function.php";
 
@@ -23,18 +24,12 @@ $contact = contact_us();
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/swiper-bundle.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/nice-select.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
 </head>
 
 <body>
-  <?php include("../header.php") ?>
-  <section class="contact-appointment-section section-padding fix ">
-    <div class="container ">
-      <div class="row mb-5">
-        <div class="col-md-3">
-          <?php include("sidebar.php") ?>
-        </div>
-        <div class="col-lg-9 ">
-          <span class="menu-btn d-lg-none mb-3" onclick="toggleMenu()">☰ Menu</span>
+  <?php $sidebar_active = 'orders'; include("sidebar.php"); ?>
+  <main class="patient-content">
           <div class="profile-card shadow">
             <h4 class="mb-4">My Supplement Order</h4>
             <div class="row mt-4">
@@ -64,17 +59,8 @@ $contact = contact_us();
               </div>
             </div>
           </div>
-
-        </div>
-      </div>
-    </div>
-  </section>
-  <?php include("../footer.php") ?>
-  <script>
-    function toggleMenu() {
-      document.getElementById("sidebarMenu").classList.toggle("show");
-    }
-  </script>
+  </main>
+  <?php include("inc/scripts.php") ?>
 </body>
 
 </html>

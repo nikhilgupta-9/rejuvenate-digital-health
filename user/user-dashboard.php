@@ -118,6 +118,16 @@ $stmt->close();
         box-shadow: 0 1px 6px rgba(0,0,0,.06);
         margin-top: 2rem;
     }
+    .dashboard{
+    width:100%;
+    min-width:0;
+}
+@media (min-width:992px){
+    .patient-content{
+        margin-left:280px; /* sidebar width */
+        width:calc(100% - 280px);
+    }
+}
   </style>
 </head>
 
@@ -168,37 +178,37 @@ $stmt->close();
 
           <!-- Statistics Cards -->
           <div class="dashboard-stats">
-            <div class="row">
-              <div class="col-md-3">
-                <div class="stat-card card-primary">
-                  <i class="fa fa-calendar bg-icon"></i>
-                  <h3><?= $appointment_count ?></h3>
-                  <p>Total Appointments</p>
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="stat-card card-orange">
-                  <i class="fa fa-hourglass-half bg-icon"></i>
-                  <h3><?= $pending_appointments ?></h3>
-                  <p>Pending Appointments</p>
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="stat-card card-teal2">
-                  <i class="fa fa-file-text-o bg-icon"></i>
-                  <h3><?= $reports_count ?></h3>
-                  <p>Medical Reports</p>
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="stat-card card-purple">
-                  <i class="fa fa-shopping-bag bg-icon"></i>
-                  <h3><?= $orders_count ?></h3>
-                  <p>Supplement Orders</p>
-                </div>
-              </div>
+    <div class="row g-3 g-md-4">
+        <div class="col-12 col-sm-6 col-md-3">
+            <div class="stat-card card-primary h-100">
+                <i class="fa fa-calendar bg-icon"></i>
+                <h3><?= $appointment_count ?></h3>
+                <p>Total Appointments</p>
             </div>
-          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-md-3">
+            <div class="stat-card card-orange h-100">
+                <i class="fa fa-hourglass-half bg-icon"></i>
+                <h3><?= $pending_appointments ?></h3>
+                <p>Pending Appointments</p>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-md-3">
+            <div class="stat-card card-teal2 h-100">
+                <i class="fa fa-file-text-o bg-icon"></i>
+                <h3><?= $reports_count ?></h3>
+                <p>Medical Reports</p>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-md-3">
+            <div class="stat-card card-purple h-100">
+                <i class="fa fa-shopping-bag bg-icon"></i>
+                <h3><?= $orders_count ?></h3>
+                <p>Supplement Orders</p>
+            </div>
+        </div>
+    </div>
+</div>
 
           <!-- Quick Actions -->
           <div class="profile-card shadow">

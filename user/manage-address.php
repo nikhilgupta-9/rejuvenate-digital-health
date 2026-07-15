@@ -207,6 +207,7 @@ if (isset($_GET['set_default'])) {
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/swiper-bundle.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/nice-select.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
     <style>
         .error { color: #dc3545; font-size: 0.875em; margin-top: 0.25rem; }
         .is-invalid { border-color: #dc3545; }
@@ -249,18 +250,8 @@ if (isset($_GET['set_default'])) {
 </head>
 
 <body>
-    <?php include("../header.php") ?>
-    <section class="contact-appointment-section section-padding fix">
-        <div class="container">
-            <div class="row mb-5">
-                <div class="col-md-3">
-                   <?php include("sidebar.php") ?>
-                </div>
-                <!-- Main Content -->
-                <div class="col-lg-9">
-                    <!-- Mobile Toggle Button -->
-                    <span class="menu-btn d-lg-none mb-3" onclick="toggleMenu()">☰ Menu</span>
-                    
+    <?php $sidebar_active = 'address'; include("sidebar.php"); ?>
+    <main class="patient-content">
                     <div class="profile-card shadow">
                         <h4 class="mb-4">Manage Address</h4>
                         
@@ -409,18 +400,10 @@ if (isset($_GET['set_default'])) {
                             <?php endif; ?>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
-    </section>
-    <?php include("../footer.php") ?>
-    
-    <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
+    </main>
+    <?php include("inc/scripts.php") ?>
+
     <script>
-        function toggleMenu() {
-            document.getElementById("sidebarMenu").classList.toggle("show");
-        }
-        
         // Pincode validation - allow only numbers and limit to 6 digits
         document.querySelector('input[name="zip_code"]').addEventListener('input', function() {
             this.value = this.value.replace(/[^0-9]/g, '');

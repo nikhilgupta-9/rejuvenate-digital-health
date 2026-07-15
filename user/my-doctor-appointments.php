@@ -215,6 +215,7 @@ if (isset($_GET['success'])) {
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/swiper-bundle.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/nice-select.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
   <style>
     /* Custom Styles */
     .profile-card { padding: 2rem; }
@@ -372,9 +373,8 @@ if (isset($_GET['success'])) {
     }
     
     .no-appointments i {
-        font-size: 60px;
-        color: #ddd;
-        margin-bottom: 20px;
+            font-size: 22px;
+    color: #ddd;
     }
     
     /* Tabs */
@@ -410,22 +410,16 @@ if (isset($_GET['success'])) {
         transform: translateY(-50%);
         color: #666;
     }
+
+    @meida (max-width: 575.98px){
+     
+    }
   </style>
 </head>
 
 <body>
-  <?php include("../header.php") ?>
-  <section class="contact-appointment-section section-padding fix">
-    <div class="container">
-      <div class="row mb-5">
-        <div class="col-md-3">
-          <?php include("sidebar.php") ?>
-        </div>
-        <!-- Main Content -->
-        <div class="col-lg-9">
-          <!-- Mobile Toggle Button -->
-          <button class="mobile-menu-btn" onclick="toggleMenu()">☰ Menu</button>
-          
+  <?php $sidebar_active = 'appointments'; include("sidebar.php"); ?>
+  <main class="patient-content">
           <!-- Success/Error Messages -->
           <?php if ($success_message): ?>
             <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -625,8 +619,8 @@ if (isset($_GET['success'])) {
                 <?php foreach ($appointments as $appointment): ?>
                   <div class="appointment-card <?= $appointment['appointment_status'] ?>">
                     <div class="d-flex align-items-start mb-3">
-                      <?php if (!empty($appointment['profile_image'])): ?>
-                        <img src="<?= BASE_URL . htmlspecialchars($appointment['profile_image']) ?>" 
+                      <?php if (!empty($appointment['profile_image']) && file_exists('../admin/'. htmlspecialchars($appointment['profile_image']))): ?>
+                        <img src="<?= BASE_URL .'admin/'. htmlspecialchars($appointment['profile_image']) ?>" 
                              alt="Doctor" 
                              class="doctor-avatar me-3">
                       <?php else: ?>
@@ -700,19 +694,10 @@ if (isset($_GET['success'])) {
               </div>
             <?php endif; ?>
           </div>
-        </div>
-      </div>
-    </div>
-  </section>
-  <?php include("../footer.php") ?>
-  
-  <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
+  </main>
+  <?php include("inc/scripts.php") ?>
+
   <script>
-    // Toggle sidebar on mobile
-    function toggleMenu() {
-      document.querySelector('.sidebar').classList.toggle('show');
-    }
-    
     // Auto-close alerts after 5 seconds
     setTimeout(() => {
       document.querySelectorAll('.alert').forEach(alert => {
