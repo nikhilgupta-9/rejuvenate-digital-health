@@ -1,9 +1,26 @@
 <?php
 /**
  * Digital Prescription / OPD Note
- * ABDM-aligned: saves to `prescriptions` table, generates care_context_ref,
- * records vitals, medications (JSON), lab tests, diagnosis, advice, follow-up.
+ * Supports: Patient (appointment-based) AND Student (school_member-based)
+ * ABDM-aligned: care_context_ref, ABHA number, HPR ID.
  */
+
+function freqSelect($selected, $name) {
+    $opts = ['','Once daily','Twice daily','Thrice daily','Four times/day','Every 6 hours','Every 8 hours','Every 12 hours','As needed (SOS)','Stat (immediately)','Weekly','At bedtime'];
+    $html = '<select class="form-select" name="' . htmlspecialchars($name) . '">';
+    foreach ($opts as $o) {
+        $html .= '<option value="' . $o . '"' . ($o === $selected ? ' selected' : '') . '>' . ($o ?: '— Select —') . '</option>';
+    }
+    return $html . '</select>';
+}
+function routeSelect($selected, $name) {
+    $opts = ['','Oral','IV','IM','SC','Topical','Inhaled','Sublingual','Rectal','Nasal'];
+    $html = '<select class="form-select" name="' . htmlspecialchars($name) . '">';
+    foreach ($opts as $o) {
+        $html .= '<option value="' . $o . '"' . ($o === $selected ? ' selected' : '') . '>' . ($o ?: '— Select —') . '</option>';
+    }
+    return $html . '</select>';
+}
 
 include_once(__DIR__ . "/../config/connect.php");
 include_once(__DIR__ . "/../util/function.php");
@@ -12,31 +29,31 @@ require_once(__DIR__ . "/auth/guard.php");
 $jwt_doctor = doctor_jwt_guard();
 $doctor_id  = (int)$jwt_doctor['sub'];
 
-/* ── Auto-create table if not exists ── */
+/* ── Auto-create prescriptions table ── */
 $conn->query("
     CREATE TABLE IF NOT EXISTS `prescriptions` (
-      `id`                  INT UNSIGNED NOT NULL AUTO_INCREMENT,
-      `appointment_id`      INT UNSIGNED NOT NULL,
-      `doctor_id`           INT UNSIGNED NOT NULL,
-      `patient_id`          INT UNSIGNED NOT NULL,
-      `care_context_ref`    VARCHAR(120)  NOT NULL,
-      `visit_date`          DATE          NOT NULL,
-      `chief_complaints`    TEXT,
-      `vitals`              JSON,
-      `examination`         TEXT,
-      `diagnosis`           TEXT,
-      `icd_codes`           VARCHAR(500)  DEFAULT NULL,
-      `medications`         JSON,
-      `lab_tests`           TEXT,
-      `radiology`           TEXT,
-      `advice`              TEXT,
-      `follow_up_date`      DATE          DEFAULT NULL,
-      `follow_up_notes`     TEXT,
-      `abha_number`         VARCHAR(20)   DEFAULT NULL,
-      `hpr_id`              VARCHAR(50)   DEFAULT NULL,
-      `status`              ENUM('draft','final') NOT NULL DEFAULT 'draft',
-      `created_at`          DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      `updated_at`          DATETIME      DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      `id`               INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      `appointment_id`   INT UNSIGNED NOT NULL,
+      `doctor_id`        INT UNSIGNED NOT NULL,
+      `patient_id`       INT UNSIGNED NOT NULL,
+      `care_context_ref` VARCHAR(120) NOT NULL,
+      `visit_date`       DATE NOT NULL,
+      `chief_complaints` TEXT,
+      `vitals`           JSON,
+      `examination`      TEXT,
+      `diagnosis`        TEXT,
+      `icd_codes`        VARCHAR(500) DEFAULT NULL,
+      `medications`      JSON,
+      `lab_tests`        TEXT,
+      `radiology`        TEXT,
+      `advice`           TEXT,
+      `follow_up_date`   DATE DEFAULT NULL,
+      `follow_up_notes`  TEXT,
+      `abha_number`      VARCHAR(20) DEFAULT NULL,
+      `hpr_id`           VARCHAR(50) DEFAULT NULL,
+      `status`           ENUM('draft','final') NOT NULL DEFAULT 'draft',
+      `created_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      `updated_at`       DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (`id`),
       UNIQUE KEY `uq_appointment` (`appointment_id`),
       KEY `idx_doctor`  (`doctor_id`),
@@ -51,13 +68,52 @@ $ds->execute();
 $doctor = $ds->get_result()->fetch_assoc();
 $ds->close();
 
-/* ── Appointment ID ── */
-$appointment_id = isset($_GET['appointment_id']) ? (int)$_GET['appointment_id'] : 0;
-$appointment = null;
-$patient     = null;
-$existing_rx = null;
+/* ── Determine mode: patient | student ── */
+$mode = (isset($_GET['mode']) && $_GET['mode'] === 'student') ? 'student' : 'patient';
 
-if ($appointment_id > 0) {
+/* ── PATIENT mode variables ── */
+$appointment_id = isset($_GET['appointment_id']) ? (int)$_GET['appointment_id'] : 0;
+$appointment    = null;
+$patient        = null;
+$existing_rx    = null;
+
+/* ── STUDENT mode variables ── */
+$member_id  = isset($_GET['member_id']) ? (int)$_GET['member_id'] : 0;
+$member     = null;
+$student_rx = null;   // latest student prescription (for pre-fill)
+
+/* ── Today's appointment list for sidebar ── */
+$today = date('Y-m-d');
+$ts = $conn->prepare("
+    SELECT a.id, u.name, u.last_name, a.appointment_time
+    FROM appointments a JOIN users u ON a.user_id = u.id
+    WHERE a.doctor_id = ? AND a.appointment_date = ?
+      AND a.status IN ('approved','pending','confirmed')
+    ORDER BY a.appointment_time ASC
+");
+$ts->bind_param('is', $doctor_id, $today);
+$ts->execute();
+$today_appts = $ts->get_result()->fetch_all(MYSQLI_ASSOC);
+$ts->close();
+
+/* ── Today's students list for sidebar ── */
+$today_students = [];
+$tss = $conn->prepare("
+    SELECT m.id, m.name, m.school_id, s.school_name
+    FROM school_members m JOIN schools s ON s.id = m.school_id
+    ORDER BY m.name ASC LIMIT 20
+");
+$tss->execute();
+$today_students = $tss->get_result()->fetch_all(MYSQLI_ASSOC);
+$tss->close();
+
+$save_success = '';
+$save_error   = '';
+
+/* ════════════════════════════════════════════
+   PATIENT MODE — load appointment data
+════════════════════════════════════════════ */
+if ($mode === 'patient' && $appointment_id > 0) {
     $as = $conn->prepare("
         SELECT a.*,
                u.id           AS patient_id,
@@ -86,10 +142,8 @@ if ($appointment_id > 0) {
         header("Location: appointments.php");
         exit();
     }
-
     $patient = $appointment;
 
-    /* Check if prescription already saved */
     $rx_s = $conn->prepare("SELECT * FROM prescriptions WHERE appointment_id = ? LIMIT 1");
     $rx_s->bind_param('i', $appointment_id);
     $rx_s->execute();
@@ -97,16 +151,43 @@ if ($appointment_id > 0) {
     $rx_s->close();
 }
 
-/* ── Handle SAVE ── */
-$save_success = '';
-$save_error   = '';
+/* ════════════════════════════════════════════
+   STUDENT MODE — load member data
+════════════════════════════════════════════ */
+if ($mode === 'student' && $member_id > 0) {
+    $ms = $conn->prepare("
+        SELECT m.*, s.school_name,
+               TIMESTAMPDIFF(YEAR, m.dob, CURDATE()) AS student_age
+        FROM school_members m
+        JOIN schools s ON s.id = m.school_id
+        WHERE m.id = ? LIMIT 1
+    ");
+    $ms->bind_param('i', $member_id);
+    $ms->execute();
+    $member = $ms->get_result()->fetch_assoc();
+    $ms->close();
 
+    if (!$member) {
+        header("Location: school-students.php");
+        exit();
+    }
+
+    /* Load latest prescription for pre-fill */
+    $srx = $conn->prepare("SELECT * FROM school_member_prescriptions WHERE member_id = ? ORDER BY created_at DESC LIMIT 1");
+    $srx->bind_param('i', $member_id);
+    $srx->execute();
+    $student_rx = $srx->get_result()->fetch_assoc();
+    $srx->close();
+}
+
+/* ════════════════════════════════════════════
+   HANDLE SAVE — PATIENT
+════════════════════════════════════════════ */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription'])) {
-    $pid        = (int)($_POST['patient_id'] ?? 0);
-    $appt_id    = (int)($_POST['appointment_id'] ?? 0);
-    $rx_status  = in_array($_POST['rx_status'] ?? '', ['draft','final']) ? $_POST['rx_status'] : 'draft';
+    $pid       = (int)($_POST['patient_id']    ?? 0);
+    $appt_id   = (int)($_POST['appointment_id'] ?? 0);
+    $rx_status = in_array($_POST['rx_status'] ?? '', ['draft','final']) ? $_POST['rx_status'] : 'draft';
 
-    /* Vitals as JSON */
     $vitals = json_encode([
         'bp_systolic'  => trim($_POST['bp_sys']   ?? ''),
         'bp_diastolic' => trim($_POST['bp_dia']   ?? ''),
@@ -118,13 +199,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
         'rr'           => trim($_POST['rr']       ?? ''),
     ]);
 
-    /* Medications as JSON */
-    $med_names  = $_POST['med_name']  ?? [];
-    $med_dose   = $_POST['med_dose']  ?? [];
-    $med_freq   = $_POST['med_freq']  ?? [];
-    $med_dur    = $_POST['med_dur']   ?? [];
-    $med_route  = $_POST['med_route'] ?? [];
-    $med_instr  = $_POST['med_instr'] ?? [];
+    $med_names = $_POST['med_name']  ?? [];
+    $med_dose  = $_POST['med_dose']  ?? [];
+    $med_freq  = $_POST['med_freq']  ?? [];
+    $med_dur   = $_POST['med_dur']   ?? [];
+    $med_route = $_POST['med_route'] ?? [];
+    $med_instr = $_POST['med_instr'] ?? [];
     $meds = [];
     foreach ($med_names as $i => $mn) {
         if (trim($mn) === '') continue;
@@ -139,14 +219,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
     }
     $medications_json = json_encode($meds);
 
-    /* Care context reference */
     $care_ref = 'CC-' . $appt_id . '-' . date('Ymd');
-
-    /* ABHA + HPR */
     $abha_num = trim($_POST['abha_number'] ?? '');
     $hpr_id   = trim($doctor['hpr_id'] ?? '');
-
-    /* Fields */
     $chief    = trim($_POST['chief_complaints'] ?? '');
     $exam     = trim($_POST['examination']      ?? '');
     $diag     = trim($_POST['diagnosis']        ?? '');
@@ -173,8 +248,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
             $appt_id, $doctor_id
         );
         if ($upd->execute()) {
-            $save_success = 'Prescription updated successfully.';
-            $existing_rx = array_merge($existing_rx, ['status' => $rx_status]);
+            $save_success = 'Prescription updated.';
+            $existing_rx['status'] = $rx_status;
         } else {
             $save_error = 'Update failed: ' . $conn->error;
         }
@@ -196,7 +271,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
         );
         if ($ins->execute()) {
             $save_success = 'Prescription saved. Care Context: ' . $care_ref;
-            /* Re-fetch */
             $rx_s2 = $conn->prepare("SELECT * FROM prescriptions WHERE appointment_id = ? LIMIT 1");
             $rx_s2->bind_param('i', $appt_id);
             $rx_s2->execute();
@@ -208,13 +282,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
         $ins->close();
     }
 
-    /* Mark appointment completed if finalised */
     if ($rx_status === 'final') {
         $conn->query("UPDATE appointments SET status='completed' WHERE id={$appt_id} AND doctor_id={$doctor_id}");
     }
 }
 
-/* ── Decode saved JSON for pre-filling ── */
+/* ════════════════════════════════════════════
+   HANDLE SAVE — STUDENT
+════════════════════════════════════════════ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_student_prescription'])) {
+    $s_member_id  = (int)($_POST['member_id']         ?? 0);
+    $s_school_id  = (int)($_POST['school_id']         ?? 0);
+    $s_diagnosis  = trim($_POST['s_diagnosis']        ?? '');
+    $s_symptoms   = trim($_POST['s_symptoms']         ?? '');
+    $s_rx_text    = trim($_POST['s_prescription_text'] ?? '');
+    $s_advice     = trim($_POST['s_advice']           ?? '');
+    $s_fu_date    = trim($_POST['s_follow_up_date']   ?? '') ?: null;
+
+    /* Student vitals */
+    $s_vitals = json_encode([
+        'bp_systolic'  => trim($_POST['s_bp_sys']  ?? ''),
+        'bp_diastolic' => trim($_POST['s_bp_dia']  ?? ''),
+        'pulse'        => trim($_POST['s_pulse']   ?? ''),
+        'temperature'  => trim($_POST['s_temp']    ?? ''),
+        'spo2'         => trim($_POST['s_spo2']    ?? ''),
+        'weight_kg'    => trim($_POST['s_weight']  ?? ''),
+        'height_cm'    => trim($_POST['s_height']  ?? ''),
+    ]);
+
+    /* Check if table has vitals column; add if missing */
+    $conn->query("ALTER TABLE school_member_prescriptions ADD COLUMN IF NOT EXISTS vitals JSON DEFAULT NULL");
+
+    if ($s_member_id && $s_rx_text) {
+        $sins = $conn->prepare("INSERT INTO school_member_prescriptions
+            (member_id, school_id, doctor_id, diagnosis, symptoms, prescription_text, advice, follow_up_date, vitals)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $sins->bind_param('iiissssss',
+            $s_member_id, $s_school_id, $doctor_id,
+            $s_diagnosis, $s_symptoms, $s_rx_text, $s_advice, $s_fu_date, $s_vitals
+        );
+        if ($sins->execute()) {
+            $save_success = 'Student prescription saved successfully.';
+            /* reload latest rx */
+            $srx2 = $conn->prepare("SELECT * FROM school_member_prescriptions WHERE member_id = ? ORDER BY created_at DESC LIMIT 1");
+            $srx2->bind_param('i', $s_member_id);
+            $srx2->execute();
+            $student_rx = $srx2->get_result()->fetch_assoc();
+            $srx2->close();
+        } else {
+            $save_error = 'Save failed: ' . $conn->error;
+        }
+        $sins->close();
+    } else {
+        $save_error = 'Prescription text is required.';
+    }
+}
+
+/* ── Decode saved JSON for pre-filling (patient) ── */
 $rx_vitals = [];
 $rx_meds   = [];
 if ($existing_rx) {
@@ -223,22 +347,15 @@ if ($existing_rx) {
 }
 if (empty($rx_meds)) $rx_meds = [['name'=>'','dose'=>'','frequency'=>'','duration'=>'','route'=>'','instructions'=>'']];
 
-$v = fn($k) => htmlspecialchars($existing_rx[$k] ?? '');
-$vt = fn($k) => htmlspecialchars($rx_vitals[$k] ?? '');
+$v  = fn($k) => htmlspecialchars($existing_rx[$k] ?? '');
+$vt = fn($k) => htmlspecialchars($rx_vitals[$k]   ?? '');
 
-/* ── Today's appointment list for selector ── */
-$today = date('Y-m-d');
-$ts = $conn->prepare("
-    SELECT a.id, u.name, u.last_name, a.appointment_time
-    FROM appointments a JOIN users u ON a.user_id = u.id
-    WHERE a.doctor_id = ? AND a.appointment_date = ?
-      AND a.status IN ('approved','pending','confirmed')
-    ORDER BY a.appointment_time ASC
-");
-$ts->bind_param('is', $doctor_id, $today);
-$ts->execute();
-$today_appts = $ts->get_result()->fetch_all(MYSQLI_ASSOC);
-$ts->close();
+/* Student vitals pre-fill */
+$s_vt_data = [];
+if ($student_rx && !empty($student_rx['vitals'])) {
+    $s_vt_data = json_decode($student_rx['vitals'], true) ?: [];
+}
+$svt = fn($k) => htmlspecialchars($s_vt_data[$k] ?? '');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -253,102 +370,197 @@ $ts->close();
         :root {
             --rdh-blue: #2c5aa0;
             --rdh-teal: #02c9b8;
+            --rdh-green: #0e7c5b;
         }
         body { background: #f0f4f8; font-size: .9rem; }
+
+        /* ── Mode toggle tabs ── */
+        .mode-tabs {
+            display: flex;
+            gap: 0;
+            background: #e2e8f0;
+            border-radius: 10px;
+            padding: 4px;
+        }
+        .mode-tab {
+            flex: 1;
+            text-align: center;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: .85rem;
+            cursor: pointer;
+            color: #64748b;
+            text-decoration: none;
+            transition: all .2s;
+        }
+        .mode-tab.active-patient { background: var(--rdh-blue); color: #fff; }
+        .mode-tab.active-student { background: var(--rdh-green); color: #fff; }
+        .mode-tab:hover:not(.active-patient):not(.active-student) { background: #cbd5e1; color: #1e293b; }
 
         /* ── Section card ── */
         .rx-card {
             background: #fff;
             border-radius: 12px;
             box-shadow: 0 2px 10px rgba(0,0,0,.06);
-            margin-bottom: 20px;
+            margin-bottom: 16px;
             overflow: hidden;
         }
         .rx-card-header {
             background: linear-gradient(135deg, var(--rdh-blue), #4a7bc8);
             color: #fff;
-            padding: 12px 18px;
+            padding: 11px 16px;
             font-weight: 600;
-            font-size: .9rem;
+            font-size: .88rem;
             display: flex;
             align-items: center;
             gap: 8px;
         }
-        .rx-card-body { padding: 18px; }
+        .rx-card-header.student-header {
+            background: linear-gradient(135deg, var(--rdh-green), #16a34a);
+        }
+        .rx-card-body { padding: 16px; }
 
-        /* ── Patient summary banner ── */
+        /* ── Patient / Student banner ── */
         .patient-banner {
             background: linear-gradient(135deg, #1a2340, #0a4a8a);
             color: #fff;
             border-radius: 12px;
-            padding: 16px 20px;
-            margin-bottom: 20px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            align-items: center;
+            padding: 14px 18px;
+            margin-bottom: 16px;
         }
-        .patient-banner .pb-name  { font-size: 1.1rem; font-weight: 700; }
-        .patient-banner .pb-meta  { font-size: .8rem; opacity: .8; }
-        .patient-banner .pb-abha  {
+        .student-banner {
+            background: linear-gradient(135deg, #064e3b, #065f46);
+            color: #fff;
+            border-radius: 12px;
+            padding: 14px 18px;
+            margin-bottom: 16px;
+        }
+        .pb-name  { font-size: 1.05rem; font-weight: 700; }
+        .pb-meta  { font-size: .8rem; opacity: .8; }
+        .pb-abha  {
+            display: inline-block;
             background: rgba(2,201,184,.2);
             border: 1px solid var(--rdh-teal);
             color: var(--rdh-teal);
             border-radius: 20px;
-            padding: 3px 12px;
-            font-size: .78rem;
-            font-weight: 600;
-        }
-        .patient-banner .care-ctx {
-            margin-left: auto;
+            padding: 2px 10px;
             font-size: .75rem;
-            opacity: .75;
-            text-align: right;
+            font-weight: 600;
+            margin-top: 5px;
+        }
+        .pb-school {
+            display: inline-block;
+            background: rgba(16,185,129,.2);
+            border: 1px solid #10b981;
+            color: #6ee7b7;
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-size: .75rem;
+            font-weight: 600;
+            margin-top: 5px;
         }
 
         /* ── Vitals grid ── */
         .vitals-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 12px;
+            gap: 10px;
         }
-        @media(max-width:768px){ .vitals-grid { grid-template-columns: repeat(2,1fr); } }
-        .vital-item label { font-size: .75rem; color: #888; font-weight: 600; margin-bottom: 3px; display: block; }
-        .vital-item input { font-size: .9rem; }
+        @media(max-width: 991px) { .vitals-grid { grid-template-columns: repeat(3,1fr); } }
+        @media(max-width: 575px) { .vitals-grid { grid-template-columns: repeat(2,1fr); } }
+        .vital-item label { font-size: .72rem; color: #888; font-weight: 600; margin-bottom: 3px; display: block; text-transform: uppercase; letter-spacing: .4px; }
+        .vital-item input { font-size: .88rem; padding: 6px 10px; }
 
         /* ── Medication table ── */
-        #med-table th { background: #e8f0fb; color: var(--rdh-blue); font-size: .8rem; font-weight: 600; }
-        #med-table td { vertical-align: middle; padding: 6px 8px; }
-        #med-table input, #med-table select { font-size: .85rem; padding: 5px 8px; }
-        .remove-med { background: none; border: none; color: #dc3545; font-size: 1.1rem; cursor: pointer; }
+        #med-table th { background: #e8f0fb; color: var(--rdh-blue); font-size: .78rem; font-weight: 600; white-space: nowrap; }
+        #med-table td { vertical-align: middle; padding: 5px 7px; }
+        #med-table input, #med-table select { font-size: .83rem; padding: 5px 7px; }
+        .remove-med { background: none; border: none; color: #dc3545; font-size: 1rem; cursor: pointer; padding: 0 4px; }
 
-        /* ── Lab tests checkboxes ── */
+        /* ── Mobile: medication cards ── */
+        @media(max-width: 767px) {
+            .med-table-wrap { display: none; }
+            .med-cards-wrap { display: block; }
+        }
+        @media(min-width: 768px) {
+            .med-table-wrap { display: block; }
+            .med-cards-wrap { display: none; }
+        }
+        .med-card {
+            background: #f8faff;
+            border: 1px solid #dbeafe;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            position: relative;
+        }
+        .med-card label { font-size: .72rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; margin-bottom: 2px; }
+        .med-card input, .med-card select { font-size: .85rem; }
+        .med-card .remove-med-card { position: absolute; top: 8px; right: 8px; background: none; border: none; color: #ef4444; font-size: 1.1rem; cursor: pointer; }
+
+        /* ── Lab tests grid ── */
         .lab-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 6px 14px;
+            gap: 5px 12px;
         }
-        @media(max-width:768px){ .lab-grid { grid-template-columns: repeat(2,1fr); } }
-        .lab-grid .form-check-label { font-size: .82rem; }
+        @media(max-width: 991px) { .lab-grid { grid-template-columns: repeat(3,1fr); } }
+        @media(max-width: 575px) { .lab-grid { grid-template-columns: repeat(2,1fr); } }
+        .lab-grid .form-check-label { font-size: .8rem; }
 
-        /* ── Status badge ── */
-        .badge-draft  { background:#fff3cd;color:#856404;padding:3px 10px;border-radius:12px;font-size:.75rem;font-weight:600; }
-        .badge-final  { background:#d4edda;color:#155724;padding:3px 10px;border-radius:12px;font-size:.75rem;font-weight:600; }
+        /* ── Status badges ── */
+        .badge-draft  { background:#fff3cd;color:#856404;padding:2px 8px;border-radius:10px;font-size:.73rem;font-weight:600; }
+        .badge-final  { background:#d4edda;color:#155724;padding:2px 8px;border-radius:10px;font-size:.73rem;font-weight:600; }
 
         /* ── Action bar ── */
         .action-bar {
             position: sticky;
             top: 0;
-            z-index: 100;
+            z-index: 200;
             background: #fff;
-            border-bottom: 1px solid #e0e0e0;
-            padding: 10px 18px;
+            border-bottom: 2px solid #e2e8f0;
+            padding: 8px 14px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             flex-wrap: wrap;
         }
-        .action-bar .title { font-weight: 700; font-size: 1rem; color: var(--rdh-blue); flex: 1; }
+        .action-bar .title { font-weight: 700; font-size: .95rem; color: var(--rdh-blue); }
+        @media(max-width: 575px) {
+            .action-bar .title { display: none; }
+            .action-bar { gap: 6px; padding: 8px 10px; }
+            .action-bar .btn { font-size: .78rem; padding: 5px 10px; }
+        }
+
+        /* ── Sidebar toggle on mobile ── */
+        .sidebar-toggle-btn {
+            display: none;
+        }
+        @media(max-width: 1199px) {
+            .sidebar-toggle-btn { display: inline-flex; align-items: center; gap: 6px; }
+            #rx-sidebar { transition: all .3s; }
+            #rx-sidebar.collapsed { display: none; }
+        }
+
+        /* ── Selector card ── */
+        .select-card {
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: inherit;
+            transition: all .2s;
+        }
+        .select-card:hover { border-color: var(--rdh-blue); box-shadow: 0 4px 14px rgba(44,90,160,.12); }
+        .select-card .sc-icon {
+            width: 44px; height: 44px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem; flex-shrink: 0;
+        }
 
         /* ── Print styles ── */
         @media print {
@@ -356,7 +568,7 @@ $ts->close();
             body { background: white; font-size: 11pt; }
             .rx-card { box-shadow: none; border: 1px solid #ccc; page-break-inside: avoid; }
             .action-bar { display: none !important; }
-            .patient-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .patient-banner, .student-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
     </style>
 </head>
@@ -364,28 +576,40 @@ $ts->close();
 
 <!-- ── Action Bar ── -->
 <div class="action-bar no-print">
-    <span class="title"><i class="fa fa-file-medical me-2"></i>Digital Prescription</span>
+    <span class="title">
+        <i class="fa fa-file-medical me-1"></i>
+        <?= $mode === 'student' ? 'Student Prescription' : 'Digital Prescription' ?>
+    </span>
 
-    <?php if ($existing_rx): ?>
+    <?php if ($existing_rx && $mode === 'patient'): ?>
         <span class="badge-<?= $existing_rx['status'] ?>"><?= ucfirst($existing_rx['status']) ?></span>
-        <span class="text-muted small">Care Ctx: <?= htmlspecialchars($existing_rx['care_context_ref']) ?></span>
     <?php endif; ?>
 
-    <button form="rx-form" name="rx_status" value="draft"  type="submit" class="btn btn-outline-secondary btn-sm">
-        <i class="fa fa-save me-1"></i> Save Draft
-    </button>
-    <button form="rx-form" name="rx_status" value="final"  type="submit" class="btn btn-success btn-sm">
-        <i class="fa fa-check me-1"></i> Finalise
-    </button>
+    <?php if ($mode === 'patient' && $appointment): ?>
+        <button form="rx-form" name="rx_status" value="draft" type="submit" class="btn btn-outline-secondary btn-sm">
+            <i class="fa fa-save me-1"></i> Save Draft
+        </button>
+        <button form="rx-form" name="rx_status" value="final" type="submit" class="btn btn-success btn-sm">
+            <i class="fa fa-check me-1"></i> Finalise
+        </button>
+    <?php elseif ($mode === 'student' && $member): ?>
+        <button form="student-rx-form" type="submit" class="btn btn-success btn-sm">
+            <i class="fa fa-save me-1"></i> Save Prescription
+        </button>
+    <?php endif; ?>
+
     <button type="button" onclick="window.print()" class="btn btn-primary btn-sm">
         <i class="fa fa-print me-1"></i> Print
+    </button>
+    <button type="button" class="btn btn-outline-info btn-sm sidebar-toggle-btn" onclick="toggleSidebar()">
+        <i class="fa fa-columns"></i> Info
     </button>
     <a href="appointments.php" class="btn btn-outline-secondary btn-sm">
         <i class="fa fa-arrow-left me-1"></i> Back
     </a>
 </div>
 
-<div class="container-fluid py-3 px-3 px-md-4">
+<div class="container-fluid py-3 px-2 px-md-3 px-xl-4">
 
     <!-- Alerts -->
     <?php if ($save_success): ?>
@@ -401,27 +625,41 @@ $ts->close();
         </div>
     <?php endif; ?>
 
+    <!-- ── Mode Toggle ── -->
+    <div class="mb-3 no-print">
+        <div class="mode-tabs" style="max-width:400px;">
+            <a href="patient-form.php<?= $appointment_id ? '?appointment_id='.$appointment_id : '' ?>"
+               class="mode-tab <?= $mode === 'patient' ? 'active-patient' : '' ?>">
+                <i class="fa fa-user me-1"></i> Patient
+            </a>
+            <a href="patient-form.php?mode=student<?= $member_id ? '&member_id='.$member_id : '' ?>"
+               class="mode-tab <?= $mode === 'student' ? 'active-student' : '' ?>">
+                <i class="fa fa-graduation-cap me-1"></i> Student
+            </a>
+        </div>
+    </div>
+
+    <!-- ════════════════ PATIENT PANEL ════════════════ -->
+    <?php if ($mode === 'patient'): ?>
+
     <?php if (!$appointment): ?>
-        <!-- No appointment selected — show selector -->
+        <!-- No appointment selected -->
         <div class="rx-card">
-            <div class="rx-card-header"><i class="fa fa-calendar-check"></i> Select Appointment</div>
+            <div class="rx-card-header"><i class="fa fa-calendar-check"></i> Select Today's Patient</div>
             <div class="rx-card-body">
                 <?php if (empty($today_appts)): ?>
-                    <p class="text-muted">No approved appointments for today. <a href="appointments.php">View all appointments</a></p>
+                    <p class="text-muted mb-0">No approved appointments for today. <a href="appointments.php">View all appointments</a></p>
                 <?php else: ?>
-                    <div class="row g-3">
+                    <div class="row g-2">
                         <?php foreach ($today_appts as $ta): ?>
-                            <div class="col-md-4 col-sm-6">
-                                <a href="patient-form.php?appointment_id=<?= $ta['id'] ?>" class="text-decoration-none">
-                                    <div class="border rounded p-3 h-100 d-flex align-items-center gap-3"
-                                         style="transition:box-shadow .2s;" onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow=''">
-                                        <div style="width:42px;height:42px;border-radius:50%;background:#e8f0fb;display:flex;align-items:center;justify-content:center;color:var(--rdh-blue);font-size:1.2rem;flex-shrink:0;">
-                                            <i class="fa fa-user"></i>
-                                        </div>
-                                        <div>
-                                            <div class="fw-semibold" style="color:#222;"><?= htmlspecialchars($ta['name'] . ' ' . $ta['last_name']) ?></div>
-                                            <div class="text-muted small"><?= date('h:i A', strtotime($ta['appointment_time'])) ?></div>
-                                        </div>
+                            <div class="col-xl-3 col-lg-4 col-md-6 col-12">
+                                <a href="patient-form.php?appointment_id=<?= $ta['id'] ?>" class="select-card d-flex">
+                                    <div class="sc-icon" style="background:#e8f0fb;color:var(--rdh-blue);">
+                                        <i class="fa fa-user"></i>
+                                    </div>
+                                    <div>
+                                        <div class="fw-semibold text-dark"><?= htmlspecialchars($ta['name'] . ' ' . $ta['last_name']) ?></div>
+                                        <div class="text-muted small"><?= date('h:i A', strtotime($ta['appointment_time'])) ?></div>
                                     </div>
                                 </a>
                             </div>
@@ -430,48 +668,39 @@ $ts->close();
                 <?php endif; ?>
             </div>
         </div>
+
     <?php else: ?>
 
-    <!-- ── Patient Banner ── -->
+    <!-- Patient Banner -->
     <div class="patient-banner">
-        <div>
-            <div class="pb-name">
-                <?= htmlspecialchars(trim($patient['patient_name'] . ' ' . ($patient['patient_last_name'] ?? ''))) ?>
-            </div>
-            <div class="pb-meta">
-                <?= $patient['patient_age'] ?> yrs &nbsp;|&nbsp;
-                <?= htmlspecialchars($patient['gender'] ?? '—') ?> &nbsp;|&nbsp;
-                <?php if (!empty($patient['blood_group'])): ?>BG: <?= htmlspecialchars($patient['blood_group']) ?> &nbsp;|&nbsp;<?php endif; ?>
-                <?= htmlspecialchars($patient['patient_phone'] ?? '') ?>
-            </div>
-            <?php if (!empty($patient['abha_number'])): ?>
-                <div class="pb-abha mt-1">
-                    <i class="fa fa-id-card me-1"></i> ABHA: <?= htmlspecialchars($patient['abha_number']) ?>
-                    <?php if ($patient['abha_linked']): ?><i class="fa fa-check-circle ms-1"></i><?php endif; ?>
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+            <div>
+                <div class="pb-name">
+                    <?= htmlspecialchars(trim($patient['patient_name'] . ' ' . ($patient['patient_last_name'] ?? ''))) ?>
                 </div>
-            <?php else: ?>
-                <div class="pb-abha mt-1" style="border-color:#aaa;color:#aaa;">ABHA not linked</div>
-            <?php endif; ?>
+                <div class="pb-meta mt-1">
+                    <?= $patient['patient_age'] ?> yrs &nbsp;|&nbsp;
+                    <?= htmlspecialchars($patient['gender'] ?? '—') ?>
+                    <?php if (!empty($patient['blood_group'])): ?>&nbsp;|&nbsp; BG: <?= htmlspecialchars($patient['blood_group']) ?><?php endif; ?>
+                    &nbsp;|&nbsp; <?= htmlspecialchars($patient['patient_phone'] ?? '') ?>
+                </div>
+                <?php if (!empty($patient['abha_number'])): ?>
+                    <span class="pb-abha"><i class="fa fa-id-card me-1"></i>ABHA: <?= htmlspecialchars($patient['abha_number']) ?><?php if ($patient['abha_linked']): ?> <i class="fa fa-check-circle ms-1"></i><?php endif; ?></span>
+                <?php else: ?>
+                    <span class="pb-abha" style="border-color:#aaa;color:#aaa;">ABHA not linked</span>
+                <?php endif; ?>
+            </div>
+            <div class="text-end">
+                <div class="pb-meta"><i class="fa fa-calendar me-1"></i><?= date('d M Y', strtotime($appointment['appointment_date'])) ?> &nbsp;<?= date('h:i A', strtotime($appointment['appointment_time'])) ?></div>
+                <div class="pb-meta mt-1"><i class="fa fa-hashtag me-1"></i>Appt #<?= $appointment_id ?></div>
+                <?php if ($existing_rx): ?>
+                    <div class="mt-1"><span class="badge-<?= $existing_rx['status'] ?>"><?= ucfirst($existing_rx['status']) ?></span></div>
+                <?php endif; ?>
+            </div>
         </div>
-        <div>
-            <div class="pb-meta">
-                <i class="fa fa-calendar me-1"></i>
-                <?= date('d M Y', strtotime($appointment['appointment_date'])) ?>
-                &nbsp;<?= date('h:i A', strtotime($appointment['appointment_time'])) ?>
-            </div>
-            <div class="pb-meta mt-1">
-                <i class="fa fa-tag me-1"></i> Appt #<?= $appointment_id ?>
-            </div>
-        </div>
-        <?php if ($existing_rx): ?>
-            <div class="care-ctx">
-                Care Context<br>
-                <strong style="color:var(--rdh-teal);"><?= htmlspecialchars($existing_rx['care_context_ref']) ?></strong>
-            </div>
-        <?php endif; ?>
     </div>
 
-    <!-- ── FORM ── -->
+    <!-- PATIENT FORM -->
     <form id="rx-form" method="POST" action="">
         <input type="hidden" name="save_prescription" value="1">
         <input type="hidden" name="appointment_id"    value="<?= $appointment_id ?>">
@@ -487,24 +716,24 @@ $ts->close();
                     <div class="rx-card-body">
                         <div class="vitals-grid">
                             <div class="vital-item">
-                                <label>BP (Systolic mmHg)</label>
-                                <input type="number" class="form-control" name="bp_sys"    placeholder="120" value="<?= $vt('bp_systolic') ?>">
+                                <label>BP Systolic (mmHg)</label>
+                                <input type="number" class="form-control" name="bp_sys" placeholder="120" value="<?= $vt('bp_systolic') ?>">
                             </div>
                             <div class="vital-item">
-                                <label>BP (Diastolic mmHg)</label>
-                                <input type="number" class="form-control" name="bp_dia"    placeholder="80"  value="<?= $vt('bp_diastolic') ?>">
+                                <label>BP Diastolic (mmHg)</label>
+                                <input type="number" class="form-control" name="bp_dia" placeholder="80" value="<?= $vt('bp_diastolic') ?>">
                             </div>
                             <div class="vital-item">
                                 <label>Pulse (bpm)</label>
-                                <input type="number" class="form-control" name="pulse"     placeholder="72"  value="<?= $vt('pulse') ?>">
+                                <input type="number" class="form-control" name="pulse" placeholder="72" value="<?= $vt('pulse') ?>">
                             </div>
                             <div class="vital-item">
                                 <label>Temperature (°F)</label>
-                                <input type="text"   class="form-control" name="temp"      placeholder="98.6" value="<?= $vt('temperature') ?>">
+                                <input type="text" class="form-control" name="temp" placeholder="98.6" value="<?= $vt('temperature') ?>">
                             </div>
                             <div class="vital-item">
                                 <label>SpO₂ (%)</label>
-                                <input type="number" class="form-control" name="spo2"      placeholder="98"  value="<?= $vt('spo2') ?>">
+                                <input type="number" class="form-control" name="spo2" placeholder="98" value="<?= $vt('spo2') ?>">
                             </div>
                             <div class="vital-item">
                                 <label>Weight (kg)</label>
@@ -512,11 +741,11 @@ $ts->close();
                             </div>
                             <div class="vital-item">
                                 <label>Height (cm)</label>
-                                <input type="number" class="form-control" name="height"    placeholder="165" value="<?= $vt('height_cm') ?>">
+                                <input type="number" class="form-control" name="height" placeholder="165" value="<?= $vt('height_cm') ?>">
                             </div>
                             <div class="vital-item">
                                 <label>Resp. Rate (br/min)</label>
-                                <input type="number" class="form-control" name="rr"        placeholder="16"  value="<?= $vt('rr') ?>">
+                                <input type="number" class="form-control" name="rr" placeholder="16" value="<?= $vt('rr') ?>">
                             </div>
                         </div>
                     </div>
@@ -547,10 +776,9 @@ $ts->close();
                         <textarea name="diagnosis" class="form-control" rows="2"
                             placeholder="Primary and secondary diagnoses..."><?= $v('diagnosis') ?></textarea>
                         <div class="mt-2">
-                            <label class="form-label text-muted small">ICD-10 Codes <span class="text-muted">(optional, comma-separated)</span></label>
+                            <label class="form-label text-muted small fw-semibold">ICD-10 Codes <span class="fw-normal">(comma-separated)</span></label>
                             <input type="text" name="icd_codes" class="form-control"
-                                placeholder="e.g. J06.9, K29.7"
-                                value="<?= $v('icd_codes') ?>">
+                                placeholder="e.g. J06.9, K29.7" value="<?= $v('icd_codes') ?>">
                         </div>
                     </div>
                 </div>
@@ -560,61 +788,62 @@ $ts->close();
                     <div class="rx-card-header">
                         <i class="fa fa-pills"></i> Medications
                         <button type="button" onclick="addMedRow()" class="btn btn-sm ms-auto"
-                            style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4);padding:3px 12px;border-radius:6px;">
-                            <i class="fa fa-plus me-1"></i> Add Row
+                            style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4);padding:3px 10px;border-radius:6px;font-size:.8rem;">
+                            <i class="fa fa-plus me-1"></i> Add
                         </button>
                     </div>
-                    <div class="rx-card-body p-0">
-                        <div class="table-responsive">
+                    <div class="rx-card-body">
+                        <!-- Desktop table -->
+                        <div class="table-responsive med-table-wrap">
                             <table class="table mb-0" id="med-table">
                                 <thead>
                                     <tr>
-                                        <th style="min-width:160px;">Medicine Name</th>
-                                        <th style="min-width:90px;">Dose</th>
+                                        <th style="min-width:150px;">Medicine</th>
+                                        <th style="min-width:80px;">Dose</th>
                                         <th style="min-width:120px;">Frequency</th>
-                                        <th style="min-width:90px;">Duration</th>
-                                        <th style="min-width:100px;">Route</th>
-                                        <th style="min-width:130px;">Instructions</th>
-                                        <th></th>
+                                        <th style="min-width:85px;">Duration</th>
+                                        <th style="min-width:95px;">Route</th>
+                                        <th style="min-width:120px;">Instructions</th>
+                                        <th style="width:36px;"></th>
                                     </tr>
                                 </thead>
                                 <tbody id="med-tbody">
                                     <?php foreach ($rx_meds as $m): ?>
                                     <tr>
-                                        <td><input type="text" class="form-control" name="med_name[]"  value="<?= htmlspecialchars($m['name'] ?? '') ?>"  placeholder="Drug name"></td>
-                                        <td><input type="text" class="form-control" name="med_dose[]"  value="<?= htmlspecialchars($m['dose'] ?? '') ?>"  placeholder="500mg"></td>
-                                        <td>
-                                            <select class="form-select" name="med_freq[]">
-                                                <?php
-                                                $freqs = ['','Once daily','Twice daily','Thrice daily','Four times/day','Every 6 hours','Every 8 hours','Every 12 hours','As needed (SOS)','Stat (immediately)','Weekly','At bedtime'];
-                                                foreach ($freqs as $f): ?>
-                                                    <option value="<?= $f ?>" <?= ($m['frequency'] ?? '') === $f ? 'selected' : '' ?>><?= $f ?: '— Select —' ?></option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </td>
+                                        <td><input type="text" class="form-control" name="med_name[]"  value="<?= htmlspecialchars($m['name'] ?? '') ?>" placeholder="Drug name"></td>
+                                        <td><input type="text" class="form-control" name="med_dose[]"  value="<?= htmlspecialchars($m['dose'] ?? '') ?>" placeholder="500mg"></td>
+                                        <td><?= freqSelect(($m['frequency'] ?? ''), 'med_freq[]') ?></td>
                                         <td><input type="text" class="form-control" name="med_dur[]"   value="<?= htmlspecialchars($m['duration'] ?? '') ?>" placeholder="5 days"></td>
-                                        <td>
-                                            <select class="form-select" name="med_route[]">
-                                                <?php
-                                                $routes = ['','Oral','IV','IM','SC','Topical','Inhaled','Sublingual','Rectal','Nasal'];
-                                                foreach ($routes as $r): ?>
-                                                    <option value="<?= $r ?>" <?= ($m['route'] ?? '') === $r ? 'selected' : '' ?>><?= $r ?: '— Select —' ?></option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </td>
+                                        <td><?= routeSelect(($m['route'] ?? ''), 'med_route[]') ?></td>
                                         <td><input type="text" class="form-control" name="med_instr[]" value="<?= htmlspecialchars($m['instructions'] ?? '') ?>" placeholder="After food"></td>
-                                        <td><button type="button" class="remove-med" onclick="this.closest('tr').remove()"><i class="fa fa-times-circle"></i></button></td>
+                                        <td><button type="button" class="remove-med" onclick="removeRow(this, 'table')"><i class="fa fa-times-circle"></i></button></td>
                                     </tr>
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
+                        </div>
+                        <!-- Mobile cards -->
+                        <div id="med-cards" class="med-cards-wrap">
+                            <?php foreach ($rx_meds as $idx => $m): ?>
+                            <div class="med-card" id="mc_<?= $idx ?>">
+                                <button type="button" class="remove-med-card" onclick="removeRow(this, 'card')"><i class="fa fa-times-circle"></i></button>
+                                <div class="row g-2">
+                                    <div class="col-6"><label>Medicine</label><input type="text" class="form-control" name="med_name[]" value="<?= htmlspecialchars($m['name'] ?? '') ?>" placeholder="Drug name"></div>
+                                    <div class="col-6"><label>Dose</label><input type="text" class="form-control" name="med_dose[]" value="<?= htmlspecialchars($m['dose'] ?? '') ?>" placeholder="500mg"></div>
+                                    <div class="col-6"><label>Frequency</label><?= freqSelect(($m['frequency'] ?? ''), 'med_freq[]') ?></div>
+                                    <div class="col-6"><label>Duration</label><input type="text" class="form-control" name="med_dur[]" value="<?= htmlspecialchars($m['duration'] ?? '') ?>" placeholder="5 days"></div>
+                                    <div class="col-6"><label>Route</label><?= routeSelect(($m['route'] ?? ''), 'med_route[]') ?></div>
+                                    <div class="col-6"><label>Instructions</label><input type="text" class="form-control" name="med_instr[]" value="<?= htmlspecialchars($m['instructions'] ?? '') ?>" placeholder="After food"></div>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
                         </div>
                     </div>
                 </div>
 
                 <!-- Lab Tests -->
                 <div class="rx-card">
-                    <div class="rx-card-header"><i class="fa fa-flask"></i> Investigations — Lab Tests</div>
+                    <div class="rx-card-header"><i class="fa fa-flask"></i> Lab Investigations</div>
                     <div class="rx-card-body">
                         <?php
                         $common_labs = ['CBC','RBS','FBS','HbA1c','LFT','KFT','Lipid Profile','Thyroid (TSH)','Urine R/M','Blood Group','HIV','HBsAg','HCV','Widal','MP Antigen','Uric Acid','Serum Electrolytes','BT / CT','PT / INR','Serum Albumin','CRP','ESR','Blood Culture','Urine Culture'];
@@ -632,7 +861,7 @@ $ts->close();
                         </div>
                         <input type="hidden" name="lab_tests" id="lab_tests_hidden" value="<?= htmlspecialchars($saved_labs) ?>">
                         <div>
-                            <label class="form-label text-muted small">Additional / Custom Tests</label>
+                            <label class="form-label text-muted small fw-semibold">Additional Tests</label>
                             <input type="text" id="extra_lab" class="form-control" placeholder="Type additional tests, comma-separated">
                         </div>
                     </div>
@@ -643,10 +872,10 @@ $ts->close();
                     <div class="rx-card-header"><i class="fa fa-x-ray"></i> Radiology / Imaging</div>
                     <div class="rx-card-body">
                         <?php
-                        $radio_opts = ['Chest X-Ray','Abdomen X-Ray','USG Abdomen','USG Pelvis','USG Whole Abdomen','CECT Abdomen','CT Chest','MRI Brain','ECG','2D Echo','TMT'];
+                        $radio_opts  = ['Chest X-Ray','Abdomen X-Ray','USG Abdomen','USG Pelvis','USG Whole Abdomen','CECT Abdomen','CT Chest','MRI Brain','ECG','2D Echo','TMT'];
                         $saved_radio = $existing_rx['radiology'] ?? '';
                         ?>
-                        <div class="lab-grid mb-2">
+                        <div class="lab-grid">
                             <?php foreach ($radio_opts as $ro): ?>
                                 <div class="form-check">
                                     <input class="form-check-input radio-check" type="checkbox"
@@ -665,19 +894,19 @@ $ts->close();
                     <div class="rx-card-header"><i class="fa fa-lightbulb"></i> Advice &amp; Follow-up</div>
                     <div class="rx-card-body">
                         <div class="mb-3">
-                            <label class="form-label">Advice / Instructions to Patient</label>
+                            <label class="form-label fw-semibold">Advice / Instructions</label>
                             <textarea name="advice" class="form-control" rows="3"
-                                placeholder="Diet advice, rest, lifestyle modifications, red flags to watch for..."><?= $v('advice') ?></textarea>
+                                placeholder="Diet advice, rest, lifestyle modifications, red flags..."><?= $v('advice') ?></textarea>
                         </div>
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <label class="form-label">Follow-up Date</label>
+                        <div class="row g-2">
+                            <div class="col-md-4 col-12">
+                                <label class="form-label fw-semibold">Follow-up Date</label>
                                 <input type="date" name="follow_up_date" class="form-control"
                                     value="<?= htmlspecialchars($existing_rx['follow_up_date'] ?? '') ?>"
                                     min="<?= date('Y-m-d') ?>">
                             </div>
-                            <div class="col-md-8">
-                                <label class="form-label">Follow-up Notes</label>
+                            <div class="col-md-8 col-12">
+                                <label class="form-label fw-semibold">Follow-up Notes</label>
                                 <input type="text" name="follow_up_notes" class="form-control"
                                     placeholder="Review CBC, recheck BP, etc."
                                     value="<?= $v('follow_up_notes') ?>">
@@ -688,122 +917,220 @@ $ts->close();
 
             </div><!-- /col-xl-9 -->
 
-            <!-- ── Right sidebar ── -->
-            <div class="col-xl-3">
+            <!-- Sidebar -->
+            <div class="col-xl-3" id="rx-sidebar">
+                <?php include __DIR__ . '/inc/rx-sidebar.php'; ?>
+            </div>
+        </div>
+    </form>
+    <?php endif; /* appointment loaded */ ?>
 
-                <!-- Doctor card -->
+    <!-- ════════════════ STUDENT PANEL ════════════════ -->
+    <?php elseif ($mode === 'student'): ?>
+
+    <?php if (!$member): ?>
+        <!-- No student selected -->
+        <div class="rx-card">
+            <div class="rx-card-header student-header"><i class="fa fa-graduation-cap"></i> Select Student</div>
+            <div class="rx-card-body">
+                <?php if (empty($today_students)): ?>
+                    <p class="text-muted mb-0">No students found. <a href="school-students.php">View school students</a></p>
+                <?php else: ?>
+                    <div class="row g-2">
+                        <?php foreach ($today_students as $stu): ?>
+                            <div class="col-xl-3 col-lg-4 col-md-6 col-12">
+                                <a href="patient-form.php?mode=student&member_id=<?= $stu['id'] ?>" class="select-card d-flex">
+                                    <div class="sc-icon" style="background:#d1fae5;color:#065f46;">
+                                        <i class="fa fa-user-graduate"></i>
+                                    </div>
+                                    <div>
+                                        <div class="fw-semibold text-dark"><?= htmlspecialchars($stu['name']) ?></div>
+                                        <div class="text-muted small"><?= htmlspecialchars($stu['school_name']) ?></div>
+                                    </div>
+                                </a>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="mt-3">
+                        <a href="school-students.php" class="btn btn-outline-success btn-sm">
+                            <i class="fa fa-search me-1"></i> Browse All Students
+                        </a>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+    <?php else: ?>
+
+    <!-- Student Banner -->
+    <div class="student-banner">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+            <div>
+                <div class="pb-name"><?= htmlspecialchars($member['name']) ?></div>
+                <div class="pb-meta mt-1">
+                    <?php if ($member['student_age']): ?><?= $member['student_age'] ?> yrs &nbsp;|&nbsp;<?php endif; ?>
+                    <?= htmlspecialchars($member['gender'] ?? '—') ?>
+                    <?php if (!empty($member['class'])): ?>&nbsp;|&nbsp; Class: <?= htmlspecialchars($member['class']) ?><?php endif; ?>
+                    <?php if (!empty($member['mobile'])): ?>&nbsp;|&nbsp; <?= htmlspecialchars($member['mobile']) ?><?php endif; ?>
+                </div>
+                <span class="pb-school"><i class="fa fa-school me-1"></i><?= htmlspecialchars($member['school_name']) ?></span>
+            </div>
+            <div class="text-end">
+                <div class="pb-meta"><i class="fa fa-id-badge me-1"></i>Member #<?= $member_id ?></div>
+                <?php if ($student_rx): ?>
+                    <div class="pb-meta mt-1"><i class="fa fa-clock me-1"></i>Last Rx: <?= date('d M Y', strtotime($student_rx['created_at'])) ?></div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- STUDENT FORM -->
+    <form id="student-rx-form" method="POST" action="">
+        <input type="hidden" name="save_student_prescription" value="1">
+        <input type="hidden" name="member_id"  value="<?= $member_id ?>">
+        <input type="hidden" name="school_id"  value="<?= (int)$member['school_id'] ?>">
+
+        <div class="row g-3">
+            <div class="col-xl-9">
+
+                <!-- Student Vitals -->
                 <div class="rx-card">
-                    <div class="rx-card-header"><i class="fa fa-user-md"></i> Prescribing Doctor</div>
-                    <div class="rx-card-body" style="font-size:.85rem;">
-                        <strong>Dr. <?= htmlspecialchars($doctor['name'] ?? '') ?></strong><br>
-                        <span class="text-muted"><?= htmlspecialchars($doctor['degrees'] ?? '') ?></span><br>
-                        <span><?= htmlspecialchars($doctor['specialization'] ?? '') ?></span><br>
-                        <?php if (!empty($doctor['hpr_id'])): ?>
-                            <span class="text-success small"><i class="fa fa-check-circle me-1"></i>HPR: <?= htmlspecialchars($doctor['hpr_id']) ?></span><br>
-                        <?php else: ?>
-                            <span class="text-warning small"><i class="fa fa-exclamation-triangle me-1"></i>HPR not registered</span><br>
-                        <?php endif; ?>
-                        <span class="text-muted small"><?= htmlspecialchars($doctor['phone'] ?? '') ?></span>
+                    <div class="rx-card-header student-header"><i class="fa fa-heartbeat"></i> Vital Signs</div>
+                    <div class="rx-card-body">
+                        <div class="vitals-grid">
+                            <div class="vital-item">
+                                <label>BP Systolic</label>
+                                <input type="number" class="form-control" name="s_bp_sys" placeholder="110" value="<?= $svt('bp_systolic') ?>">
+                            </div>
+                            <div class="vital-item">
+                                <label>BP Diastolic</label>
+                                <input type="number" class="form-control" name="s_bp_dia" placeholder="70" value="<?= $svt('bp_diastolic') ?>">
+                            </div>
+                            <div class="vital-item">
+                                <label>Pulse (bpm)</label>
+                                <input type="number" class="form-control" name="s_pulse" placeholder="80" value="<?= $svt('pulse') ?>">
+                            </div>
+                            <div class="vital-item">
+                                <label>Temperature (°F)</label>
+                                <input type="text" class="form-control" name="s_temp" placeholder="98.6" value="<?= $svt('temperature') ?>">
+                            </div>
+                            <div class="vital-item">
+                                <label>SpO₂ (%)</label>
+                                <input type="number" class="form-control" name="s_spo2" placeholder="99" value="<?= $svt('spo2') ?>">
+                            </div>
+                            <div class="vital-item">
+                                <label>Weight (kg)</label>
+                                <input type="number" step="0.1" class="form-control" name="s_weight" placeholder="40" value="<?= $svt('weight_kg') ?>">
+                            </div>
+                            <div class="vital-item">
+                                <label>Height (cm)</label>
+                                <input type="number" class="form-control" name="s_height" placeholder="150" value="<?= $svt('height_cm') ?>">
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <!-- ABHA / ABDM compliance -->
+                <!-- Symptoms -->
                 <div class="rx-card">
-                    <div class="rx-card-header" style="background:linear-gradient(135deg,#025a52,var(--rdh-teal));">
-                        <i class="fa fa-shield-alt"></i> ABDM Compliance
-                    </div>
-                    <div class="rx-card-body" style="font-size:.82rem;">
-                        <?php if (!empty($patient['abha_number'])): ?>
-                            <div class="mb-2">
-                                <div class="text-muted">ABHA Number</div>
-                                <strong style="color:var(--rdh-teal);"><?= htmlspecialchars($patient['abha_number']) ?></strong>
-                            </div>
-                            <?php if (!empty($patient['abha_address'])): ?>
-                            <div class="mb-2">
-                                <div class="text-muted">ABHA Address</div>
-                                <strong><?= htmlspecialchars($patient['abha_address']) ?></strong>
-                            </div>
-                            <?php endif; ?>
-                        <?php else: ?>
-                            <div class="alert alert-warning py-2 px-3 mb-2" style="font-size:.8rem;">
-                                Patient ABHA not linked. Records will be stored locally only.
-                                <a href="find-patient-mobile.php" class="alert-link d-block mt-1">Link ABHA →</a>
-                            </div>
-                        <?php endif; ?>
-                        <?php if ($existing_rx): ?>
-                            <div class="mb-1">
-                                <div class="text-muted">Care Context Ref</div>
-                                <strong class="text-break" style="color:var(--rdh-blue);"><?= htmlspecialchars($existing_rx['care_context_ref']) ?></strong>
-                            </div>
-                            <div>
-                                <div class="text-muted">Record Status</div>
-                                <span class="badge-<?= $existing_rx['status'] ?>"><?= ucfirst($existing_rx['status']) ?></span>
-                            </div>
-                        <?php endif; ?>
+                    <div class="rx-card-header student-header"><i class="fa fa-comment-medical"></i> Symptoms / Complaints</div>
+                    <div class="rx-card-body">
+                        <textarea name="s_symptoms" class="form-control" rows="3"
+                            placeholder="Describe symptoms..."><?= htmlspecialchars($student_rx['symptoms'] ?? '') ?></textarea>
                     </div>
                 </div>
 
-                <!-- Previous prescriptions -->
+                <!-- Diagnosis -->
+                <div class="rx-card">
+                    <div class="rx-card-header student-header"><i class="fa fa-diagnoses"></i> Diagnosis</div>
+                    <div class="rx-card-body">
+                        <textarea name="s_diagnosis" class="form-control" rows="2"
+                            placeholder="Clinical diagnosis..."><?= htmlspecialchars($student_rx['diagnosis'] ?? '') ?></textarea>
+                    </div>
+                </div>
+
+                <!-- Prescription Text -->
+                <div class="rx-card">
+                    <div class="rx-card-header student-header"><i class="fa fa-prescription"></i> Prescription</div>
+                    <div class="rx-card-body">
+                        <textarea name="s_prescription_text" class="form-control" rows="6"
+                            placeholder="Write the full prescription here — medicines, doses, frequency, duration..."><?= htmlspecialchars($student_rx['prescription_text'] ?? '') ?></textarea>
+                        <div class="text-muted small mt-1"><i class="fa fa-info-circle me-1"></i>Enter each medicine on a new line.</div>
+                    </div>
+                </div>
+
+                <!-- Advice & Follow-up -->
+                <div class="rx-card">
+                    <div class="rx-card-header student-header"><i class="fa fa-lightbulb"></i> Advice &amp; Follow-up</div>
+                    <div class="rx-card-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Advice</label>
+                            <textarea name="s_advice" class="form-control" rows="2"
+                                placeholder="Rest, diet, activity restrictions..."><?= htmlspecialchars($student_rx['advice'] ?? '') ?></textarea>
+                        </div>
+                        <div>
+                            <label class="form-label fw-semibold">Follow-up Date</label>
+                            <input type="date" name="s_follow_up_date" class="form-control"
+                                style="max-width:220px;"
+                                value="<?= htmlspecialchars($student_rx['follow_up_date'] ?? '') ?>"
+                                min="<?= date('Y-m-d') ?>">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Past Prescriptions for this student -->
                 <?php
-                $prev_s = $conn->prepare("
-                    SELECT p.id, p.visit_date, p.care_context_ref, p.status, p.diagnosis
-                    FROM prescriptions p
-                    WHERE p.patient_id = ? AND p.appointment_id != ?
-                    ORDER BY p.visit_date DESC LIMIT 5
-                ");
-                $prev_s->bind_param('ii', $patient['patient_id'], $appointment_id);
-                $prev_s->execute();
-                $prev_rx = $prev_s->get_result()->fetch_all(MYSQLI_ASSOC);
-                $prev_s->close();
+                $past_srx = $conn->prepare("SELECT p.*, d.name as doctor_name FROM school_member_prescriptions p LEFT JOIN doctors d ON d.id = p.doctor_id WHERE p.member_id = ? ORDER BY p.created_at DESC LIMIT 5");
+                $past_srx->bind_param('i', $member_id);
+                $past_srx->execute();
+                $past_student_rxs = $past_srx->get_result()->fetch_all(MYSQLI_ASSOC);
+                $past_srx->close();
                 ?>
-                <?php if (!empty($prev_rx)): ?>
+                <?php if (!empty($past_student_rxs)): ?>
                 <div class="rx-card">
-                    <div class="rx-card-header"><i class="fa fa-history"></i> Past Prescriptions</div>
+                    <div class="rx-card-header student-header"><i class="fa fa-history"></i> Prescription History</div>
                     <div class="rx-card-body p-0">
-                        <ul class="list-group list-group-flush" style="font-size:.8rem;">
-                            <?php foreach ($prev_rx as $pr): ?>
-                                <li class="list-group-item py-2 px-3">
-                                    <div class="fw-semibold"><?= date('d M Y', strtotime($pr['visit_date'])) ?></div>
-                                    <div class="text-muted text-truncate" style="max-width:180px;"><?= htmlspecialchars($pr['diagnosis'] ?: '—') ?></div>
-                                    <span class="badge-<?= $pr['status'] ?>"><?= ucfirst($pr['status']) ?></span>
-                                </li>
+                        <div class="accordion" id="pastRxAccordion">
+                            <?php foreach ($past_student_rxs as $pidx => $prx): ?>
+                            <div class="accordion-item border-0 border-bottom">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button <?= $pidx > 0 ? 'collapsed' : '' ?> py-2 px-3" type="button"
+                                        data-bs-toggle="collapse" data-bs-target="#prx<?= $pidx ?>">
+                                        <span class="fw-semibold"><?= date('d M Y', strtotime($prx['created_at'])) ?></span>
+                                        <span class="ms-2 text-muted small">&mdash; Dr. <?= htmlspecialchars($prx['doctor_name'] ?? 'Unknown') ?></span>
+                                    </button>
+                                </h2>
+                                <div id="prx<?= $pidx ?>" class="accordion-collapse collapse <?= $pidx === 0 ? 'show' : '' ?>">
+                                    <div class="accordion-body py-2 px-3" style="font-size:.83rem;">
+                                        <?php if ($prx['diagnosis']): ?><div><strong>Dx:</strong> <?= nl2br(htmlspecialchars($prx['diagnosis'])) ?></div><?php endif; ?>
+                                        <?php if ($prx['symptoms']): ?><div class="mt-1"><strong>Symptoms:</strong> <?= nl2br(htmlspecialchars($prx['symptoms'])) ?></div><?php endif; ?>
+                                        <?php if ($prx['prescription_text']): ?><div class="mt-1"><strong>Rx:</strong> <?= nl2br(htmlspecialchars($prx['prescription_text'])) ?></div><?php endif; ?>
+                                        <?php if ($prx['advice']): ?><div class="mt-1 text-muted"><?= nl2br(htmlspecialchars($prx['advice'])) ?></div><?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
                             <?php endforeach; ?>
-                        </ul>
+                        </div>
                     </div>
                 </div>
                 <?php endif; ?>
 
-                <!-- Today's queue -->
-                <?php if (!empty($today_appts)): ?>
-                <div class="rx-card no-print">
-                    <div class="rx-card-header"><i class="fa fa-list-ul"></i> Today's Queue</div>
-                    <div class="rx-card-body p-0">
-                        <ul class="list-group list-group-flush" style="font-size:.8rem;">
-                            <?php foreach ($today_appts as $ta): ?>
-                                <li class="list-group-item py-2 px-3 <?= $ta['id'] == $appointment_id ? 'active' : '' ?>">
-                                    <a href="patient-form.php?appointment_id=<?= $ta['id'] ?>"
-                                       class="<?= $ta['id'] == $appointment_id ? 'text-white' : 'text-dark' ?> text-decoration-none d-flex justify-content-between">
-                                        <span><?= htmlspecialchars($ta['name'] . ' ' . $ta['last_name']) ?></span>
-                                        <small><?= date('h:i A', strtotime($ta['appointment_time'])) ?></small>
-                                    </a>
-                                </li>
-                            <?php endforeach; ?>
-                        </ul>
-                    </div>
-                </div>
-                <?php endif; ?>
+            </div><!-- /col-xl-9 -->
 
-            </div><!-- /col-xl-3 -->
-        </div><!-- /row -->
+            <!-- Sidebar -->
+            <div class="col-xl-3" id="rx-sidebar">
+                <?php include __DIR__ . '/inc/rx-sidebar.php'; ?>
+            </div>
+        </div>
     </form>
 
-    <?php endif; /* appointment loaded */ ?>
+    <?php endif; /* member loaded */ ?>
+    <?php endif; /* mode */ ?>
 
 </div><!-- /container -->
 
 <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
 <script>
-/* ── Add medication row ── */
+/* ── Medication helpers ── */
 const freqOpts  = ['','Once daily','Twice daily','Thrice daily','Four times/day','Every 6 hours','Every 8 hours','Every 12 hours','As needed (SOS)','Stat (immediately)','Weekly','At bedtime'];
 const routeOpts = ['','Oral','IV','IM','SC','Topical','Inhaled','Sublingual','Rectal','Nasal'];
 
@@ -813,44 +1140,81 @@ function makeSelect(name, opts) {
         '</select>';
 }
 
+let medCardIdx = <?= count($rx_meds) ?>;
+
 function addMedRow() {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-        <td><input type="text" class="form-control" name="med_name[]"  placeholder="Drug name"></td>
-        <td><input type="text" class="form-control" name="med_dose[]"  placeholder="500mg"></td>
-        <td>${makeSelect('med_freq[]',  freqOpts)}</td>
-        <td><input type="text" class="form-control" name="med_dur[]"   placeholder="5 days"></td>
-        <td>${makeSelect('med_route[]', routeOpts)}</td>
-        <td><input type="text" class="form-control" name="med_instr[]" placeholder="After food"></td>
-        <td><button type="button" class="remove-med" onclick="this.closest('tr').remove()"><i class="fa fa-times-circle"></i></button></td>
-    `;
-    document.getElementById('med-tbody').appendChild(tr);
-    tr.querySelector('input').focus();
+    /* Add to desktop table */
+    const tbody = document.getElementById('med-tbody');
+    if (tbody) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><input type="text" class="form-control" name="med_name[]" placeholder="Drug name"></td>
+            <td><input type="text" class="form-control" name="med_dose[]" placeholder="500mg"></td>
+            <td>${makeSelect('med_freq[]', freqOpts)}</td>
+            <td><input type="text" class="form-control" name="med_dur[]" placeholder="5 days"></td>
+            <td>${makeSelect('med_route[]', routeOpts)}</td>
+            <td><input type="text" class="form-control" name="med_instr[]" placeholder="After food"></td>
+            <td><button type="button" class="remove-med" onclick="removeRow(this,'table')"><i class="fa fa-times-circle"></i></button></td>
+        `;
+        tbody.appendChild(tr);
+    }
+    /* Add to mobile cards */
+    const cards = document.getElementById('med-cards');
+    if (cards) {
+        const div = document.createElement('div');
+        div.className = 'med-card';
+        div.innerHTML = `
+            <button type="button" class="remove-med-card" onclick="removeRow(this,'card')"><i class="fa fa-times-circle"></i></button>
+            <div class="row g-2">
+                <div class="col-6"><label>Medicine</label><input type="text" class="form-control" name="med_name[]" placeholder="Drug name"></div>
+                <div class="col-6"><label>Dose</label><input type="text" class="form-control" name="med_dose[]" placeholder="500mg"></div>
+                <div class="col-6"><label>Frequency</label>${makeSelect('med_freq[]', freqOpts)}</div>
+                <div class="col-6"><label>Duration</label><input type="text" class="form-control" name="med_dur[]" placeholder="5 days"></div>
+                <div class="col-6"><label>Route</label>${makeSelect('med_route[]', routeOpts)}</div>
+                <div class="col-6"><label>Instructions</label><input type="text" class="form-control" name="med_instr[]" placeholder="After food"></div>
+            </div>
+        `;
+        cards.appendChild(div);
+    }
+    medCardIdx++;
 }
 
-/* ── Sync checkbox → hidden input ── */
+function removeRow(btn, type) {
+    if (type === 'table') btn.closest('tr').remove();
+    else                  btn.closest('.med-card').remove();
+}
+
+/* ── Checkbox → hidden input sync ── */
 function syncChecks(cls, hiddenId) {
-    const checked  = [...document.querySelectorAll('.' + cls + ':checked')].map(c => c.value);
-    const extraEl  = (cls === 'lab-check') ? document.getElementById('extra_lab') : null;
-    let   val      = checked.join(', ');
+    const checked = [...document.querySelectorAll('.' + cls + ':checked')].map(c => c.value);
+    const extraEl = (cls === 'lab-check') ? document.getElementById('extra_lab') : null;
+    let val = checked.join(', ');
     if (extraEl && extraEl.value.trim()) val += (val ? ', ' : '') + extraEl.value.trim();
-    document.getElementById(hiddenId).value = val;
+    const h = document.getElementById(hiddenId);
+    if (h) h.value = val;
 }
 
-document.querySelectorAll('.lab-check,.radio-check').forEach(cb => {
+document.querySelectorAll('.lab-check,.radio-check').forEach(cb =>
     cb.addEventListener('change', () => {
+        syncChecks('lab-check',   'lab_tests_hidden');
+        syncChecks('radio-check', 'radiology_hidden');
+    })
+);
+const extraLabEl = document.getElementById('extra_lab');
+if (extraLabEl) extraLabEl.addEventListener('input', () => syncChecks('lab-check', 'lab_tests_hidden'));
+
+['rx-form','student-rx-form'].forEach(id => {
+    document.getElementById(id)?.addEventListener('submit', () => {
         syncChecks('lab-check',   'lab_tests_hidden');
         syncChecks('radio-check', 'radiology_hidden');
     });
 });
-const extraLabEl = document.getElementById('extra_lab');
-if (extraLabEl) extraLabEl.addEventListener('input', () => syncChecks('lab-check', 'lab_tests_hidden'));
 
-/* ── Before submit: sync checkboxes once more ── */
-document.getElementById('rx-form')?.addEventListener('submit', function() {
-    syncChecks('lab-check',   'lab_tests_hidden');
-    syncChecks('radio-check', 'radiology_hidden');
-});
+/* ── Sidebar toggle (mobile / tablet) ── */
+function toggleSidebar() {
+    const s = document.getElementById('rx-sidebar');
+    if (s) s.classList.toggle('collapsed');
+}
 
 /* ── Auto-dismiss alerts ── */
 setTimeout(() => {
