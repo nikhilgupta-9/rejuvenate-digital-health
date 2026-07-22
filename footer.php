@@ -34,8 +34,8 @@ $logo    = get_header_logo();
     </svg>
   </div> -->
 
-  <div class="container rjv-footer-body">
-    <div class="row g-5">
+  <div class="container-fluid rjv-footer-body p-3">
+    <div class="row g-5 py-4">
 
       <!-- Col 1: Brand -->
       <div class="col-xxl-4 col-xl-4 col-lg-5 col-md-6">
@@ -89,7 +89,7 @@ $logo    = get_header_logo();
           <?php foreach (get_online_book(5) as $svc): ?>
             <li><a href="<?= BASE_URL ?>online-services/<?= $svc['slug_url'] ?>"><i class="fas fa-chevron-right"></i><?= htmlspecialchars($svc['pro_name']) ?></a></li>
           <?php endforeach; ?>
-          <?php foreach (get_sub_category() as $dep): ?>
+          <?php foreach (get_sub_category_home() as $dep): ?>
             <li><a href="<?= BASE_URL ?>department/<?= $dep['slug_url'] ?>"><i class="fas fa-chevron-right"></i><?= htmlspecialchars($dep['categories']) ?></a></li>
           <?php endforeach; ?>
         </ul>
@@ -193,9 +193,9 @@ $logo    = get_header_logo();
 </footer>
 
 <!-- Back to Top -->
-<button class="rjv-back-top" id="rjvBackTop" title="Back to top">
+<!-- <button class="rjv-back-top" id="rjvBackTop" title="Back to top">
   <i class="fas fa-chevron-up"></i>
-</button>
+</button> -->
 
 <script src="<?= BASE_URL ?>assets/js/jquery-3.7.1.min.js"></script>
 <script src="<?= BASE_URL ?>assets/js/jquery.nice-select.min.js"></script>

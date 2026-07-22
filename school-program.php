@@ -72,7 +72,7 @@ $contact = contact_us();
                 </div>
                 <div class="col-lg-6">
                     <div class="position-relative">
-                        <img src="<?= BASE_URL?>assets/img/school-program-hero.jpg" 
+                        <img src="<?= BASE_URL?>assets/img/school-plan.jpeg" 
                              alt="School Health Program" 
                              class="img-fluid rounded-4 shadow-lg">
                         <div class="position-absolute bottom-0 end-0 bg-white p-3 rounded-3 shadow-sm m-3">

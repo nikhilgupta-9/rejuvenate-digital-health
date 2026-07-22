@@ -174,7 +174,7 @@ $awards_result = mysqli_query($conn, $awards_sql);
         </div>
 
         <div class="main_content_iner">
-            <div class="container-fluid p-0">
+            <div class="container-fluid p-0 sm_padding_15px">
                 <div class="row justify-content-center">
                     <div class="col-12">
                         <div class="white_card card_height_100 mb_30">

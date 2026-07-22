@@ -4,6 +4,7 @@ include_once "util/function.php";
 
 $departments = get_sub_category();
 $total = count($departments);
+$search_query = trim($_GET['search'] ?? '');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -96,7 +97,7 @@ $total = count($departments);
 
       <div class="dept-search-box">
         <i class="far fa-search"></i>
-        <input type="text" id="deptSearch" class="form-control" placeholder="Search a department, e.g. Cardiology, ENT…">
+        <input type="text" id="deptSearch" class="form-control" placeholder="Search a department or problem, e.g. Cardiology, chest pain…" value="<?= htmlspecialchars($search_query) ?>">
       </div>
 
       <?php if ($total === 0): ?>
@@ -114,7 +115,9 @@ $total = count($departments);
 
         <div class="row g-4 pb-0 advance-wrap" id="deptGrid">
           <?php foreach ($departments as $dept): ?>
-            <div class="col-xl-3 col-lg-4 col-md-6 dept-card" data-name="<?= strtolower(htmlspecialchars($dept['categories'])) ?>">
+            <div class="col-xl-3 col-lg-4 col-md-6 dept-card"
+              data-name="<?= strtolower(htmlspecialchars($dept['categories'])) ?>"
+              data-desc="<?= strtolower(htmlspecialchars(strip_tags($dept['description'] ?? ''))) ?>">
               <div class="team-box-items mt-0">
                 <a href="<?= BASE_URL ?>department/<?= htmlspecialchars($dept['slug_url']) ?>/">
                   <div class="team-image">
@@ -145,18 +148,20 @@ $total = count($departments);
   <script>
     const deptSearch = document.getElementById('deptSearch');
     if (deptSearch) {
-      deptSearch.addEventListener('input', function () {
-        const q = this.value.trim().toLowerCase();
+      const runFilter = function () {
+        const q = deptSearch.value.trim().toLowerCase();
         const cards = document.querySelectorAll('.dept-card');
         let visible = 0;
         cards.forEach(card => {
-          const match = card.dataset.name.includes(q);
+          const match = !q || card.dataset.name.includes(q) || card.dataset.desc.includes(q);
           card.style.display = match ? '' : 'none';
           if (match) visible++;
         });
         const noResults = document.getElementById('deptNoResults');
         if (noResults) noResults.style.display = visible === 0 ? 'block' : 'none';
-      });
+      };
+      deptSearch.addEventListener('input', runFilter);
+      if (deptSearch.value.trim()) runFilter();
     }
   </script>
 </body>

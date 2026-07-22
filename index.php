@@ -39,11 +39,17 @@ $contact = contact_us();
                             home</h1>
                         <p>Doctor Consultation starts from <span class="tags">Rs 149/-</span></p>
                         <div class="search_input mt-4">
-                            <form class="d-flex">
-                                <input type="search" class="form-control cutom_search"
-                                    placeholder="Search Departments...">
-                                <button type="search" class="btn btn-search"><i class="far fa-search"></i></button>
+                            <form class="d-flex" id="heroSearchForm">
+                                <input type="search" name="search" id="heroSearchInput" class="form-control cutom_search"
+                                    placeholder="Search by department or problem, e.g. Cardiology, chest pain..." autocomplete="off">
+                                <button type="submit" class="btn btn-search"><i class="far fa-search"></i></button>
                             </form>
+                        </div>
+
+                        <div class="hero-book-btn mt-3">
+                            <a href="<?= BASE_URL ?>book-appointment/" class="theme-btn">
+                                <i class="far fa-calendar-check me-1"></i> Book an Appointment
+                            </a>
                         </div>
 
                     </div>
@@ -384,7 +390,7 @@ $contact = contact_us();
     </section>
 
     <!-- Feature Section Start -->
-    <section class="feature-treatment-section pt-4 pb-4 fix section-bg-">
+    <section class="feature-treatment-section pt-4 pb-4 fix section-bg-3">
         <div class="feature-shape-1">
             <img src="assets/img/home-1/feature/shape-01.png" alt="img">
         </div>
@@ -462,38 +468,45 @@ $contact = contact_us();
                 <div class="row g-2">
                     <div class="col-lg-8">
                         <div class="appointment-items">
+                            <span class="subtitle text-uppercase" style="color:#fff;opacity:.8;font-size:.72rem;letter-spacing:.1em;display:inline-block;margin-bottom:6px;">ABDM-Compliant Digital Health Platform</span>
                             <h3>Book An Appointment</h3>
+                            <p style="color:rgba(255,255,255,.82);font-size:14px;margin-top:6px;margin-bottom:16px;">
+                                Send a quick request — our team confirms your slot with a verified doctor. ABHA linking &amp; consent are captured at your appointment.
+                            </p>
 
-                            <form id="appointmentForm">
+                            <form id="appointmentForm" novalidate>
                                 <div class="row">
 
                                     <div class="col-xl-4 col-lg-6 col-md-6">
-                                        <div class="form-clt">
-                                            <p>Name</p>
-                                            <input type="text" name="name" placeholder="Your name" required>
+                                        <div class="form-group">
+                                            <p class="text-light">Name</p>
+                                            <input type="text" class="form-control" name="name" placeholder="Your name" required>
                                         </div>
                                     </div>
 
                                     <div class="col-xl-4 col-lg-6 col-md-6">
-                                        <div class="form-clt">
-                                            <p>Email</p>
-                                            <input type="email" name="email" placeholder="Your email" required>
+                                        <div class="form-group">
+                                            <p class="text-light">Email</p>
+                                            <input type="email"class="form-control" name="email" placeholder="Your email" required>
                                         </div>
                                     </div>
 
                                     <div class="col-xl-4 col-lg-6 col-md-6">
-                                        <div class="form-clt">
-                                            <p>Phone</p>
-                                            <input type="text" name="phone" placeholder="Your phone" required>
+                                        <div class="form-group">
+                                            <p class="text-light">Phone</p>
+                                            <input type="text" class="form-control" name="phone" placeholder="Your phone" required>
                                         </div>
                                     </div>
 
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-clt">
                                             <p>Department</p>
-                                            <select class="single-select w-100" name="department" required>
+                                            <select class="form-control w-100" name="department" required>
                                                 <option value="">Your department</option>
-                                                <?php foreach ($department as $dep) { ?>
+                                                <?php
+                                                $book_dep = get_sub_category();
+                                                foreach ($book_dep as $dep) {
+                                                    ?>
                                                     <option value="<?= $dep['categories'] ?>">
                                                         <?= $dep['categories'] ?>
                                                     </option>
@@ -504,15 +517,25 @@ $contact = contact_us();
 
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-clt">
-                                            <p>Date</p>
-                                            <input type="date" name="date" required>
+                                            <p>Consultation Type</p>
+                                            <select class="form-control w-100" name="appointment_type">
+                                                <option value="online">Online Consultation</option>
+                                                <option value="clinic">In-Clinic Visit</option>
+                                            </select>
                                         </div>
                                     </div>
 
                                     <div class="col-xl-4 col-lg-6 col-md-6">
-                                        <div class="form-clt">
-                                            <p>Time</p>
-                                            <input type="time" name="time" required>
+                                        <div class="form-group">
+                                            <p class="text-light">Date</p>
+                                            <input type="date" class="form-control" name="date" required>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-xl-4 col-lg-6 col-md-6">
+                                        <div class="form-group">
+                                            <p class="text-light">Time</p>
+                                            <input type="time" class="form-control" name="time" required>
                                         </div>
                                     </div>
 
@@ -529,6 +552,12 @@ $contact = contact_us();
                                         <div id="formMessage"></div>
                                     </div>
 
+                                    <div class="col-xl-12 text-center mt-2">
+                                        <a href="<?= BASE_URL ?>book-appointment/" style="color:#fff;font-size:13px;text-decoration:underline;opacity:.9;">
+                                            Prefer to choose your doctor &amp; time slot yourself? Use our guided Booking Wizard <i class="fas fa-arrow-right ms-1"></i>
+                                        </a>
+                                    </div>
+
                                 </div>
                             </form>
 
@@ -536,14 +565,29 @@ $contact = contact_us();
 
                     </div>
                     <div class="col-lg-4">
-                        <div class="appointment-image">
+                        <div class="appointment-image" style="position:relative;">
                             <img src="assets/img/home-1/appointment-img.jpg" alt="img">
+                            <div style="position:absolute;left:16px;right:16px;bottom:16px;background:#fff;border-radius:12px;padding:14px 16px;box-shadow:0 8px 24px rgba(0,0,0,.18);">
+                                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                                    <span style="width:32px;height:32px;border-radius:8px;background:#e9f9f0;color:#009f4d;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem;"><i class="fas fa-id-card"></i></span>
+                                    <span style="font-size:13px;font-weight:600;color:#1f2937;">ABHA / ABDM Integrated</span>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                                    <span style="width:32px;height:32px;border-radius:8px;background:#e9f2fe;color:#0C74C5;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem;"><i class="fas fa-user-md"></i></span>
+                                    <span style="font-size:13px;font-weight:600;color:#1f2937;">Verified &amp; HPR-Registered Doctors</span>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:10px;">
+                                    <span style="width:32px;height:32px;border-radius:8px;background:#fdf2e9;color:#e07e18;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem;"><i class="fas fa-shield-alt"></i></span>
+                                    <span style="font-size:13px;font-weight:600;color:#1f2937;">Secure &amp; Confidential Records</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </section>
+
     <!-- Testimonial Section5 Start -->
     <!-- Time Table Section Start -->
     <section class="time-table-section-2 section-padding pt-4">
@@ -765,6 +809,12 @@ $contact = contact_us();
 
     <?php include("footer.php") ?>
     <script>
+        document.getElementById("heroSearchForm").addEventListener("submit", function (e) {
+            e.preventDefault();
+            const q = document.getElementById("heroSearchInput").value.trim();
+            window.location.href = "<?= BASE_URL ?>departments/" + (q ? "?search=" + encodeURIComponent(q) : "");
+        });
+
         document.getElementById("appointmentForm").addEventListener("submit", function (e) {
             e.preventDefault();
 

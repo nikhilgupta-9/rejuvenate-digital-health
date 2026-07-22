@@ -54,7 +54,7 @@ switch ($action) {
             <div class="row"><div class="col-lg-12 p-0"><?php include "top_nav.php"; ?></div></div>
         </div>
         <div class="main_content_iner">
-            <div class="container-fluid p-0">
+            <div class="container-fluid p-0 sm_padding_15px">
                 <div class="row justify-content-center">
                     <div class="col-md-6">
                         <div class="white_card">

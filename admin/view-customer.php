@@ -149,7 +149,7 @@ if (!empty($customer['dob']) && $customer['dob'] != '0000-00-00') {
         </div>
 
         <div class="main_content_iner">
-            <div class="container-fluid p-0">
+            <div class="container-fluid p-0 sm_padding_15px">
                 <!-- Success/Error Messages -->
                 <?php if (isset($_SESSION['success_message'])): ?>
                     <div class="alert alert-success alert-dismissible fade show" role="alert">

@@ -434,7 +434,7 @@ $result = $stmt->get_result();
         </div>
 
         <div class="main_content_iner ">
-            <div class="container-fluid p-0">
+            <div class="container-fluid p-0 sm_padding_15px">
                 <div class="row justify-content-center">
                     <div class="col-lg-12">
                         <?php if (isset($_SESSION['flash_message'])): ?>

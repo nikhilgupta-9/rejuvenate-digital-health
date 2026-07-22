@@ -49,7 +49,7 @@ $schools_dd = mysqli_query($conn, "SELECT id, school_name FROM schools ORDER BY 
         </div>
 
         <div class="main_content_iner">
-            <div class="container-fluid p-0">
+            <div class="container-fluid p-0 sm_padding_15px">
 
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <div class="page-heading">

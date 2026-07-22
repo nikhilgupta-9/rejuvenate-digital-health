@@ -64,7 +64,7 @@ function time_elapsed_string($datetime) {
     <section class="contact-info-section section-padding pt-5 pb-5">
         <div class="container">
             <div class="row g-4">
-                <div class="col-lg-4 col-md-6">
+                <div class="col-lg-6 col-md-6">
                     <div class="contact-info-box-items text-center p-4 border rounded-3 bg-white shadow-sm h-100">
                         <div class="icon mb-3">
                             <i class="far fa-phone-alt fs-1 text-light"></i>
@@ -81,7 +81,7 @@ function time_elapsed_string($datetime) {
                     </div>
                 </div>
                 
-                <div class="col-lg-4 col-md-6">
+                <div class="col-lg-6 col-md-6">
                     <div class="contact-info-box-items text-center p-4 border rounded-3 bg-white shadow-sm h-100">
                         <div class="icon mb-3">
                             <i class="far fa-envelope fs-1 text-light"></i>
@@ -95,7 +95,7 @@ function time_elapsed_string($datetime) {
                     </div>
                 </div>
                 
-                <div class="col-lg-4 col-md-6">
+                <div class="col-lg-4 col-md-6 d-none">
                     <div class="contact-info-box-items text-center p-4 border rounded-3 bg-white shadow-sm h-100">
                         <div class="icon mb-3">
                             <i class="fal fa-map-marker-alt fs-1 text-light"></i>
@@ -125,7 +125,7 @@ function time_elapsed_string($datetime) {
                 <div class="col-lg-6">
                     <div class="contact-appointment-box p-4 border rounded-3 bg-white shadow-sm">
                         <h3 class="mb-4">Get In Touch</h3>
-                        <form action="#" id="contactForm">
+                        <form action="#" id="contactForm" novalidate>
                             <div class="row g-3">
                                 <div class="col-lg-6 wow fadeInUp" data-wow-delay=".3s">
                                     <div class="form-clt">
@@ -171,11 +171,11 @@ function time_elapsed_string($datetime) {
                                 <div class="col-12 wow fadeInUp" data-wow-delay=".3s">
                                     <button type="submit" class="btn btn-primary btn-lg px-5">
                                         <i class="far fa-paper-plane me-2"></i>
-                                        Send Message
+                                        <span class="btn-text">Send Message</span>
                                     </button>
                                 </div>
-                                
-                                <div id="contactMessage" class="alert alert-success d-none"></div>
+
+                                <div id="contactMessage" class="alert d-none"></div>
                             </div>
                         </form>
                     </div>
@@ -184,114 +184,7 @@ function time_elapsed_string($datetime) {
         </div>
     </section>
 
-    <!-- Testimonials Section Start -->
-    <section class="testimonial-section section-padding bg-light">
-        <div class="container">
-            <!-- Section Header -->
-            <div class="row justify-content-center mb-5">
-                <div class="col-lg-8 text-center">
-                    <h2 class="display-6 fw-bold">What Our Patients Say</h2>
-                    <p class="text-muted">Real experiences from our valued patients</p>
-                </div>
-            </div>
-
-            <!-- Testimonial Slider -->
-            <div class="testimonial-right-item">
-                <div class="swiper testimonial-slider-1">
-                    <div class="swiper-wrapper">
-                        <?php 
-                        if (!empty($testimonials)) {
-                            foreach ($testimonials as $testi) {
-                                $rating = isset($testi['rating']) ? intval($testi['rating']) : 5;
-
-                                 $hasImage = !empty($testi['client_photo']) && file_exists($testi['client_photo']);
-                                        $firstLetter = strtoupper(substr(trim($testi['client_name']), 0, 1));
-                        ?>
-                            <div class="swiper-slide">
-                                <div class="card border-0 shadow-sm h-100">
-                                    <div class="card-body p-4">
-                                        <!-- Header -->
-                                        <div class="d-flex justify-content-between align-items-start mb-3">
-                                            <div class="d-flex gap-3">
-                                                <?php if ($hasImage): ?>
-                                                        <img src="<?= htmlspecialchars($testi['client_photo']) ?>"
-                                                            alt="<?= htmlspecialchars($testi['client_name']) ?>"
-                                                            class="reviewer-avatar">
-                                                    <?php else: ?>
-                                                        <div class="reviewer-avatar avatar-placeholder">
-                                                            <?= htmlspecialchars($firstLetter) ?>
-                                                        </div>
-                                                    <?php endif; ?>
-
-                                                <div>
-                                                    <h6 class="fw-bold mb-0"><?= htmlspecialchars($testi['client_name']) ?></h6>
-                                                    <small class="text-muted">
-                                                        <?= htmlspecialchars($testi['client_title'] ?? 'Verified Patient') ?>
-                                                        <?php if (!empty($testi['client_company'])): ?>
-                                                            <span class="mx-1">•</span>
-                                                            <?= htmlspecialchars($testi['client_company']) ?>
-                                                        <?php endif; ?>
-                                                    </small>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <img src="assets/img/home-5/testimonial/01.svg" alt="Google" style="width: 28px; height: 28px;">
-                                            </div>
-                                        </div>
-
-                                        <!-- Rating Stars -->
-                                        <div class="mb-2">
-                                            <?php for ($i = 1; $i <= 5; $i++): ?>
-                                                <i class="fas fa-star <?= $i <= $rating ? 'text-warning' : 'text-secondary' ?>" 
-                                                   style="font-size: 18px;"></i>
-                                            <?php endfor; ?>
-                                            <span class="ms-2 text-muted small fw-semibold"><?= number_format($rating, 1) ?></span>
-                                        </div>
-
-                                        <!-- Review Text -->
-                                        <p class="card-text fst-italic" style="font-size: 15px; line-height: 1.6;">
-                                            “<?= htmlspecialchars($testi['testimonial_text']) ?>”
-                                        </p>
-
-                                        <!-- Footer -->
-                                        <div class="d-flex justify-content-between align-items-center pt-3 border-top">
-                                            <small class="text-muted">
-                                                <i class="far fa-clock me-1"></i>
-                                                <?= time_elapsed_string($testi['project_date'] ?? $testi['created_at'] ?? '') ?>
-                                            </small>
-                                            <?php if (!empty($testi['featured']) && $testi['featured'] == 1): ?>
-                                                <span class="badge bg-primary bg-opacity-10 text-primary">
-                                                    <i class="fas fa-check-circle me-1"></i>
-                                                    Featured
-                                                </span>
-                                            <?php endif; ?>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php 
-                            }
-                        } else { 
-                        ?>
-                            <div class="swiper-slide">
-                                <div class="card border-0 shadow-sm">
-                                    <div class="card-body p-4 text-center">
-                                        <p class="text-muted mb-0">No testimonials available yet.</p>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php } ?>
-                    </div>
-
-                    <!-- Slider Navigation -->
-                    <div class="swiper-button-next"></div>
-                    <div class="swiper-button-prev"></div>
-                    <div class="swiper-pagination"></div>
-                </div>
-            </div>
-        </div>
-    </section>
-
+   
     <?php include("footer.php")?>
 
     <!-- Scripts -->
@@ -299,6 +192,45 @@ function time_elapsed_string($datetime) {
     <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
     <script src="<?= BASE_URL ?>assets/js/swiper-bundle.min.js"></script>
     <script>
+        document.getElementById("contactForm").addEventListener("submit", function (e) {
+            e.preventDefault();
+
+            const form = this;
+            const formData = new FormData(form);
+            const messageBox = document.getElementById("contactMessage");
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const btnText = submitBtn.querySelector(".btn-text");
+
+            submitBtn.disabled = true;
+            btnText.textContent = "Sending...";
+            messageBox.classList.add("d-none");
+
+            fetch("<?= BASE_URL ?>util/contact-handler.php", {
+                method: "POST",
+                body: formData
+            })
+                .then(res => res.json())
+                .then(data => {
+                    submitBtn.disabled = false;
+                    btnText.textContent = "Send Message";
+
+                    messageBox.classList.remove("d-none", "alert-success", "alert-danger");
+                    messageBox.classList.add(data.status === "success" ? "alert-success" : "alert-danger");
+                    messageBox.textContent = data.message;
+
+                    if (data.status === "success") {
+                        form.reset();
+                    }
+                })
+                .catch(() => {
+                    submitBtn.disabled = false;
+                    btnText.textContent = "Send Message";
+                    messageBox.classList.remove("d-none", "alert-success");
+                    messageBox.classList.add("alert-danger");
+                    messageBox.textContent = "Something went wrong. Please try again.";
+                });
+        });
+
         // Initialize Swiper
         document.addEventListener('DOMContentLoaded', function() {
             const swiper = new Swiper('.testimonial-slider-1', {

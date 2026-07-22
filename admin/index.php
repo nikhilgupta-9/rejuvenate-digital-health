@@ -59,7 +59,7 @@ $pending_appts = (int)(mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) a
             </div>
 
             <div class="main_content_iner">
-                <div class="container-fluid p-0">
+                <div class="container-fluid p-0 sm_padding_15px">
 
                     <!-- Page Header -->
                     <div class="d-flex justify-content-between align-items-center mb-3">

@@ -1023,6 +1023,124 @@ function insert_appointment($data) {
 }
 
 /**
+ * Insert a contact-us inquiry.
+ * Required $data keys: name, email, subject, message. Optional: phone.
+ * Returns the new inquiry's insert ID on success, or false on failure.
+ */
+function insert_inquiry($data) {
+    global $conn;
+
+    $stmt = mysqli_prepare($conn, "
+        INSERT INTO inquiries (name, email, phone, subject, message)
+        VALUES (?, ?, ?, ?, ?)
+    ");
+    mysqli_stmt_bind_param(
+        $stmt,
+        "sssss",
+        $data['name'],
+        $data['email'],
+        $data['phone'],
+        $data['subject'],
+        $data['message']
+    );
+
+    $result = mysqli_stmt_execute($stmt);
+    $insertId = $result ? mysqli_insert_id($conn) : false;
+
+    if (!$result) {
+        error_log("Inquiry insert failed: " . mysqli_stmt_error($stmt));
+    }
+
+    mysqli_stmt_close($stmt);
+
+    return $insertId;
+}
+
+/**
+ * Insert the inquiry and (best-effort) email a notification to the site's
+ * configured contact address. Returns the new inquiry's insert ID on success,
+ * or false if the inquiry itself could not be saved. A failed notification
+ * email does NOT cause this to return false — same pattern as
+ * send_appointment_email() above.
+ */
+function send_inquiry_email($data, $toEmail) {
+    $inquiryId = insert_inquiry($data);
+    if (!$inquiryId) {
+        return false;
+    }
+
+    if (empty($toEmail)) {
+        return $inquiryId;
+    }
+
+    $mail = new PHPMailer(true);
+
+    try {
+        $mail->isSMTP();
+        $mail->Host       = 'smtp.gmail.com';
+        $mail->SMTPAuth   = true;
+        $mail->Username   = 'nik007guptadu@gmail.com';
+        $mail->Password   = 'ltmnhrwacmwmcrni';
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port       = 587;
+
+        $mail->setFrom('no-reply@rejuvenatehealth.com', 'REJUVENATE Digital Health');
+        $mail->addAddress($toEmail);
+        $mail->addReplyTo($data['email'], $data['name']);
+
+        $mail->isHTML(true);
+        $mail->Subject = 'New Contact Us Inquiry: ' . $data['subject'];
+
+        $mail->Body = "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; background:#f4f6f8; }
+                .container { max-width:600px; margin:auto; background:#ffffff; padding:20px; }
+                h2 { background:#2c5aa0; color:#fff; padding:15px; text-align:center; }
+                table { width:100%; border-collapse:collapse; }
+                td { padding:10px; border-bottom:1px solid #ddd; }
+                .label { font-weight:bold; width:30%; }
+                .footer { text-align:center; font-size:12px; color:#777; margin-top:20px; }
+            </style>
+        </head>
+        <body>
+            <div class='container'>
+                <h2>New Contact Us Inquiry</h2>
+                <table>
+                    <tr><td class='label'>Name</td><td>{$data['name']}</td></tr>
+                    <tr><td class='label'>Email</td><td>{$data['email']}</td></tr>" .
+                    (!empty($data['phone']) ? "<tr><td class='label'>Phone</td><td>{$data['phone']}</td></tr>" : "") . "
+                    <tr><td class='label'>Subject</td><td>{$data['subject']}</td></tr>
+                    <tr><td class='label'>Message</td><td>" . nl2br(htmlspecialchars($data['message'])) . "</td></tr>
+                </table>
+                <div class='footer'>
+                    <p>&copy; " . date('Y') . " REJUVENATE Digital Health</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        ";
+
+        $mail->AltBody =
+            "New Contact Us Inquiry\n\n" .
+            "Name: {$data['name']}\n" .
+            "Email: {$data['email']}\n" .
+            (!empty($data['phone']) ? "Phone: {$data['phone']}\n" : "") .
+            "Subject: {$data['subject']}\n" .
+            "Message: {$data['message']}\n";
+
+        $mail->send();
+        return $inquiryId;
+
+    } catch (Exception $e) {
+        error_log("Inquiry Mail Error: " . $mail->ErrorInfo);
+        return $inquiryId;
+    }
+}
+
+/**
  * Active doctors practising in a given department (by department slug).
  * Used by the public "Book an Appointment" page's department -> doctor step.
  */

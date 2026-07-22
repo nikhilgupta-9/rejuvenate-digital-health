@@ -1323,4 +1323,76 @@ function send_appointment_assignment_email($doctor_email, $doctor_name, $appoint
         return false;
     }
 }
+
+/* ==================== DOCTOR SCHEDULE MANAGEMENT ==================== */
+
+if (isset($_POST["save_doctor_schedule"])) {
+    $doctor_id     = (int) ($_POST['doctor_id'] ?? 0);
+    $day_of_week   = $_POST['day_of_week'] ?? '';
+    $start_time    = $_POST['start_time'] ?? '';
+    $end_time      = $_POST['end_time'] ?? '';
+    $slot_duration = (int) ($_POST['slot_duration_minutes'] ?? 30);
+    $is_available  = isset($_POST['is_available']) ? 1 : 0;
+
+    $valid_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    $redirect   = "doctor-schedule.php" . ($doctor_id ? "?doctor_id=$doctor_id" : "");
+
+    if (!$doctor_id || !in_array($day_of_week, $valid_days, true) || !$start_time || !$end_time) {
+        $_SESSION['error'] = "Please fill in all required fields.";
+        header("Location: $redirect");
+        exit();
+    }
+
+    if (strtotime($end_time) <= strtotime($start_time)) {
+        $_SESSION['error'] = "End time must be after start time.";
+        header("Location: $redirect");
+        exit();
+    }
+
+    $chk = $conn->prepare("SELECT id FROM doctors WHERE id = ? AND status = 'Active'");
+    $chk->bind_param("i", $doctor_id);
+    $chk->execute();
+    if (!$chk->get_result()->fetch_assoc()) {
+        $_SESSION['error'] = "Invalid doctor.";
+        header("Location: doctor-schedule.php");
+        exit();
+    }
+
+    $existing = $conn->prepare("SELECT id FROM doctor_schedules WHERE doctor_id = ? AND day_of_week = ?");
+    $existing->bind_param("is", $doctor_id, $day_of_week);
+    $existing->execute();
+    $existingRow = $existing->get_result()->fetch_assoc();
+
+    if ($existingRow) {
+        $stmt = $conn->prepare("UPDATE doctor_schedules SET start_time = ?, end_time = ?, slot_duration_minutes = ?, is_available = ? WHERE id = ?");
+        $stmt->bind_param("ssiii", $start_time, $end_time, $slot_duration, $is_available, $existingRow['id']);
+    } else {
+        $stmt = $conn->prepare("INSERT INTO doctor_schedules (doctor_id, day_of_week, start_time, end_time, slot_duration_minutes, is_available) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("isssii", $doctor_id, $day_of_week, $start_time, $end_time, $slot_duration, $is_available);
+    }
+
+    if ($stmt->execute()) {
+        $_SESSION['success'] = "$day_of_week schedule saved successfully.";
+    } else {
+        $_SESSION['error'] = "Database error: " . $conn->error;
+    }
+    header("Location: $redirect");
+    exit();
+}
+
+if (isset($_POST["delete_doctor_schedule"])) {
+    $schedule_id = (int) ($_POST['schedule_id'] ?? 0);
+    $doctor_id   = (int) ($_POST['doctor_id'] ?? 0);
+    $redirect    = "doctor-schedule.php" . ($doctor_id ? "?doctor_id=$doctor_id" : "");
+
+    $stmt = $conn->prepare("DELETE FROM doctor_schedules WHERE id = ? AND doctor_id = ?");
+    $stmt->bind_param("ii", $schedule_id, $doctor_id);
+    if ($stmt->execute()) {
+        $_SESSION['success'] = "Schedule entry removed.";
+    } else {
+        $_SESSION['error'] = "Database error: " . $conn->error;
+    }
+    header("Location: $redirect");
+    exit();
+}
 ?>

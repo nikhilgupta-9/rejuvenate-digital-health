@@ -662,10 +662,11 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
               <label class="d-flex gap-2 mb-0" style="cursor:pointer;">
                 <input type="checkbox" name="consent_given" id="bkConsent" required style="margin-top:3px;">
                 <span>
-                  I consent to Rejuvenate Digital Health collecting and processing my personal and health
-                  information for the purpose of this consultation, in line with ABDM (Ayushman Bharat Digital
-                  Mission) data-sharing guidelines and our
+                   I voluntarily consent to receive medical consultation through Telemedicine (Video Call, Audio Call, Chat or Digital Platform), understand that the doctor's advice will be based on the information and documents provided by me, agree to the secure storage and management of my digital health records, consent to the creation, linking, updating and sharing of my health records through ABHA/ABDM as per applicable guidelines, and confirm that the information provided by me is true and correct.
                   <a href="<?= BASE_URL ?>terms-and-condition/" class="text-danger">Terms &amp; Privacy Policy</a>. *
+                </span>
+                <span>
+                   मैं स्वेच्छा से टेलीमेडिसिन (वीडियो कॉल, ऑडियो कॉल, चैट या डिजिटल प्लेटफॉर्म) के माध्यम से चिकित्सा परामर्श प्राप्त करने, यह समझने कि चिकित्सक की सलाह मेरे द्वारा प्रदान की गई जानकारी एवं दस्तावेजों के आधार पर होगी, अपने डिजिटल स्वास्थ्य रिकॉर्ड के सुरक्षित संग्रहण एवं प्रबंधन, लागू दिशानिर्देशों के अनुसार ABHA/ABDM के माध्यम से स्वास्थ्य रिकॉर्ड के निर्माण, लिंकिंग, अद्यतन एवं साझा किए जाने तथा मेरे द्वारा प्रदान की गई जानकारी के सही एवं सत्य होने की पुष्टि हेतु अपनी सहमति प्रदान करता/करती हूँ।
                 </span>
               </label>
             </div>

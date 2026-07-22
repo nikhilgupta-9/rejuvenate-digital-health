@@ -40,7 +40,7 @@ $schools_result = mysqli_query($conn, "SELECT s.*,
         </div>
 
         <div class="main_content_iner">
-            <div class="container-fluid p-0">
+            <div class="container-fluid p-0 sm_padding_15px">
 
                 <!-- Heading -->
                 <div class="d-flex justify-content-between align-items-center mb-4">

@@ -822,21 +822,21 @@ require_once __DIR__ . '/inc/sidebar.php';
             item.dataset.docId = doc.id;
             item.dataset.uploaded = doc.uploaded_at;
             item.innerHTML = `
-        <div class="doc-icon"><i class="fa fa-file-text-o"></i></div>
-        <div style="flex:1;min-width:0;">
-          <div class="doc-name" style="font-weight:600;font-size:.88rem;color:#1f2937;">${escapeHtml(doc.document_name)}</div>
-          <div class="doc-desc" style="font-size:.78rem;color:#6b7280;${doc.description ? '' : 'display:none;'}">${escapeHtml(doc.description || '')}</div>
-          <div style="font-size:.76rem;color:#9ca3af;">${new Date(doc.uploaded_at).toLocaleDateString()}</div>
-        </div>
-        <a href="<?= BASE_URL ?>${doc.file_path}" target="_blank" class="btn btn-sm btn-outline-secondary doc-view-link"><i class="fa fa-eye"></i></a>
-        <button type="button" class="doc-menu-btn" onclick="toggleDocActions(this)"><i class="fa fa-bars"></i></button>
-        <div class="doc-actions-row">
-          <button type="button" class="doc-action-btn" onclick="openEditDocModal(this)"><i class="fa fa-pencil"></i> Edit</button>
-          <button type="button" class="doc-action-btn" onclick="openShareDocModal(this)"><i class="fa fa-share-alt"></i> Share</button>
-          <button type="button" class="doc-action-btn" onclick="copyDocLink(this)"><i class="fa fa-link"></i> Send Link</button>
-          <button type="button" class="doc-action-btn danger" onclick="removeDocument(this)"><i class="fa fa-trash"></i> Remove</button>
-        </div>
-      `;
+              <div class="doc-icon"><i class="fa fa-file-text-o"></i></div>
+              <div style="flex:1;min-width:0;">
+                <div class="doc-name" style="font-weight:600;font-size:.88rem;color:#1f2937;">${escapeHtml(doc.document_name)}</div>
+                <div class="doc-desc" style="font-size:.78rem;color:#6b7280;${doc.description ? '' : 'display:none;'}">${escapeHtml(doc.description || '')}</div>
+                <div style="font-size:.76rem;color:#9ca3af;">${new Date(doc.uploaded_at).toLocaleDateString()}</div>
+              </div>
+              <a href="<?= BASE_URL ?>${doc.file_path}" target="_blank" class="btn btn-sm btn-outline-secondary doc-view-link"><i class="fa fa-eye"></i></a>
+              <button type="button" class="doc-menu-btn" onclick="toggleDocActions(this)"><i class="fa fa-bars"></i></button>
+              <div class="doc-actions-row">
+                <button type="button" class="doc-action-btn" onclick="openEditDocModal(this)"><i class="fa fa-pencil"></i> Edit</button>
+                <button type="button" class="doc-action-btn" onclick="openShareDocModal(this)"><i class="fa fa-share-alt"></i> Share</button>
+                <button type="button" class="doc-action-btn" onclick="copyDocLink(this)"><i class="fa fa-link"></i> Send Link</button>
+                <button type="button" class="doc-action-btn danger" onclick="removeDocument(this)"><i class="fa fa-trash"></i> Remove</button>
+              </div>
+            `;
             document.getElementById('docsList').prepend(item);
 
             const countLabel = document.getElementById('docCountLabel');

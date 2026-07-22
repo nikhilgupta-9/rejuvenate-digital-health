@@ -99,7 +99,7 @@ $members_list = mysqli_query($conn, "SELECT * FROM school_members $m_where ORDER
             </div>
 
             <div class="main_content_iner">
-                <div class="container-fluid p-0">
+                <div class="container-fluid p-0 sm_padding_15px">
 
                     <!-- Breadcrumb -->
                     <nav aria-label="breadcrumb" class="mb-3">

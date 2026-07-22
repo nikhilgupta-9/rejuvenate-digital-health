@@ -183,7 +183,7 @@ $verified_customers = mysqli_fetch_assoc($verified_result)['verified'];
         </div>
 
         <div class="main_content_iner">
-            <div class="container-fluid p-0">
+            <div class="container-fluid p-0 sm_padding_15px">
                 <!-- Success/Error Messages -->
                 <?php if (isset($_SESSION['success_message'])): ?>
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
