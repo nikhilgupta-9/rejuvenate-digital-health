@@ -21,21 +21,22 @@ if (JWT_SECRET && !empty($_COOKIE['rdh_admin_token'])) {
       header("Location: ../index.php");
       exit();
     }
-  } catch (RuntimeException $e) { /* expired/invalid — fall through to login form */ }
+  } catch (RuntimeException $e) { /* expired/invalid — fall through to login form */
+  }
 }
 
 // ── IP-based rate limit — survives cleared cookies/sessions ──
 // Independent of the per-account lock below: this throttles an IP hammering
 // many different usernames, which a per-account lock alone can't catch.
-$IP_MAX_ATTEMPTS  = 10;
-$IP_WINDOW_SECS   = 900; // 15 minutes
+$IP_MAX_ATTEMPTS = 10;
+$IP_WINDOW_SECS = 900; // 15 minutes
 
 $rl = $conn->prepare("SELECT COUNT(*) as c FROM login_rate_limits
     WHERE entity_type='admin' AND ip_address=? AND success=0 AND attempted_at > (NOW() - INTERVAL ? SECOND)");
 $rl->bind_param('si', $ip, $IP_WINDOW_SECS);
 $rl->execute();
 $ip_failures = (int) $rl->get_result()->fetch_assoc()['c'];
-$ip_blocked  = $ip_failures >= $IP_MAX_ATTEMPTS;
+$ip_blocked = $ip_failures >= $IP_MAX_ATTEMPTS;
 
 $error = '';
 if ($ip_blocked) {
@@ -43,7 +44,7 @@ if ($ip_blocked) {
 }
 
 // Per-account lock configuration (mirrors the DB columns already on admin_user)
-$MAX_ATTEMPTS    = 4;
+$MAX_ATTEMPTS = 4;
 $COOLDOWN_PERIOD = 1200; // 20 minutes
 
 if ($_SERVER["REQUEST_METHOD"] == "POST" && !$ip_blocked) {
@@ -85,15 +86,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && !$ip_blocked) {
           $update_stmt->close();
 
           $payload = [
-            'sub'        => (int) $user_data['id'],
-            'role'       => 'admin',
-            'username'   => $user_data['username'],
+            'sub' => (int) $user_data['id'],
+            'role' => 'admin',
+            'username' => $user_data['username'],
             'admin_role' => $user_data['role'],
           ];
-          $accessToken  = JWT::issue($payload, JWT_SECRET, 900);      // 15 min
+          $accessToken = JWT::issue($payload, JWT_SECRET, 900);      // 15 min
           $refreshToken = bin2hex(random_bytes(32));
-          $refreshHash  = hash('sha256', $refreshToken);
-          $refreshExp   = date('Y-m-d H:i:s', strtotime('+7 days'));
+          $refreshHash = hash('sha256', $refreshToken);
+          $refreshExp = date('Y-m-d H:i:s', strtotime('+7 days'));
 
           // Revoke any previous refresh tokens for this admin
           $conn->query("UPDATE jwt_refresh_tokens SET revoked=1, revoked_at=NOW() WHERE entity_type='admin' AND entity_id=" . (int) $user_data['id']);
@@ -109,17 +110,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && !$ip_blocked) {
 
           $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
           setcookie('rdh_admin_token', $accessToken, [
-            'expires' => time() + 900, 'path' => '/', 'secure' => $secure, 'httponly' => true, 'samesite' => 'Strict',
+            'expires' => time() + 900,
+            'path' => '/',
+            'secure' => $secure,
+            'httponly' => true,
+            'samesite' => 'Strict',
           ]);
           setcookie('rdh_admin_refresh', $refreshToken, [
-            'expires' => $refresh_cookie_expiry, 'path' => '/', 'secure' => $secure, 'httponly' => true, 'samesite' => 'Strict',
+            'expires' => $refresh_cookie_expiry,
+            'path' => '/',
+            'secure' => $secure,
+            'httponly' => true,
+            'samesite' => 'Strict',
           ]);
 
           // Populate session too, so this same request's redirect target loads instantly
           $_SESSION['admin_logged_in'] = true;
-          $_SESSION['admin_id']        = $user_data['id'];
-          $_SESSION['admin_user']      = $user_data['username'];
-          $_SESSION['admin_role']      = $user_data['role'];
+          $_SESSION['admin_id'] = $user_data['id'];
+          $_SESSION['admin_user'] = $user_data['username'];
+          $_SESSION['admin_role'] = $user_data['role'];
 
           _record_attempt($conn, $ip, $username, true);
           $logger->logAuthAttempt($username, 'password', true, $user_data['id'], 'admin');

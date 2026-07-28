@@ -32,6 +32,9 @@ $active_page = $active_page ?? '';
     <a href="<?= $base_path ?? '../' ?>members/add.php" <?= $active_page==='add' ? 'class="active"' : '' ?>>
       <i class="fas fa-user-plus"></i> Add Member
     </a>
+    <a href="<?= $base_path ?? '../' ?>members/import.php" <?= $active_page==='import' ? 'class="active"' : '' ?>>
+      <i class="fas fa-file-import"></i> Bulk Import
+    </a>
     <a href="<?= $base_path ?? '../' ?>members/list.php?type=Student">
       <i class="fas fa-user-graduate"></i> Students
     </a>
