@@ -52,6 +52,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_action'])) {
                     $bulk_message_type = 'success';
                     break;
 
+                case 'show_on_home':
+                    $stmt = $conn->prepare("UPDATE sub_categories SET show_on_home = 1 WHERE id IN ($placeholders)");
+                    $stmt->bind_param($types, ...$selected_ids);
+                    $stmt->execute();
+                    $bulk_message = "$count department(s) will now show on the home page.";
+                    $bulk_message_type = 'success';
+                    break;
+
+                case 'hide_from_home':
+                    $stmt = $conn->prepare("UPDATE sub_categories SET show_on_home = 0 WHERE id IN ($placeholders)");
+                    $stmt->bind_param($types, ...$selected_ids);
+                    $stmt->execute();
+                    $bulk_message = "$count department(s) hidden from the home page.";
+                    $bulk_message_type = 'success';
+                    break;
+
                 default:
                     $bulk_message = 'Unknown bulk action requested.';
                     $bulk_message_type = 'danger';
@@ -212,6 +228,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_action'])) {
                                         <button type="button" class="btn btn-sm btn-outline-danger bulk-btn" data-action="delete" disabled>
                                             <i class="fas fa-trash me-1"></i>Delete
                                         </button>
+                                        <button type="button" class="btn btn-sm btn-outline-primary bulk-btn" data-action="show_on_home" disabled>
+                                            <i class="fas fa-home me-1"></i>Show on Home
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary bulk-btn" data-action="hide_from_home" disabled>
+                                            <i class="fas fa-eye-slash me-1"></i>Hide from Home
+                                        </button>
                                     </div>
                                 </div>
 
@@ -230,6 +252,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_action'])) {
                                                         <th scope="col">Parent Category</th>
                                                         <th scope="col">Slug URL</th>
                                                         <th scope="col">Status</th>
+                                                        <th scope="col">Home Page</th>
                                                         <th scope="col">Added On</th>
                                                         <th scope="col">Action</th>
                                                     </tr>
@@ -330,6 +353,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_action'])) {
                     activate: `Activate ${checked.length} selected department(s)?`,
                     deactivate: `Deactivate ${checked.length} selected department(s)?`,
                     delete: `Delete ${checked.length} selected department(s)? This cannot be undone.`,
+                    show_on_home: `Show ${checked.length} selected department(s) on the home page?`,
+                    hide_from_home: `Hide ${checked.length} selected department(s) from the home page?`,
                 };
                 if (!confirm(messages[action] || 'Apply this action to the selected departments?')) return;
 

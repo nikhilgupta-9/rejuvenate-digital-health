@@ -85,45 +85,49 @@ $pro_details = fetch_product_details();
                     <div class="col-lg-12">
                         <div class="appointment-items">
                             <h3>Book Your Medicine</h3>
-                            <form action="#">
+                            <form id="medicineBookingForm" novalidate>
+                                <input type="hidden" name="product" value="<?= htmlspecialchars($pro_details['pro_name']) ?>">
                                 <div class="row">
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-clt">
                                             <p>Name</p>
-                                            <input type="text" placeholder="Your name">
+                                            <input type="text" name="name" placeholder="Your name" required>
                                         </div>
                                     </div>
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-clt">
                                             <p>Email</p>
-                                            <input type="text" placeholder="Your email">
+                                            <input type="email" name="email" placeholder="Your email" required>
                                         </div>
                                     </div>
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-clt">
                                             <p>Phone</p>
-                                            <input type="text" placeholder="Your phone">
+                                            <input type="text" name="phone" placeholder="Your phone" required>
                                         </div>
                                     </div>
 
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-clt">
                                             <p>Date</p>
-                                            <input type="date" placeholder="Your date">
+                                            <input type="date" name="date" placeholder="Your date" required>
                                         </div>
                                     </div>
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-clt">
                                             <p>Subject</p>
-                                            <input type="text" placeholder="Your Subject">
+                                            <input type="text" name="subject" placeholder="Your Subject">
                                         </div>
                                     </div>
                                     <div class="col-xl-4">
                                         <div class="form-clt">
                                             <button class="theme-btn" type="submit">
-                                                Book Now
+                                                <span class="btn-text">Book Now</span>
                                             </button>
                                         </div>
+                                    </div>
+                                    <div class="col-xl-12 mt-3">
+                                        <div id="medicineFormMessage"></div>
                                     </div>
                                 </div>
                             </form>
@@ -145,10 +149,10 @@ $pro_details = fetch_product_details();
                         <div class="about-content">
                             <div class="section-title text-start mb-0">
                                 <span class="subtitle tz-sub-tilte tz-sub-anim  text-uppercase tx-subTitle">ABOUT US</span>
-                                <h2 class="tx-title sec_title  tz-itm-title tz-itm-anim">Welcome to REJUVINATE DIGITAL HEALTH – Your Trusted Online Healthcare Partner.</h2>
+                                <h2 class="tx-title sec_title  tz-itm-title tz-itm-anim">Welcome to REJUVENATE DIGITAL HEALTH – Your Trusted Online Healthcare Partner.</h2>
                             </div>
-                            <p class="about-text"><b>REJUVINATE DIGITAL HEALTH</b> welcomes you to tech Era of Digital Online Health support for you and your precious family members.</p>
-                            <p class="about-text">At <b>REJUVINATE DIGITAL HEALTH</b>, we bring quality healthcare to your fingertips — anytime, anywhere. Our Online Telemedicine Consultation Platform connects you directly with experienced doctors from the comfort of your home.</p>
+                            <p class="about-text"><b>REJUVENATE DIGITAL HEALTH</b> welcomes you to tech Era of Digital Online Health support for you and your precious family members.</p>
+                            <p class="about-text">At <b>REJUVENATE DIGITAL HEALTH</b>, we bring quality healthcare to your fingertips — anytime, anywhere. Our Online Telemedicine Consultation Platform connects you directly with experienced doctors from the comfort of your home.</p>
 
                             <div class="why-text">
                                 <h3>💡 Why Choose Us?</h3>
@@ -214,7 +218,7 @@ $pro_details = fetch_product_details();
                     <div class="why-text">
                         <h3>🩺 Get Started Today</h3>
                         <p>Your health deserves convenience, quality, and care — all in one place.
-                            Sign up now and experience the future of healthcare with REJUVINATE DIGITAL HEALTH </p>
+                            Sign up now and experience the future of healthcare with REJUVENATE DIGITAL HEALTH </p>
                     </div>
                 </div>
             </div>
@@ -223,6 +227,45 @@ $pro_details = fetch_product_details();
 
 
     <?php include("footer.php") ?>
+    <script>
+        document.getElementById("medicineBookingForm").addEventListener("submit", function (e) {
+            e.preventDefault();
+
+            const form = this;
+            const formData = new FormData(form);
+            const messageBox = document.getElementById("medicineFormMessage");
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const btnText = submitBtn.querySelector(".btn-text");
+
+            submitBtn.disabled = true;
+            btnText.textContent = "Sending...";
+            messageBox.classList.remove("d-none");
+            messageBox.innerHTML = "";
+
+            fetch("<?= BASE_URL ?>util/medicine-booking-handler.php", {
+                method: "POST",
+                body: formData
+            })
+                .then(res => res.json())
+                .then(data => {
+                    submitBtn.disabled = false;
+                    btnText.textContent = "Book Now";
+
+                    const alertClass = data.status === "success" ? "alert-success" : "alert-danger";
+                    messageBox.innerHTML = `<div class="alert ${alertClass}">${data.message}</div>`;
+
+                    if (data.status === "success") {
+                        form.reset();
+                        form.querySelector('input[name="product"]').value = <?= json_encode($pro_details['pro_name']) ?>;
+                    }
+                })
+                .catch(() => {
+                    submitBtn.disabled = false;
+                    btnText.textContent = "Book Now";
+                    messageBox.innerHTML = `<div class="alert alert-danger">Something went wrong. Please try again.</div>`;
+                });
+        });
+    </script>
 </body>
 
 </html>

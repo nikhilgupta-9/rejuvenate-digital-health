@@ -154,19 +154,36 @@ if (isset($_POST["add-sub-categories"])) {
     }
 
     $cate_id = mt_rand(11111, 99999);
-    $cate_name = mysqli_real_escape_string($conn, $_POST["cate_name"]);
-    $description = mysqli_real_escape_string($conn, $_POST["description"] ?? '');
-    $meta_title = mysqli_real_escape_string($conn, $_POST["meta_title"]);
-    $meta_key = mysqli_real_escape_string($conn, $_POST["meta_key"]);
-    $meta_desc = mysqli_real_escape_string($conn, $_POST["meta_desc"]);
+    $cate_name = trim($_POST["cate_name"]);
+    $description = trim($_POST["description"] ?? '');
+    $meta_title = trim($_POST["meta_title"] ?? '');
+    $meta_key = trim($_POST["meta_key"] ?? '');
+    $meta_desc = trim($_POST["meta_desc"] ?? '');
     $added_on = date('M d, Y');
-    $parent_id = mysqli_real_escape_string($conn, $_POST['parent_id']);
+    $parent_id = (int) $_POST['parent_id'];
     $slug_url = strtolower(str_replace(" ", "-", $cate_name));
+    $status = isset($_POST['status']) ? (int) $_POST['status'] : 1;
+    $show_on_home = isset($_POST['show_on_home']) ? 1 : 0;
 
-    $sql = "INSERT INTO `sub_categories`( `parent_id`,`cate_id`, `categories`, `description`, `meta_title`, `meta_desc`, `meta_key`, `sub_cat_img`, `slug_url`, `status`, `added_on`)
-            VALUES ('$parent_id','$cate_id','$cate_name','$description','$meta_title','$meta_desc','$meta_key', '$uploadedImage', '$slug_url', 1, '$added_on')";
-
-    $check = mysqli_query($conn, $sql);
+    $stmt = $conn->prepare("INSERT INTO `sub_categories`
+            (`parent_id`, `cate_id`, `categories`, `description`, `meta_title`, `meta_desc`, `meta_key`, `sub_cat_img`, `slug_url`, `status`, `show_on_home`, `added_on`)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+    $stmt->bind_param(
+        'iisssssssiis',
+        $parent_id,
+        $cate_id,
+        $cate_name,
+        $description,
+        $meta_title,
+        $meta_desc,
+        $meta_key,
+        $uploadedImage,
+        $slug_url,
+        $status,
+        $show_on_home,
+        $added_on
+    );
+    $check = $stmt->execute();
     if ($check) {
         ?>
         <script type="text/javascript">
@@ -341,6 +358,11 @@ function get_Sub_Category() {
                 ? '<span class="badge_1">Active</span>'
                 : '<span class="badge_2">Inactive</span>';
 
+            // Home page visibility badge
+            $home_badge = !empty($result['show_on_home'])
+                ? '<span class="badge_1"><i class="fas fa-home me-1"></i>Shown</span>'
+                : '<span class="badge_2"><i class="fas fa-eye-slash me-1"></i>Hidden</span>';
+
             // Format date
             $added_on = date('d M Y', strtotime($result['added_on']));
 
@@ -354,6 +376,7 @@ function get_Sub_Category() {
                     <td>" . htmlspecialchars($result['parent_category'] ?? 'N/A') . "</td>
                     <td><span class='text-muted'>" . htmlspecialchars($result['slug_url']) . "</span></td>
                     <td class='text-center'>" . $status . "</td>
+                    <td class='text-center'>" . $home_badge . "</td>
                     <td class='text-center'>" . $added_on . "</td>
                     <td class='text-center'>
                         <div class='d-flex justify-content-center gap-2'>
@@ -374,7 +397,7 @@ function get_Sub_Category() {
         }
     } else {
         echo "<tr>
-                <td colspan='9' class='text-center py-4'>
+                <td colspan='10' class='text-center py-4'>
                     <div class='d-flex flex-column align-items-center'>
                         <i class='fas fa-folder-open fs-1 text-muted mb-2'></i>
                         <span class='text-muted'>No subcategories found</span>

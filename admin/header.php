@@ -106,7 +106,7 @@ if ($is_admin && isset($conn)) {
         </li>
 
         <li>
-            <a class="has-arrow" href="#"><i class="fas fa-briefcase-medical"></i> <span>Hospital Services</span></a>
+            <a class="has-arrow" href="#"><i class="fas fa-briefcase-medical"></i> <span>Online Services</span></a>
             <ul>
                 <li><a href="show-products.php">All Services</a></li>
                 <li><a href="add-products.php">Add New Service</a></li>

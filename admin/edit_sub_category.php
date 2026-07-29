@@ -15,35 +15,34 @@ if ($sub_cat_id <= 0) {
 // Process form submission
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Sanitize inputs
-    $parent_id = mysqli_real_escape_string($conn, $_POST['parent_id']);
-    $cate_id = mysqli_real_escape_string($conn, $_POST['cate_id']);
-    $categories = mysqli_real_escape_string($conn, $_POST['categories']);
-    $description = mysqli_real_escape_string($conn, $_POST['description']);
-    $meta_title = mysqli_real_escape_string($conn, $_POST['meta_title']);
-    $meta_desc = mysqli_real_escape_string($conn, $_POST['meta_desc']);
-    $meta_key = mysqli_real_escape_string($conn, $_POST['meta_key']);
-    $slug_url = mysqli_real_escape_string($conn, $_POST['slug_url']);
-    $status = mysqli_real_escape_string($conn, $_POST['status']);
+    $parent_id = (int) $_POST['parent_id'];
+    $cate_id = (int) $_POST['cate_id'];
+    $categories = trim($_POST['categories']);
+    $description = trim($_POST['description']);
+    $meta_title = trim($_POST['meta_title']);
+    $meta_desc = trim($_POST['meta_desc']);
+    $meta_key = trim($_POST['meta_key']);
+    $slug_url = trim($_POST['slug_url']);
+    $status = (int) $_POST['status'];
+    $show_on_home = isset($_POST['show_on_home']) ? 1 : 0;
     $added_on = date('Y-m-d H:i:s');
 
     // Handle file upload
     $imageName = null;
     $uploadDir = 'uploads/sub-category/';
-    
+
     if (!empty($_FILES['imageUpload']['name'])) {
         $fileTmpPath = $_FILES['imageUpload']['tmp_name'];
         $fileName = $_FILES['imageUpload']['name'];
-        $fileSize = $_FILES['imageUpload']['size'];
-        $fileType = $_FILES['imageUpload']['type'];
         $fileNameCmps = explode(".", $fileName);
         $fileExtension = strtolower(end($fileNameCmps));
-        
+
         $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
         $newFileName = md5(time() . $fileName) . '.' . $fileExtension;
-        
+
         if (in_array($fileExtension, $allowedExtensions)) {
             $destPath = $uploadDir . $newFileName;
-            
+
             if (move_uploaded_file($fileTmpPath, $destPath)) {
                 $imageName = $newFileName;
             } else {
@@ -54,38 +53,42 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     }
 
-    // Update query
-    $updateQuery = "UPDATE sub_categories SET
-        parent_id = '$parent_id',
-        cate_id = '$cate_id',
-        categories = '$categories',
-        description = '$description',
-        meta_title = '$meta_title',
-        meta_desc = '$meta_desc',
-        meta_key = '$meta_key',
-        slug_url = '$slug_url',
-        status = '$status',
-        added_on = '$added_on'";
-    
     if ($imageName) {
-        $updateQuery .= ", sub_cat_img = '$imageName'";
+        $stmt = $conn->prepare("UPDATE sub_categories SET
+            parent_id = ?, cate_id = ?, categories = ?, description = ?, meta_title = ?, meta_desc = ?,
+            meta_key = ?, slug_url = ?, status = ?, show_on_home = ?, added_on = ?, sub_cat_img = ?
+            WHERE cate_id = ?");
+        $stmt->bind_param(
+            'iissssssiissi',
+            $parent_id, $cate_id, $categories, $description, $meta_title, $meta_desc,
+            $meta_key, $slug_url, $status, $show_on_home, $added_on, $imageName, $sub_cat_id
+        );
+    } else {
+        $stmt = $conn->prepare("UPDATE sub_categories SET
+            parent_id = ?, cate_id = ?, categories = ?, description = ?, meta_title = ?, meta_desc = ?,
+            meta_key = ?, slug_url = ?, status = ?, show_on_home = ?, added_on = ?
+            WHERE cate_id = ?");
+        $stmt->bind_param(
+            'iissssssiisi',
+            $parent_id, $cate_id, $categories, $description, $meta_title, $meta_desc,
+            $meta_key, $slug_url, $status, $show_on_home, $added_on, $sub_cat_id
+        );
     }
-    
-    $updateQuery .= " WHERE cate_id = '$sub_cat_id'";
-    
-    if (mysqli_query($conn, $updateQuery)) {
+
+    if ($stmt->execute()) {
         $_SESSION['success'] = 'Sub-category updated successfully';
         // header("Location: edit_sub_category.php?id=$sub_cat_id");
         // exit();
     } else {
-        $_SESSION['error'] = 'Error updating sub-category: ' . mysqli_error($conn);
+        $_SESSION['error'] = 'Error updating sub-category: ' . $conn->error;
     }
 }
 
 // Fetch sub-category data
-$sql = "SELECT * FROM sub_categories WHERE cate_id = '$sub_cat_id'";
-$result = mysqli_query($conn, $sql);
-$subcategory = mysqli_fetch_assoc($result);
+$stmt = $conn->prepare("SELECT * FROM sub_categories WHERE cate_id = ?");
+$stmt->bind_param('i', $sub_cat_id);
+$stmt->execute();
+$subcategory = $stmt->get_result()->fetch_assoc();
 
 if (!$subcategory) {
     $_SESSION['error'] = 'Sub-category not found';
@@ -319,17 +322,31 @@ while ($row = mysqli_fetch_assoc($parentResult)) {
                                     <div class="col-md-6 mb-4">
                                         <label class="form-label">Status <span class="text-danger">*</span></label>
                                         <select class="form-select" name="status" required>
-                                            <option value="1" <?= ($subcategory['status'] == 'Active') ? 'selected' : '' ?>>Active</option>
-                                            <option value="0" <?= ($subcategory['status'] == 'Inactive') ? 'selected' : '' ?>>Inactive</option>
+                                            <option value="1" <?= ($subcategory['status'] == 1) ? 'selected' : '' ?>>Active</option>
+                                            <option value="0" <?= ($subcategory['status'] == 0) ? 'selected' : '' ?>>Inactive</option>
                                         </select>
                                     </div>
-                                    
+
+                                    <!-- Show on Home -->
+                                    <div class="col-md-6 mb-4">
+                                        <label class="form-label d-block">Home Page Visibility</label>
+                                        <div class="form-check form-switch mt-2">
+                                            <input class="form-check-input" type="checkbox" role="switch"
+                                                name="show_on_home" id="showOnHome" value="1"
+                                                <?= !empty($subcategory['show_on_home']) ? 'checked' : '' ?>>
+                                            <label class="form-check-label" for="showOnHome">
+                                                Show this department on the home page
+                                            </label>
+                                        </div>
+                                        <small class="text-muted">Controls the "Consult Doctor by Speciality" section on the public home page.</small>
+                                    </div>
+
                                     <!-- Submit Button -->
                                     <div class="col-12 mt-3">
                                         <button type="submit" class="btn btn-primary">
                                             <i class="fas fa-save me-2"></i> Update Sub-Category
                                         </button>
-                                        <a href="sub-categories.php" class="btn btn-outline-secondary ms-2">
+                                        <a href="view-sub-categories.php" class="btn btn-outline-secondary ms-2">
                                             <i class="fas fa-times me-2"></i> Cancel
                                         </a>
                                     </div>

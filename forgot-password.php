@@ -1,7 +1,7 @@
 <?php
 include_once "config/connect.php";
 include_once "util/function.php";
-include "util/mail_config.php";
+include_once "util/mail_config.php";
 
 $mailer = new Mailer();
 
@@ -64,15 +64,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $update_stmt->bind_param('ssi', $token_hash, $expiry, $doctor['id']);
                     
                     if ($update_stmt->execute()) {
-                        // Send reset email using PHPMailer
-                        $reset_link = BASE_URL . "forgot-password/reset-password.php?token=" . $token . "&email=" . urlencode($email)
-                        
+                        // Send reset email using the shared Mailer
+                        $reset_link = BASE_URL . "forgot-password/reset-password.php?token=" . $token . "&email=" . urlencode($email);
+
                         try {
-                             $mailer->sendPasswordReset();
-                            $success_message = "Password reset link has been sent to your email. Please check your inbox (and spam folder).";
-                            
+                            if ($mailer->sendPasswordReset($doctor['email'], $doctor['name'], $reset_link, 60)) {
+                                $success_message = "Password reset link has been sent to your email. Please check your inbox (and spam folder).";
+                            } else {
+                                $error_message = "Failed to send email. Please try again later.";
+                            }
                         } catch (Exception $e) {
-                            error_log("Password Reset Mail Error: " . $mail->ErrorInfo);
+                            error_log("Password Reset Mail Error: " . $e->getMessage());
                             $error_message = "Failed to send email. Please try again later.";
                         }
                         

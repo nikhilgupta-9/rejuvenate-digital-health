@@ -254,9 +254,9 @@ function get_sub_category_home()
     global $conn;
     $sub_category = [];
 
-    // Use prepared statement to prevent SQL injection
-    // $sql = "SELECT * FROM `sub_categories` where `parent_id` = 20873 AND `status` = 1 order by `id`"; 
-    $sql = "SELECT * FROM `sub_categories` where `parent_id` = 20873 AND `status` = 1 order by `id` desc limit 8"; 
+    // Admin explicitly curates which departments appear on the home page via
+    // the `show_on_home` flag (Sub Department Management in the admin panel).
+    $sql = "SELECT * FROM `sub_categories` where `parent_id` = 20873 AND `status` = 1 AND `show_on_home` = 1 order by `id` desc";
 
     $result = mysqli_query($conn, $sql);
 
@@ -834,83 +834,40 @@ function send_appointment_email( $data) {
     if (!$appointmentId) {
         return false;
     }
-    $mail = new PHPMailer(true);
 
-    try {
-        // SMTP Settings
-        $mail->isSMTP();
-        $mail->Host       = 'smtp.gmail.com';
-        $mail->SMTPAuth   = true;
-        $mail->Username   = 'nik007guptadu@gmail.com'; // your email
-        $mail->Password   = 'ltmnhrwacmwmcrni';        // app password
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port       = 587;
+    // 2️⃣ Best-effort admin notification via the shared Mailer (util/mail_config.php,
+    // credentials from .env). A failed email must not make the patient think
+    // their appointment didn't go through — the DB insert above already succeeded,
+    // that's what actually matters.
+    $contact = contact_us();
+    $toEmail = $contact['email'] ?? MAIL_USERNAME;
 
-        // Sender & Recipient
-        $mail->setFrom('no-reply@rejuvenatehealth.com', 'REJUVENATE Digital Health');
-        $mail->addAddress('support@rejuvenatehealth.com'); // Admin email
-        $mail->addReplyTo($data['email'], $data['name']);
+    $bodyHtml = "
+        <p>A new appointment request has been received.</p>
+        <table style='width:100%;border-collapse:collapse;font-size:14px;'>
+            <tr><td style='padding:8px 0;font-weight:bold;width:40%;'>Name</td><td>" . htmlspecialchars($data['name']) . "</td></tr>
+            <tr><td style='padding:8px 0;font-weight:bold;'>Email</td><td>" . htmlspecialchars($data['email']) . "</td></tr>
+            <tr><td style='padding:8px 0;font-weight:bold;'>Phone</td><td>" . htmlspecialchars($data['phone']) . "</td></tr>
+            <tr><td style='padding:8px 0;font-weight:bold;'>Department</td><td>" . htmlspecialchars($data['department']) . "</td></tr>" .
+            (!empty($data['doctor_name']) ? "<tr><td style='padding:8px 0;font-weight:bold;'>Preferred Doctor</td><td>" . htmlspecialchars($data['doctor_name']) . "</td></tr>" : "") . "
+            <tr><td style='padding:8px 0;font-weight:bold;'>Date</td><td>" . htmlspecialchars($data['date']) . "</td></tr>
+            <tr><td style='padding:8px 0;font-weight:bold;'>Time</td><td>" . htmlspecialchars($data['time']) . "</td></tr>
+        </table>
+    ";
 
-        // Email Content
-        $mail->isHTML(true);
-        $mail->Subject = 'New Appointment Booking Request';
+    $bodyText =
+        "New Appointment Booking\n\n" .
+        "Name: {$data['name']}\n" .
+        "Email: {$data['email']}\n" .
+        "Phone: {$data['phone']}\n" .
+        "Department: {$data['department']}\n" .
+        (!empty($data['doctor_name']) ? "Preferred Doctor: {$data['doctor_name']}\n" : "") .
+        "Date: {$data['date']}\n" .
+        "Time: {$data['time']}\n";
 
-        $mail->Body = "
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body { font-family: Arial, sans-serif; background:#f4f6f8; }
-                .container { max-width:600px; margin:auto; background:#ffffff; padding:20px; }
-                h2 { background:#2c5aa0; color:#fff; padding:15px; text-align:center; }
-                table { width:100%; border-collapse:collapse; }
-                td { padding:10px; border-bottom:1px solid #ddd; }
-                .label { font-weight:bold; width:40%; }
-                .footer { text-align:center; font-size:12px; color:#777; margin-top:20px; }
-            </style>
-        </head>
-        <body>
-            <div class='container'>
-                <h2>New Appointment Booked</h2>
-                <table>
-                    <tr><td class='label'>Name</td><td>{$data['name']}</td></tr>
-                    <tr><td class='label'>Email</td><td>{$data['email']}</td></tr>
-                    <tr><td class='label'>Phone</td><td>{$data['phone']}</td></tr>
-                    <tr><td class='label'>Department</td><td>{$data['department']}</td></tr>" .
-                    (!empty($data['doctor_name']) ? "<tr><td class='label'>Preferred Doctor</td><td>{$data['doctor_name']}</td></tr>" : "") . "
-                    <tr><td class='label'>Date</td><td>{$data['date']}</td></tr>
-                    <tr><td class='label'>Time</td><td>{$data['time']}</td></tr>
-                </table>
-                <div class='footer'>
-                    <p>&copy; " . date('Y') . " REJUVENATE Digital Health</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        ";
+    (new Mailer())->sendCustom($toEmail, 'Admin', 'New Appointment Booking Request', $bodyHtml, $bodyText);
 
-        // Plain Text Version
-        $mail->AltBody =
-            "New Appointment Booking\n\n" .
-            "Name: {$data['name']}\n" .
-            "Email: {$data['email']}\n" .
-            "Phone: {$data['phone']}\n" .
-            "Department: {$data['department']}\n" .
-            (!empty($data['doctor_name']) ? "Preferred Doctor: {$data['doctor_name']}\n" : "") .
-            "Date: {$data['date']}\n" .
-            "Time: {$data['time']}\n";
-
-        $mail->send();
-        return $appointmentId;
-
-    } catch (Exception $e) {
-        // The appointment is already saved in the database at this point (step 1
-        // above) — that's the part that actually matters. A failed notification
-        // email is a delivery problem, not a booking failure, so it must not make
-        // the patient think their appointment didn't go through.
-        error_log("Appointment Mail Error: " . $mail->ErrorInfo);
-        return $appointmentId;
-    }
+    return $appointmentId;
 }
 
 /**
@@ -1073,71 +1030,31 @@ function send_inquiry_email($data, $toEmail) {
         return $inquiryId;
     }
 
-    $mail = new PHPMailer(true);
+    // Best-effort admin notification via the shared Mailer (util/mail_config.php,
+    // credentials from .env) — a failed email must not make the visitor think
+    // their inquiry wasn't received; the DB insert above already succeeded.
+    $bodyHtml = "
+        <p>A new contact us inquiry has been received.</p>
+        <table style='width:100%;border-collapse:collapse;font-size:14px;'>
+            <tr><td style='padding:8px 0;font-weight:bold;width:30%;'>Name</td><td>" . htmlspecialchars($data['name']) . "</td></tr>
+            <tr><td style='padding:8px 0;font-weight:bold;'>Email</td><td>" . htmlspecialchars($data['email']) . "</td></tr>" .
+            (!empty($data['phone']) ? "<tr><td style='padding:8px 0;font-weight:bold;'>Phone</td><td>" . htmlspecialchars($data['phone']) . "</td></tr>" : "") . "
+            <tr><td style='padding:8px 0;font-weight:bold;'>Subject</td><td>" . htmlspecialchars($data['subject']) . "</td></tr>
+            <tr><td style='padding:8px 0;font-weight:bold;'>Message</td><td>" . nl2br(htmlspecialchars($data['message'])) . "</td></tr>
+        </table>
+    ";
 
-    try {
-        $mail->isSMTP();
-        $mail->Host       = 'smtp.gmail.com';
-        $mail->SMTPAuth   = true;
-        $mail->Username   = 'nik007guptadu@gmail.com';
-        $mail->Password   = 'ltmnhrwacmwmcrni';
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port       = 587;
+    $bodyText =
+        "New Contact Us Inquiry\n\n" .
+        "Name: {$data['name']}\n" .
+        "Email: {$data['email']}\n" .
+        (!empty($data['phone']) ? "Phone: {$data['phone']}\n" : "") .
+        "Subject: {$data['subject']}\n" .
+        "Message: {$data['message']}\n";
 
-        $mail->setFrom('no-reply@rejuvenatehealth.com', 'REJUVENATE Digital Health');
-        $mail->addAddress($toEmail);
-        $mail->addReplyTo($data['email'], $data['name']);
+    (new Mailer())->sendCustom($toEmail, 'Admin', 'New Contact Us Inquiry: ' . $data['subject'], $bodyHtml, $bodyText);
 
-        $mail->isHTML(true);
-        $mail->Subject = 'New Contact Us Inquiry: ' . $data['subject'];
-
-        $mail->Body = "
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body { font-family: Arial, sans-serif; background:#f4f6f8; }
-                .container { max-width:600px; margin:auto; background:#ffffff; padding:20px; }
-                h2 { background:#2c5aa0; color:#fff; padding:15px; text-align:center; }
-                table { width:100%; border-collapse:collapse; }
-                td { padding:10px; border-bottom:1px solid #ddd; }
-                .label { font-weight:bold; width:30%; }
-                .footer { text-align:center; font-size:12px; color:#777; margin-top:20px; }
-            </style>
-        </head>
-        <body>
-            <div class='container'>
-                <h2>New Contact Us Inquiry</h2>
-                <table>
-                    <tr><td class='label'>Name</td><td>{$data['name']}</td></tr>
-                    <tr><td class='label'>Email</td><td>{$data['email']}</td></tr>" .
-                    (!empty($data['phone']) ? "<tr><td class='label'>Phone</td><td>{$data['phone']}</td></tr>" : "") . "
-                    <tr><td class='label'>Subject</td><td>{$data['subject']}</td></tr>
-                    <tr><td class='label'>Message</td><td>" . nl2br(htmlspecialchars($data['message'])) . "</td></tr>
-                </table>
-                <div class='footer'>
-                    <p>&copy; " . date('Y') . " REJUVENATE Digital Health</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        ";
-
-        $mail->AltBody =
-            "New Contact Us Inquiry\n\n" .
-            "Name: {$data['name']}\n" .
-            "Email: {$data['email']}\n" .
-            (!empty($data['phone']) ? "Phone: {$data['phone']}\n" : "") .
-            "Subject: {$data['subject']}\n" .
-            "Message: {$data['message']}\n";
-
-        $mail->send();
-        return $inquiryId;
-
-    } catch (Exception $e) {
-        error_log("Inquiry Mail Error: " . $mail->ErrorInfo);
-        return $inquiryId;
-    }
+    return $inquiryId;
 }
 
 /**

@@ -232,7 +232,24 @@ function SlugUrl($string) {
                                                     </div>
                                                 </div>
                                             </div>
-                                            
+
+                                            <div class="row mb-3">
+                                                <!-- Show on Home -->
+                                                <div class="col-md-12">
+                                                    <div class="form-check form-switch">
+                                                        <input class="form-check-input" type="checkbox" role="switch"
+                                                            name="show_on_home" id="showOnHome" value="1">
+                                                        <label class="form-check-label" for="showOnHome">
+                                                            Show this department on the home page
+                                                        </label>
+                                                        <div class="form-text">
+                                                            Controls whether this department appears in the "Consult Doctor by
+                                                            Speciality" section on the public home page.
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
                                             <!-- Submit Button -->
                                             <div class="d-flex justify-content-end mt-4">
                                                 <a href="view-sub-categories.php" class="btn btn-secondary me-3">
