@@ -149,12 +149,12 @@ if (!empty($hp['height_cm']) && !empty($hp['weight_kg'])) {
   <div class="health-summary">
     <div class="h-tile">
       <div class="h-icon" style="color:#0C74C5;"><i class="fas fa-ruler-vertical"></i></div>
-      <div class="h-val"><?= $hp['height_cm'] ? $hp['height_cm'].'<span style="font-size:.65rem;font-weight:400;"> cm</span>' : '—' ?></div>
+      <div class="h-val"><?= !empty($hp['height_cm']) ? $hp['height_cm'].'<span style="font-size:.65rem;font-weight:400;"> cm</span>' : '—' ?></div>
       <div class="h-lbl">Height</div>
     </div>
     <div class="h-tile">
       <div class="h-icon" style="color:#7c3aed;"><i class="fas fa-weight"></i></div>
-      <div class="h-val"><?= $hp['weight_kg'] ? $hp['weight_kg'].'<span style="font-size:.65rem;font-weight:400;"> kg</span>' : '—' ?></div>
+      <div class="h-val"><?= !empty($hp['weight_kg']) ? $hp['weight_kg'].'<span style="font-size:.65rem;font-weight:400;"> kg</span>' : '—' ?></div>
       <div class="h-lbl">Weight</div>
     </div>
     <div class="h-tile">
