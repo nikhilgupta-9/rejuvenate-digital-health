@@ -18092,3 +18092,125 @@ p.sticky-label {
     order: -1;
   }
 }
+
+/*-----------------------[ School Register / Login Cards ]------------------------*/
+
+.reg-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 36px 40px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, .08);
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+@media (max-width: 576px) {
+  .reg-card {
+    padding: 24px 18px;
+  }
+}
+
+@media (max-width: 375px) {
+  .reg-card {
+    padding: 20px 14px;
+    border-radius: 12px;
+  }
+}
+
+.field-group {
+  margin-bottom: 18px;
+}
+
+.field-group label {
+  font-size: .85rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 5px;
+  display: block;
+}
+
+.field-group .form-control,
+.field-group .form-select {
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: .88rem;
+  border-color: #e5e7eb;
+}
+
+.field-group .form-control:focus,
+.field-group .form-select:focus {
+  border-color: #0C74C5;
+  box-shadow: 0 0 0 3px rgba(12, 116, 197, .1);
+}
+
+.pass-wrap {
+  position: relative;
+}
+
+.pass-wrap .toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 0;
+  font-size: .9rem;
+}
+
+.pw-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: #e5e7eb;
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.pw-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  width: 0;
+  transition: .3s;
+}
+
+.reg-divider {
+  text-align: center;
+  font-size: .72rem;
+  color: #9ca3af;
+  margin: 6px 0 18px;
+}
+
+.later-note {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: .78rem;
+  color: #166534;
+  margin-bottom: 20px;
+}
+
+.benefit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .83rem;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.benefit-row i {
+  color: #16a34a;
+  width: 16px;
+}
+
+/* On narrow screens the input-group prefix (+91 / mail icon) and field can
+   get cramped; shrink the prefix so the input keeps most of the width. */
+@media (max-width: 375px) {
+  .reg-card .input-group-text {
+    padding: 10px 10px;
+    font-size: .82rem;
+  }
+}

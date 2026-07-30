@@ -525,6 +525,9 @@ $abdm_on = ABDM_CONFIGURED;
             &nbsp;|&nbsp;
             Teacher? <a href="<?= BASE_URL ?>teacher-register.php">Register here</a>
           </div>
+          <div class="login-footer-links">
+            Student Request for password link: <a href="<?=BASE_URL?>school/request-password-link.php">Request Password Link</a>
+          </div>
 
         </div><!-- /login-body -->
       </div><!-- /login-card -->

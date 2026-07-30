@@ -8,12 +8,14 @@ $contact = contact_us();
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="author" content="REJUVENATE Digital Health">
-    <meta name="description" content="School Digital Health Program - Comprehensive health management for educational institutions">
+    <meta name="description"
+        content="School Digital Health Program - Comprehensive health management for educational institutions">
     <title>REJUVENATE Digital Health - School Program</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
@@ -24,12 +26,15 @@ $contact = contact_us();
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/swiper-bundle.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/nice-select.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </head>
+
 <body>
-    <?php include("header.php")?>
+    <?php include("header.php") ?>
 
     <!-- Breadcrumb Section Start -->
-    <div class="breadcrumb-wrapper bg-cover" style="background-image: url('<?= BASE_URL?>assets/img/inner/breadcrumb-img.jpg');">
+    <div class="breadcrumb-wrapper bg-cover"
+        style="background-image: url('<?= BASE_URL ?>assets/img/inner/breadcrumb-img.jpg');">
         <div class="container">
             <div class="page-heading">
                 <div class="breadcrumb-items-area">
@@ -55,16 +60,43 @@ $contact = contact_us();
                         <span class="badge bg-primary bg-opacity-10 text-primary mb-3 px-3 py-2 fs-6 fw-semibold">
                             <i class="fas fa-graduation-cap me-2"></i>Education Health Initiative
                         </span>
+
                         <h2 class="display-5 fw-bold mb-4">Transforming School Health Management</h2>
+
                         <p class="lead text-muted mb-4">
-                            REJUVENATE Digital Health brings comprehensive digital health solutions to schools, 
-                            ensuring student wellness through innovative technology and streamlined healthcare management.
+                            REJUVENATE Digital Health brings comprehensive digital health solutions to schools,
+                            ensuring student wellness through innovative technology and streamlined healthcare
+                            management.
                         </p>
+
                         <div class="d-flex flex-wrap gap-3">
-                            <a href="#" class="btn btn-primary btn-lg">
-                                <i class="fas fa-calendar-check me-2"></i>Get Started
-                            </a>
-                            <a href="#" class="btn btn-outline-primary btn-lg">
+                            <!-- Get Started: dropdown with the 3 registration types -->
+                            <div class="dropdown">
+                                <button class="btn btn-primary btn-lg dropdown-toggle" type="button"
+                                    id="getStartedDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fas fa-calendar-check me-2"></i>Get Started
+                                </button>
+                                <ul class="dropdown-menu shadow" aria-labelledby="getStartedDropdown">
+                                    <li>
+                                        <a class="dropdown-item py-2" href="<?= BASE_URL ?>school-register.php">
+                                            <i class="fas fa-school me-2 text-primary"></i>School Registration
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item py-2" href="<?= BASE_URL ?>student-register.php">
+                                            <i class="fas fa-user-graduate me-2 text-primary"></i>Student Registration
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item py-2" href="<?= BASE_URL ?>teacher-register.php">
+                                            <i class="fas fa-chalkboard-teacher me-2 text-primary"></i>Teacher
+                                            Registration
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <a href="demo.php" class="btn btn-outline-primary btn-lg">
                                 <i class="fas fa-play-circle me-2"></i>Watch Demo
                             </a>
                         </div>
@@ -72,9 +104,8 @@ $contact = contact_us();
                 </div>
                 <div class="col-lg-6">
                     <div class="position-relative">
-                        <img src="<?= BASE_URL?>assets/img/school-plan.jpeg" 
-                             alt="School Health Program" 
-                             class="img-fluid rounded-4 shadow-lg">
+                        <img src="<?= BASE_URL ?>assets/img/school-plan.jpeg" alt="School Health Program"
+                            class="img-fluid rounded-4 shadow-lg">
                         <div class="position-absolute bottom-0 end-0 bg-white p-3 rounded-3 shadow-sm m-3">
                             <div class="d-flex align-items-center gap-3">
                                 <div class="bg-success bg-opacity-10 rounded-circle p-3">
@@ -213,7 +244,7 @@ $contact = contact_us();
                     ['icon' => 'fa-shield-alt', 'color' => '#f59e0b', 'title' => 'Stay Safe', 'desc' => 'Follow safety rules. Say NO to junk food, tobacco and other harmful habits.'],
                 ];
                 foreach ($health_tips as $tip):
-                ?>
+                    ?>
                     <div class="col-6 col-md-4 col-lg-3">
                         <div class="card border-0 shadow-sm h-100 text-center">
                             <div class="card-body p-3">
@@ -293,13 +324,15 @@ $contact = contact_us();
                                     Check-up Report</li>
                                 <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Height /
                                     Weight / BMI Tracking</li>
-                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Hemoglobin
+                                <li class="mb-2"><i class="fas fa-check-circle me-2"
+                                        style="color:#f59e0b;"></i>Hemoglobin
                                     / Anemia Screening</li>
                                 <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Parent
                                     Alert System (Deficiency, Low BMI etc.)</li>
                                 <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Basic
                                     Teleconsultation (Limited)</li>
-                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Nutrition
+                                <li class="mb-2"><i class="fas fa-check-circle me-2"
+                                        style="color:#f59e0b;"></i>Nutrition
                                     Guidance Report</li>
                             </ul>
                             <p class="small fw-semibold mb-3" style="color:#f59e0b;">Early detection today, healthy
@@ -421,12 +454,15 @@ $contact = contact_us();
                                             ['Teleconsultation', false, true, true],
                                         ];
                                         foreach ($age68 as $row):
-                                        ?>
+                                            ?>
                                             <tr>
                                                 <td><?= $row[0] ?></td>
-                                                <td class="text-center"><?= $row[1] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
-                                                <td class="text-center"><?= $row[2] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
-                                                <td class="text-center"><?= $row[3] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
+                                                <td class="text-center">
+                                                    <?= $row[1] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
+                                                <td class="text-center">
+                                                    <?= $row[2] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
+                                                <td class="text-center">
+                                                    <?= $row[3] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </tbody>
@@ -472,12 +508,15 @@ $contact = contact_us();
                                             ['School Health Dashboard & Analytics', false, false, true],
                                         ];
                                         foreach ($age912 as $row):
-                                        ?>
+                                            ?>
                                             <tr>
                                                 <td><?= $row[0] ?></td>
-                                                <td class="text-center"><?= $row[1] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
-                                                <td class="text-center"><?= $row[2] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
-                                                <td class="text-center"><?= $row[3] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
+                                                <td class="text-center">
+                                                    <?= $row[1] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
+                                                <td class="text-center">
+                                                    <?= $row[2] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
+                                                <td class="text-center">
+                                                    <?= $row[3] ? '<i class="fas fa-check text-success"></i>' : '' ?></td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </tbody>
@@ -507,8 +546,8 @@ $contact = contact_us();
             <div class="row g-4">
                 <div class="col-lg-3 col-md-6">
                     <div class="text-center">
-                        <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" 
-                             style="width: 80px; height: 80px;">
+                        <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3"
+                            style="width: 80px; height: 80px;">
                             <span class="text-white display-6 fw-bold">1</span>
                         </div>
                         <h5 class="fw-bold">Registration</h5>
@@ -517,8 +556,8 @@ $contact = contact_us();
                 </div>
                 <div class="col-lg-3 col-md-6">
                     <div class="text-center">
-                        <div class="bg-success rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" 
-                             style="width: 80px; height: 80px;">
+                        <div class="bg-success rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3"
+                            style="width: 80px; height: 80px;">
                             <span class="text-white display-6 fw-bold">2</span>
                         </div>
                         <h5 class="fw-bold">Student Onboarding</h5>
@@ -527,8 +566,8 @@ $contact = contact_us();
                 </div>
                 <div class="col-lg-3 col-md-6">
                     <div class="text-center">
-                        <div class="bg-info rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" 
-                             style="width: 80px; height: 80px;">
+                        <div class="bg-info rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3"
+                            style="width: 80px; height: 80px;">
                             <span class="text-white display-6 fw-bold">3</span>
                         </div>
                         <h5 class="fw-bold">Health Training</h5>
@@ -537,8 +576,8 @@ $contact = contact_us();
                 </div>
                 <div class="col-lg-3 col-md-6">
                     <div class="text-center">
-                        <div class="bg-warning rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" 
-                             style="width: 80px; height: 80px;">
+                        <div class="bg-warning rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3"
+                            style="width: 80px; height: 80px;">
                             <span class="text-white display-6 fw-bold">4</span>
                         </div>
                         <h5 class="fw-bold">Go Live</h5>
@@ -688,44 +727,46 @@ $contact = contact_us();
                 </div>
             </div>
             <div class="row g-4">
-                <?php 
+                <?php
                 if (!empty($testimonials)) {
-                    $school_testimonials = array_filter($testimonials, function($t) {
-                        return strpos(strtolower($t['client_title'] ?? ''), 'school') !== false || 
-                               strpos(strtolower($t['client_company'] ?? ''), 'school') !== false;
+                    $school_testimonials = array_filter($testimonials, function ($t) {
+                        return strpos(strtolower($t['client_title'] ?? ''), 'school') !== false ||
+                            strpos(strtolower($t['client_company'] ?? ''), 'school') !== false;
                     });
                     $testi_to_show = !empty($school_testimonials) ? $school_testimonials : $testimonials;
                     $testi_to_show = array_slice($testi_to_show, 0, 3);
-                    
+
                     foreach ($testi_to_show as $testi) {
                         $rating = isset($testi['rating']) ? intval($testi['rating']) : 5;
-                ?>
-                    <div class="col-md-6 col-lg-4">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-body p-4">
-                                <div class="d-flex align-items-center gap-3 mb-3">
-                                    <img src="<?= !empty($testi['client_photo']) ? $testi['client_photo'] : 'assets/img/dummy.png' ?>" 
-                                         alt="<?= htmlspecialchars($testi['client_name']) ?>" 
-                                         class="rounded-circle" 
-                                         style="width: 48px; height: 48px; object-fit: cover;">
-                                    <div>
-                                        <h6 class="fw-bold mb-0"><?= htmlspecialchars($testi['client_name']) ?></h6>
-                                        <small class="text-muted"><?= htmlspecialchars($testi['client_title'] ?? 'School Administrator') ?></small>
+                        ?>
+                        <div class="col-md-6 col-lg-4">
+                            <div class="card border-0 shadow-sm h-100">
+                                <div class="card-body p-4">
+                                    <div class="d-flex align-items-center gap-3 mb-3">
+                                        <img src="<?= !empty($testi['client_photo']) ? $testi['client_photo'] : 'assets/img/dummy.png' ?>"
+                                            alt="<?= htmlspecialchars($testi['client_name']) ?>" class="rounded-circle"
+                                            style="width: 48px; height: 48px; object-fit: cover;">
+                                        <div>
+                                            <h6 class="fw-bold mb-0"><?= htmlspecialchars($testi['client_name']) ?></h6>
+                                            <small
+                                                class="text-muted"><?= htmlspecialchars($testi['client_title'] ?? 'School Administrator') ?></small>
+                                        </div>
                                     </div>
+                                    <div class="mb-2">
+                                        <?php for ($i = 1; $i <= 5; $i++): ?>
+                                            <i class="fas fa-star <?= $i <= $rating ? 'text-warning' : 'text-secondary' ?>"
+                                                style="font-size: 14px;"></i>
+                                        <?php endfor; ?>
+                                    </div>
+                                    <p class="card-text fst-italic small">“<?= htmlspecialchars($testi['testimonial_text']) ?>”
+                                    </p>
                                 </div>
-                                <div class="mb-2">
-                                    <?php for ($i = 1; $i <= 5; $i++): ?>
-                                        <i class="fas fa-star <?= $i <= $rating ? 'text-warning' : 'text-secondary' ?>" style="font-size: 14px;"></i>
-                                    <?php endfor; ?>
-                                </div>
-                                <p class="card-text fst-italic small">“<?= htmlspecialchars($testi['testimonial_text']) ?>”</p>
                             </div>
                         </div>
-                    </div>
-                <?php 
+                    <?php
                     }
-                } else { 
-                ?>
+                } else {
+                    ?>
                     <div class="col-12 text-center">
                         <p class="text-muted">No testimonials available yet.</p>
                     </div>
@@ -740,7 +781,8 @@ $contact = contact_us();
             <div class="row g-4 align-items-center text-center text-lg-start">
                 <div class="col-lg-8">
                     <h2 class="text-white display-6 fw-bold mb-3">Ready to Transform Your School Health Program?</h2>
-                    <p class="text-white opacity-75 mb-0">Join 500+ schools already using our digital health solutions</p>
+                    <p class="text-white opacity-75 mb-0">Join 500+ schools already using our digital health solutions
+                    </p>
                 </div>
                 <div class="col-lg-4 text-center text-lg-end">
                     <a href="#" class="btn btn-light btn-lg px-5">
@@ -767,49 +809,57 @@ $contact = contact_us();
                     <div class="accordion" id="faqAccordion">
                         <div class="accordion-item border-0 mb-3 shadow-sm">
                             <h2 class="accordion-header">
-                                <button class="accordion-button fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
+                                <button class="accordion-button fw-bold" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#faq1">
                                     What is the School Digital Health Program?
                                 </button>
                             </h2>
                             <div id="faq1" class="accordion-collapse collapse show" data-bs-parent="#faqAccordion">
                                 <div class="accordion-body text-muted">
-                                    It's a comprehensive digital health management solution designed specifically for schools to monitor, track, and manage student health records using ABHA integration.
+                                    It's a comprehensive digital health management solution designed specifically for
+                                    schools to monitor, track, and manage student health records using ABHA integration.
                                 </div>
                             </div>
                         </div>
                         <div class="accordion-item border-0 mb-3 shadow-sm">
                             <h2 class="accordion-header">
-                                <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
+                                <button class="accordion-button collapsed fw-bold" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#faq2">
                                     How does ABHA integration work for students?
                                 </button>
                             </h2>
                             <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
                                 <div class="accordion-body text-muted">
-                                    Students can create ABHA accounts through our platform, allowing seamless health record management and access to government health schemes.
+                                    Students can create ABHA accounts through our platform, allowing seamless health
+                                    record management and access to government health schemes.
                                 </div>
                             </div>
                         </div>
                         <div class="accordion-item border-0 mb-3 shadow-sm">
                             <h2 class="accordion-header">
-                                <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
+                                <button class="accordion-button collapsed fw-bold" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#faq3">
                                     Is student data secure?
                                 </button>
                             </h2>
                             <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
                                 <div class="accordion-body text-muted">
-                                    Yes, we follow strict data security protocols and comply with all health data protection regulations to ensure student privacy.
+                                    Yes, we follow strict data security protocols and comply with all health data
+                                    protection regulations to ensure student privacy.
                                 </div>
                             </div>
                         </div>
                         <div class="accordion-item border-0 mb-3 shadow-sm">
                             <h2 class="accordion-header">
-                                <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">
+                                <button class="accordion-button collapsed fw-bold" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#faq4">
                                     What training is provided for school staff?
                                 </button>
                             </h2>
                             <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
                                 <div class="accordion-body text-muted">
-                                    We provide comprehensive training sessions, user manuals, and ongoing support to ensure smooth implementation and usage.
+                                    We provide comprehensive training sessions, user manuals, and ongoing support to
+                                    ensure smooth implementation and usage.
                                 </div>
                             </div>
                         </div>
@@ -819,7 +869,7 @@ $contact = contact_us();
         </div>
     </section>
 
-    <?php include("footer.php")?>
+    <?php include("footer.php") ?>
 
     <!-- Scripts -->
     <script src="<?= BASE_URL ?>assets/js/jquery-3.6.0.min.js"></script>
@@ -827,4 +877,5 @@ $contact = contact_us();
     <script src="<?= BASE_URL ?>assets/js/swiper-bundle.min.js"></script>
     <script src="<?= BASE_URL ?>assets/js/main.js"></script>
 </body>
+
 </html>
