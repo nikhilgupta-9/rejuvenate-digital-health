@@ -99,11 +99,12 @@ class Mailer
     public function sendOtp(string $toEmail, string $toName, string $otp, string $context = 'login'): bool
     {
         $labels = [
-            'login'        => ['Login Verification',          'Sign in to your account'],
-            'signup'       => ['Email Verification',          'Complete your registration'],
-            'reset'        => ['Password Reset Verification', 'Reset your account password'],
-            'abha'         => ['ABHA Verification',           'Verify your ABHA account'],
-            'change_email' => ['Email Change Verification',   'Confirm your new email address'],
+            'login'         => ['Login Verification',          'Sign in to your account'],
+            'signup'        => ['Email Verification',          'Complete your registration'],
+            'reset'         => ['Password Reset Verification', 'Reset your account password'],
+            'abha'          => ['ABHA Verification',           'Verify your ABHA account'],
+            'change_email'  => ['Email Change Verification',   'Confirm your new email address'],
+            'doctor_lookup' => ['Doctor Record Access Request', 'A doctor is requesting to view your health record'],
         ];
 
         [$title, $subtitle] = $labels[$context] ?? ['OTP Verification', 'Verify your identity'];

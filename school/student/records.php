@@ -26,7 +26,16 @@ $doc_stmt->bind_param('i', $student_id);
 $doc_stmt->execute();
 $documents = $doc_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
-$active_tab = ($_GET['tab'] ?? '') === 'reports' ? 'reports' : 'rx';
+// Medical / leave certificates issued by a doctor for this student (read-only)
+$cert_stmt = $conn->prepare("SELECT c.*, d.name as doctor_name
+    FROM school_member_certificates c
+    LEFT JOIN doctors d ON d.id = c.doctor_id
+    WHERE c.member_id = ? ORDER BY c.created_at DESC");
+$cert_stmt->bind_param('i', $student_id);
+$cert_stmt->execute();
+$certificates = $cert_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+$active_tab = in_array($_GET['tab'] ?? '', ['reports', 'cert'], true) ? $_GET['tab'] : 'rx';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -114,6 +123,9 @@ $active_tab = ($_GET['tab'] ?? '') === 'reports' ? 'reports' : 'rx';
     <div class="rec-tab <?= $active_tab === 'rx' ? 'active' : '' ?>" onclick="showTab('rx')">
       <i class="fas fa-file-medical"></i>Prescriptions <span style="opacity:.75;">(<?= count($prescriptions) ?>)</span>
     </div>
+    <div class="rec-tab <?= $active_tab === 'cert' ? 'active' : '' ?>" onclick="showTab('cert')">
+      <i class="fas fa-certificate"></i>Certificates <span style="opacity:.75;">(<?= count($certificates) ?>)</span>
+    </div>
     <div class="rec-tab <?= $active_tab === 'reports' ? 'active' : '' ?>" onclick="showTab('reports')">
       <i class="fas fa-file-alt"></i>Reports <span style="opacity:.75;">(<?= count($documents) ?>)</span>
     </div>
@@ -150,6 +162,40 @@ $active_tab = ($_GET['tab'] ?? '') === 'reports' ? 'reports' : 'rx';
           <?php if ($rx['advice']): ?>
             <div style="font-size:.78rem;color:#6b7280;margin-top:8px;"><strong>Advice:</strong> <?= htmlspecialchars($rx['advice']) ?></div>
           <?php endif; ?>
+        </div>
+      <?php endforeach; ?>
+    <?php endif; ?>
+  </div>
+
+  <!-- ── CERTIFICATES ── -->
+  <div id="pane-cert" style="<?= $active_tab === 'cert' ? '' : 'display:none;' ?>">
+    <?php if (empty($certificates)): ?>
+      <div class="s-card empty-state">
+        <i class="fas fa-certificate"></i>
+        No certificates yet.<br>Medical / leave certificates issued by your school doctor will appear here.
+      </div>
+    <?php else: ?>
+      <?php foreach ($certificates as $c): ?>
+        <div class="s-card">
+          <div class="rx-head">
+            <div>
+              <div style="font-weight:700;font-size:.92rem;color:#1f2937;"><?= htmlspecialchars($c['certificate_type']) ?></div>
+              <div style="font-size:.72rem;color:#9ca3af;">
+                Dr. <?= htmlspecialchars($c['doctor_name'] ?? 'Unknown') ?>
+                <br><?= date('d M Y, h:i A', strtotime($c['created_at'])) ?>
+              </div>
+            </div>
+            <a href="print-certificate.php?id=<?= $c['id'] ?>" target="_blank"
+              class="btn btn-sm" style="background:#e0f2fe;color:var(--primary);border:none;flex-shrink:0;">
+              <i class="fas fa-print"></i>
+            </a>
+          </div>
+          <?php if ($c['leave_from'] && $c['leave_to']): ?>
+            <div style="font-size:.78rem;color:#6b7280;margin-bottom:4px;">
+              <strong>Leave Period:</strong> <?= date('d M Y', strtotime($c['leave_from'])) ?> – <?= date('d M Y', strtotime($c['leave_to'])) ?>
+            </div>
+          <?php endif; ?>
+          <div class="rx-text"><?= nl2br(htmlspecialchars($c['reason'])) ?></div>
         </div>
       <?php endforeach; ?>
     <?php endif; ?>
@@ -205,6 +251,7 @@ $active_tab = ($_GET['tab'] ?? '') === 'reports' ? 'reports' : 'rx';
 <script>
 function showTab(name) {
   document.getElementById('pane-rx').style.display = name === 'rx' ? '' : 'none';
+  document.getElementById('pane-cert').style.display = name === 'cert' ? '' : 'none';
   document.getElementById('pane-reports').style.display = name === 'reports' ? '' : 'none';
   document.querySelectorAll('.rec-tab').forEach(t => t.classList.remove('active'));
   event.currentTarget.classList.add('active');

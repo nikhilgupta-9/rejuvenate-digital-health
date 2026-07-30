@@ -10,6 +10,13 @@ if (!$member_id) {
     exit;
 }
 
+// Require a recent OTP-verified identity check (set by doctor/api/school-lookup-verify.php)
+$verified_until = $_SESSION['school_verified_members'][$member_id] ?? 0;
+if ($verified_until < time()) {
+    header('Location: ' . BASE_URL . 'doctor/school-students.php?err=verify_required');
+    exit;
+}
+
 $stmt = $conn->prepare("SELECT m.*, s.school_name, s.id as school_id FROM school_members m JOIN schools s ON s.id = m.school_id WHERE m.id = ? LIMIT 1");
 $stmt->bind_param('i', $member_id);
 $stmt->execute();
@@ -25,6 +32,17 @@ if (!empty($m['dob'])) {
         $age = (new DateTime($m['dob']))->diff(new DateTime())->y;
     } catch (Exception $e) {
     }
+}
+
+// Health profile (editable by the doctor)
+$hp_stmt = $conn->prepare("SELECT * FROM member_health_profiles WHERE member_id = ?");
+$hp_stmt->bind_param('i', $member_id);
+$hp_stmt->execute();
+$hp = $hp_stmt->get_result()->fetch_assoc();
+
+$bmi = null;
+if (!empty($hp['height_cm']) && !empty($hp['weight_kg'])) {
+    $bmi = round($hp['weight_kg'] / (($hp['height_cm'] / 100) ** 2), 1);
 }
 
 $doc_types = ['Lab Report', 'Diagnostic Report', 'X-Ray / Imaging', 'Vaccination Certificate', 'Medical Certificate', 'Discharge Summary', 'Other'];
@@ -45,6 +63,15 @@ $doc_stmt = $conn->prepare("SELECT sd.*, d.name as doctor_name, au.first_name as
 $doc_stmt->bind_param('i', $member_id);
 $doc_stmt->execute();
 $documents = $doc_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+// Medical / leave certificates issued for this member
+$cert_stmt = $conn->prepare("SELECT c.*, d.name as doctor_name FROM school_member_certificates c
+    LEFT JOIN doctors d ON d.id = c.doctor_id WHERE c.member_id = ? ORDER BY c.created_at DESC LIMIT 50");
+$cert_stmt->bind_param('i', $member_id);
+$cert_stmt->execute();
+$certificates = $cert_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+$certificate_types = ['Medical Leave Certificate', 'Fitness / Fit-to-Join Certificate', 'Medical Certificate'];
 
 $sidebar_active = 'school-students';
 ?>
@@ -267,7 +294,9 @@ $sidebar_active = 'school-students';
         <!-- Tabs -->
         <div class="profile-tabs">
             <div class="p-tab active" onclick="showTab('info',this)"><i class="fa fa-user me-1"></i> Information</div>
+            <div class="p-tab" onclick="showTab('health',this)"><i class="fa fa-heartbeat me-1"></i> Health Profile</div>
             <div class="p-tab" onclick="showTab('rx',this)"><i class="fa fa-file-medical me-1"></i> Prescriptions</div>
+            <div class="p-tab" onclick="showTab('cert',this)"><i class="fa fa-certificate me-1"></i> Certificates</div>
             <div class="p-tab" onclick="showTab('docs',this)"><i class="fa fa-file-text-o me-1"></i> Medical Reports</div>
         </div>
 
@@ -306,6 +335,127 @@ $sidebar_active = 'school-students';
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- ── TAB: Health Profile ── -->
+        <div class="tab-pane" id="tab-health">
+            <div class="info-section">
+                <div class="section-title"><i class="fa fa-heartbeat me-2" style="color:#dc2626;"></i>Edit Health Profile</div>
+                <?php if (isset($_SESSION['health_success'])): ?>
+                    <div class="alert alert-success" style="font-size:.82rem;"><?= htmlspecialchars($_SESSION['health_success']); unset($_SESSION['health_success']); ?></div>
+                <?php endif; ?>
+                <?php if (isset($_SESSION['health_error'])): ?>
+                    <div class="alert alert-danger" style="font-size:.82rem;"><?= htmlspecialchars($_SESSION['health_error']); unset($_SESSION['health_error']); ?></div>
+                <?php endif; ?>
+
+                <?php if ($bmi): ?>
+                <div class="row g-2 mb-3">
+                    <div class="col-6 col-sm-3">
+                        <div style="background:#f9fafb;border-radius:10px;padding:12px;text-align:center;">
+                            <div style="font-size:1.1rem;font-weight:700;color:#0277bd;"><?= $hp['height_cm'] ?> <span style="font-size:.68rem;">cm</span></div>
+                            <div style="font-size:.68rem;color:#9ca3af;">Height</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-3">
+                        <div style="background:#f9fafb;border-radius:10px;padding:12px;text-align:center;">
+                            <div style="font-size:1.1rem;font-weight:700;color:#16a34a;"><?= $hp['weight_kg'] ?> <span style="font-size:.68rem;">kg</span></div>
+                            <div style="font-size:.68rem;color:#9ca3af;">Weight</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-3">
+                        <div style="background:#f9fafb;border-radius:10px;padding:12px;text-align:center;">
+                            <div style="font-size:1.1rem;font-weight:700;"><?= $bmi ?></div>
+                            <div style="font-size:.68rem;color:#9ca3af;">BMI</div>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <form method="POST" action="save-student-health.php" id="healthForm">
+                    <input type="hidden" name="member_id" value="<?= $member_id ?>">
+
+                    <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#9ca3af;margin:6px 0 10px;">Physical Measurements</div>
+                    <div class="form-row">
+                        <div class="col-md-3 mb-2">
+                            <label class="info-label d-block mb-1">Blood Group</label>
+                            <select name="blood_group" class="form-control form-control-sm">
+                                <option value="">Not set</option>
+                                <?php foreach (['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as $bg): ?>
+                                    <option value="<?= $bg ?>" <?= ($m['blood_group'] ?? '') === $bg ? 'selected' : '' ?>><?= $bg ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <label class="info-label d-block mb-1">Height (cm)</label>
+                            <input type="number" step="0.1" name="height_cm" id="heightInput" class="form-control form-control-sm"
+                                value="<?= $hp['height_cm'] ?? '' ?>" placeholder="e.g. 150.0" oninput="calcBMI()">
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <label class="info-label d-block mb-1">Weight (kg)</label>
+                            <input type="number" step="0.1" name="weight_kg" id="weightInput" class="form-control form-control-sm"
+                                value="<?= $hp['weight_kg'] ?? '' ?>" placeholder="e.g. 42.0" oninput="calcBMI()">
+                            <div id="bmiLive" style="font-size:.7rem;margin-top:3px;"></div>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <label class="info-label d-block mb-1">Vision</label>
+                            <input type="text" name="vision" class="form-control form-control-sm" value="<?= htmlspecialchars($hp['vision'] ?? '') ?>" placeholder="e.g. 6/6 Normal">
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <label class="info-label d-block mb-1">Hearing</label>
+                            <input type="text" name="hearing" class="form-control form-control-sm" value="<?= htmlspecialchars($hp['hearing'] ?? '') ?>" placeholder="e.g. Normal">
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <label class="info-label d-block mb-1">Dental</label>
+                            <input type="text" name="dental" class="form-control form-control-sm" value="<?= htmlspecialchars($hp['dental'] ?? '') ?>" placeholder="e.g. Good">
+                        </div>
+                    </div>
+
+                    <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#9ca3af;margin:16px 0 10px;">Medical History</div>
+                    <div class="form-row">
+                        <div class="col-md-6 mb-2">
+                            <label class="info-label d-block mb-1">Known Allergies</label>
+                            <textarea name="known_allergies" class="form-control form-control-sm" rows="2" placeholder="e.g. Peanuts, Dust mites, Penicillin"><?= htmlspecialchars($hp['known_allergies'] ?? '') ?></textarea>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label class="info-label d-block mb-1">Chronic Conditions</label>
+                            <textarea name="chronic_conditions" class="form-control form-control-sm" rows="2" placeholder="e.g. Asthma, Diabetes"><?= htmlspecialchars($hp['chronic_conditions'] ?? '') ?></textarea>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label class="info-label d-block mb-1">Current Medications</label>
+                            <textarea name="current_medications" class="form-control form-control-sm" rows="2" placeholder="e.g. Salbutamol inhaler"><?= htmlspecialchars($hp['current_medications'] ?? '') ?></textarea>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label class="info-label d-block mb-1">Vaccination Status</label>
+                            <textarea name="vaccination_status" class="form-control form-control-sm" rows="2" placeholder="e.g. COVID-19 fully vaccinated, BCG, MMR"><?= htmlspecialchars($hp['vaccination_status'] ?? '') ?></textarea>
+                        </div>
+                    </div>
+
+                    <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#9ca3af;margin:16px 0 10px;">Emergency Contact</div>
+                    <div class="form-row">
+                        <div class="col-md-6 mb-2">
+                            <label class="info-label d-block mb-1">Contact Name</label>
+                            <input type="text" name="emergency_contact" class="form-control form-control-sm" value="<?= htmlspecialchars($hp['emergency_contact'] ?? '') ?>" placeholder="Parent / Guardian name">
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label class="info-label d-block mb-1">Contact Phone</label>
+                            <input type="tel" name="emergency_phone" class="form-control form-control-sm" value="<?= htmlspecialchars($hp['emergency_phone'] ?? '') ?>" placeholder="+91 XXXXX XXXXX">
+                        </div>
+                        <div class="col-md-12 mb-2">
+                            <label class="info-label d-block mb-1">Additional Notes</label>
+                            <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Any other health observations…"><?= htmlspecialchars($hp['notes'] ?? '') ?></textarea>
+                        </div>
+                    </div>
+
+                    <?php if (!empty($hp['updated_at'])): ?>
+                        <div style="font-size:.72rem;color:#9ca3af;margin-bottom:10px;">
+                            <i class="fa fa-clock me-1"></i>Last updated <?= date('d M Y, h:i A', strtotime($hp['updated_at'])) ?>
+                            <?= !empty($hp['last_updated_role']) ? ' by ' . ucfirst($hp['last_updated_role']) : '' ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <button type="submit" class="btn btn-sm btn-primary-custom"><i class="fa fa-save me-1"></i> Save Health Profile</button>
+                </form>
             </div>
         </div>
 
@@ -381,6 +531,90 @@ $sidebar_active = 'school-students';
                         <?php if ($rx['symptoms']): ?><div style="font-size:.8rem;color:#6b7280;margin-bottom:6px;"><strong>Symptoms:</strong> <?= htmlspecialchars($rx['symptoms']) ?></div><?php endif; ?>
                         <div class="rx-text"><?= htmlspecialchars($rx['prescription_text']) ?></div>
                         <?php if ($rx['advice']): ?><div style="font-size:.8rem;color:#6b7280;margin-top:6px;"><strong>Advice:</strong> <?= htmlspecialchars($rx['advice']) ?></div><?php endif; ?>
+                    </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+
+        <!-- ── TAB: Certificates ── -->
+        <div class="tab-pane" id="tab-cert">
+            <div class="info-section">
+                <div class="section-title"><i class="fa fa-certificate me-2" style="color:#0277bd;"></i>Issue Medical / Leave Certificate</div>
+                <?php if (isset($_SESSION['cert_error'])): ?>
+                    <div class="alert alert-danger" style="font-size:.82rem;"><?= htmlspecialchars($_SESSION['cert_error']); unset($_SESSION['cert_error']); ?></div>
+                <?php endif; ?>
+                <form method="POST" action="save-student-certificate.php">
+                    <input type="hidden" name="member_id" value="<?= $member_id ?>">
+                    <div class="form-row">
+                        <div class="col-md-12 mb-2">
+                            <label class="info-label d-block mb-1">Certificate Type</label>
+                            <select name="certificate_type" class="form-control form-control-sm">
+                                <?php foreach ($certificate_types as $t): ?><option value="<?= htmlspecialchars($t) ?>"><?= htmlspecialchars($t) ?></option><?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-12 mb-2">
+                            <label class="info-label d-block mb-1">Reason / Diagnosis <span class="text-danger">*</span></label>
+                            <textarea name="reason" class="form-control form-control-sm" rows="3" required
+                                placeholder="Medical condition or reason the certificate is being issued for…"></textarea>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="info-label d-block mb-1">Leave From</label>
+                            <input type="date" name="leave_from" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="info-label d-block mb-1">Leave To</label>
+                            <input type="date" name="leave_to" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="info-label d-block mb-1">Fit to Resume From</label>
+                            <input type="date" name="fit_to_join_date" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-12 mb-2">
+                            <label class="info-label d-block mb-1">Additional Remarks</label>
+                            <textarea name="remarks" class="form-control form-control-sm" rows="2" placeholder="Optional notes…"></textarea>
+                        </div>
+                        <div class="col-md-12">
+                            <button type="submit" class="btn btn-sm btn-primary-custom"><i class="fa fa-certificate me-1"></i> Issue Certificate</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div style="font-size:.84rem;color:#374151;font-weight:600;margin:16px 0 8px;">
+                <?= count($certificates) ?> certificate(s)
+            </div>
+
+            <?php if (empty($certificates)): ?>
+                <div class="info-section text-center py-4">
+                    <i class="fa fa-certificate fa-2x text-muted mb-2"></i>
+                    <div class="text-muted" style="font-size:.86rem;">No certificates issued yet.</div>
+                </div>
+            <?php else: ?>
+                <?php foreach ($certificates as $c): ?>
+                    <div class="rx-item">
+                        <div class="rx-head">
+                            <div>
+                                <div style="font-weight:600;font-size:.9rem;color:#1f2937;"><?= htmlspecialchars($c['certificate_type']) ?></div>
+                                <div style="font-size:.74rem;color:#9ca3af;">
+                                    Dr. <?= htmlspecialchars($c['doctor_name'] ?? 'Unknown') ?> &bull; <?= date('d M Y, h:i A', strtotime($c['created_at'])) ?>
+                                    <?php if ($c['leave_from'] && $c['leave_to']): ?>
+                                        &bull; Leave: <?= date('d M', strtotime($c['leave_from'])) ?> – <?= date('d M Y', strtotime($c['leave_to'])) ?>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <div class="d-flex" style="gap:6px;">
+                                <a href="print-student-certificate.php?id=<?= $c['id'] ?>" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print"><i class="fa fa-print"></i></a>
+                                <?php if ((int)$c['doctor_id'] === $doctor_id): ?>
+                                    <form method="POST" action="delete-student-certificate.php" onsubmit="return confirm('Delete this certificate?');" style="display:inline;">
+                                        <input type="hidden" name="id" value="<?= $c['id'] ?>">
+                                        <input type="hidden" name="member_id" value="<?= $member_id ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="fa fa-trash"></i></button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <div class="rx-text"><?= nl2br(htmlspecialchars($c['reason'])) ?></div>
+                        <?php if ($c['remarks']): ?><div style="font-size:.8rem;color:#6b7280;margin-top:6px;"><strong>Remarks:</strong> <?= htmlspecialchars($c['remarks']) ?></div><?php endif; ?>
                     </div>
                 <?php endforeach; ?>
             <?php endif; ?>
@@ -466,6 +700,27 @@ $sidebar_active = 'school-students';
             document.getElementById('tab-' + name).classList.add('active');
             el.classList.add('active');
         }
+
+        function calcBMI() {
+            const h = parseFloat(document.getElementById('heightInput').value);
+            const w = parseFloat(document.getElementById('weightInput').value);
+            const el = document.getElementById('bmiLive');
+            if (!el) return;
+            if (h > 0 && w > 0) {
+                const bmi = (w / ((h / 100) * (h / 100))).toFixed(1);
+                let label, color;
+                if (bmi < 18.5) { label = 'Underweight'; color = '#d97706'; }
+                else if (bmi < 25) { label = 'Normal'; color = '#16a34a'; }
+                else if (bmi < 30) { label = 'Overweight'; color = '#d97706'; }
+                else { label = 'Obese'; color = '#dc2626'; }
+                el.innerHTML = `<span style="color:${color};font-weight:700;">BMI: ${bmi}</span> <span style="color:#9ca3af;">— ${label}</span>`;
+            } else {
+                el.innerHTML = '';
+            }
+        }
+
+        calcBMI();
+
         const hash = location.hash.replace('#', '') || new URLSearchParams(location.search).get('tab');
         if (hash) {
             const btn = document.querySelector('[onclick*="\'' + hash + '\'"]');
