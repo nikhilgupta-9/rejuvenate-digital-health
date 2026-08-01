@@ -14,7 +14,8 @@ $search_query = trim($_GET['search'] ?? '');
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="author" content="modinatheme">
-  <meta name="description" content="Browse all medical departments and specialities at Rejuvenate Digital Health — find the right specialist and book a consultation online.">
+  <meta name="description"
+    content="Browse all medical departments and specialities at Rejuvenate Digital Health — find the right specialist and book a consultation online.">
   <title>All Departments — REJUVENATE Digital Health</title>
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
@@ -43,7 +44,7 @@ $search_query = trim($_GET['search'] ?? '');
 
     .dept-search-box {
       max-width: 460px;
-      margin: -34px auto 40px;
+      margin: -14px auto 40px;
       position: relative;
       z-index: 2;
     }
@@ -74,7 +75,8 @@ $search_query = trim($_GET['search'] ?? '');
   <?php include("header.php") ?>
 
   <!-- Breadcrumb Section Start -->
-  <div class="breadcrumb-wrapper bg-cover" style="background-image: url('<?= BASE_URL ?>assets/img/inner/breadcrumb-img.jpg');">
+  <div class="breadcrumb-wrapper bg-cover"
+    style="background-image: url('<?= BASE_URL ?>assets/img/inner/breadcrumb-img.jpg');">
     <div class="container">
       <div class="page-heading">
         <div class="breadcrumb-items-area">
@@ -92,12 +94,14 @@ $search_query = trim($_GET['search'] ?? '');
   </div>
 
   <!-- Departments Grid Section Start -->
-  <section class="cta-section section-padding fix">
+  <section class="cta-section section-padding fix mb-3">
     <div class="container">
 
       <div class="dept-search-box">
         <i class="far fa-search"></i>
-        <input type="text" id="deptSearch" class="form-control" placeholder="Search a department or problem, e.g. Cardiology, chest pain…" value="<?= htmlspecialchars($search_query) ?>">
+        <input type="text" id="deptSearch" class="form-control"
+          placeholder="Search a department or problem, e.g. Cardiology, chest pain…"
+          value="<?= htmlspecialchars($search_query) ?>">
       </div>
 
       <?php if ($total === 0): ?>
@@ -115,14 +119,15 @@ $search_query = trim($_GET['search'] ?? '');
 
         <div class="row g-4 pb-0 advance-wrap" id="deptGrid">
           <?php foreach ($departments as $dept): ?>
-            <div class="col-xl-3 col-lg-4 col-md-6 dept-card"
+            <div class="col-6 col-sm-6 col-md-4 col-lg-3 col-xl-3 dept-card"
               data-name="<?= strtolower(htmlspecialchars($dept['categories'])) ?>"
               data-desc="<?= strtolower(htmlspecialchars(strip_tags($dept['description'] ?? ''))) ?>">
               <div class="team-box-items mt-0">
                 <a href="<?= BASE_URL ?>department/<?= htmlspecialchars($dept['slug_url']) ?>/">
                   <div class="team-image">
                     <?php if (!empty($dept['sub_cat_img'])): ?>
-                      <img src="<?= BASE_URL ?>admin/uploads/sub-category/<?= htmlspecialchars($dept['sub_cat_img']) ?>" alt="<?= htmlspecialchars($dept['categories']) ?>">
+                      <img src="<?= BASE_URL ?>admin/uploads/sub-category/<?= htmlspecialchars($dept['sub_cat_img']) ?>"
+                        alt="<?= htmlspecialchars($dept['categories']) ?>">
                     <?php else: ?>
                       <div class="dept-icon-fallback"><i class="fas fa-stethoscope"></i></div>
                     <?php endif; ?>

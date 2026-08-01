@@ -29,7 +29,7 @@ $contact = contact_us();
 
 <body>
     <?php include("header.php") ?>
-    <section class="hero-section hero-1 bg-cover fix"
+    <section class="hero-section hero-1 bg-cover-hero fix"
         style="background-image: url('assets/img/home-1/hero/bg-01.jpg');">
         <div class="container">
             <div class="row g-4 align-items-center ">

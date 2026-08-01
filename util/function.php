@@ -823,24 +823,100 @@ function send_verification_otp($email, $mobile, $otp_code) {
 }
 
 /**
- * Insert the appointment and (best-effort) email a notification.
+ * Find an existing patient account by email or mobile, or create one on
+ * the spot using the info they filled in on the booking form. Called from
+ * util/appointment-handler.php before insert_appointment(), so every
+ * booking — even from a first-time visitor who never signed up — ends up
+ * tied to a real users.id instead of leaving appointments.user_id NULL.
+ *
+ * @return array{user_id:int, created:bool, temp_password:?string}
+ */
+function find_or_create_patient_user(mysqli $conn, string $name, string $email, string $mobile): array
+{
+    $mobileClean = preg_replace('/\D/', '', $mobile);
+
+    $stmt = $conn->prepare("SELECT id FROM users WHERE email = ? OR mobile = ? LIMIT 1");
+    $stmt->bind_param('ss', $email, $mobileClean);
+    $stmt->execute();
+    $existing = $stmt->get_result()->fetch_assoc();
+
+    if ($existing) {
+        return ['user_id' => (int) $existing['id'], 'created' => false, 'temp_password' => null];
+    }
+
+    // New account — generate a temp password so they can actually log in
+    // later (process-login.php always requires a password; there's no
+    // password-less login for patients).
+    $tempPassword = bin2hex(random_bytes(5)); // 10 hex chars
+    $hash = password_hash($tempPassword, PASSWORD_BCRYPT, ['cost' => 12]);
+
+    $ins = $conn->prepare("INSERT INTO users (name, email, mobile, password, status, created_at) VALUES (?, ?, ?, ?, 'Active', NOW())");
+    $ins->bind_param('ssss', $name, $email, $mobileClean, $hash);
+    $ins->execute();
+
+    return ['user_id' => (int) $conn->insert_id, 'created' => true, 'temp_password' => $tempPassword];
+}
+
+/**
+ * Insert the appointment and (best-effort) email three notifications, in
+ * order: admin, then patient, then doctor (if a specific doctor was
+ * matched). All via the shared Mailer (util/mail_config.php).
+ *
+ * For online consultations, the video call room + join link are created
+ * up front (see telemedicine/helpers.php) so the link can go out in the
+ * patient/doctor emails immediately — it only "activates" once the doctor
+ * approves the appointment (see telemedicine/join.php's status check).
+ *
  * Returns the new appointment's insert ID on success, or false if the
  * booking itself could not be saved. A failed notification email does
- * NOT cause this to return false — see the catch block below.
+ * NOT cause this to return false — the DB insert already succeeded,
+ * that's what actually matters to the patient.
  */
 function send_appointment_email( $data) {
-     // 1️⃣ Insert appointment into DB
+    global $conn;
+
+    // 1️⃣ Insert appointment into DB
     $appointmentId = insert_appointment( $data);
     if (!$appointmentId) {
         return false;
     }
 
-    // 2️⃣ Best-effort admin notification via the shared Mailer (util/mail_config.php,
-    // credentials from .env). A failed email must not make the patient think
-    // their appointment didn't go through — the DB insert above already succeeded,
-    // that's what actually matters.
+    // Re-fetch the saved row so the emails below work off validated DB
+    // state (confirmed doctor_id, etc.) rather than raw client input.
+    $stmt = $conn->prepare("SELECT a.*, d.name AS doctor_name, d.email AS doctor_email
+        FROM appointments a
+        LEFT JOIN doctors d ON d.id = a.doctor_id
+        WHERE a.id = ? LIMIT 1");
+    $stmt->bind_param('i', $appointmentId);
+    $stmt->execute();
+    $appt = $stmt->get_result()->fetch_assoc();
+
+    $typeLabel = ($appt['appointment_type'] ?? 'online') === 'clinic' ? 'In-Clinic Visit' : 'Online Consultation';
+    $dateLabel = !empty($appt['appointment_date']) ? date('d M Y', strtotime($appt['appointment_date'])) : $data['date'];
+    $timeLabel = !empty($appt['appointment_time']) ? date('h:i A', strtotime($appt['appointment_time'])) : $data['time'];
+
+    // Create the telemedicine room up front for online consultations, so
+    // the join link can be included in the emails below.
+    $meetingLink = null;        // goes to the doctor (always has an account, logs in via JWT)
+    $patientMeetingLink = null; // goes to the patient — may need a guest link, see below
+    if ($appt && $appt['appointment_type'] === 'online') {
+        require_once __DIR__ . '/../telemedicine/helpers.php';
+        $room = telemedicine_ensure_room($conn, $appointmentId);
+        $meetingLink = $room['link'] ?? null;
+        $patientMeetingLink = $meetingLink;
+
+        // A guest booking (no account -> appointments.user_id is NULL) can't
+        // prove ownership via a login session, so the plain link would just
+        // bounce them to the login page forever. Mail them a signed,
+        // appointment-scoped link instead — see telemedicine_guest_link().
+        if ($meetingLink && empty($appt['user_id'])) {
+            $patientMeetingLink = telemedicine_guest_link($appointmentId);
+        }
+    }
+
+    // 2️⃣ Admin notification — first
     $contact = contact_us();
-    $toEmail = $contact['email'] ?? MAIL_USERNAME;
+    $adminEmail = $contact['email'] ?? MAIL_USERNAME;
 
     $bodyHtml = "
         <p>A new appointment request has been received.</p>
@@ -850,8 +926,9 @@ function send_appointment_email( $data) {
             <tr><td style='padding:8px 0;font-weight:bold;'>Phone</td><td>" . htmlspecialchars($data['phone']) . "</td></tr>
             <tr><td style='padding:8px 0;font-weight:bold;'>Department</td><td>" . htmlspecialchars($data['department']) . "</td></tr>" .
             (!empty($data['doctor_name']) ? "<tr><td style='padding:8px 0;font-weight:bold;'>Preferred Doctor</td><td>" . htmlspecialchars($data['doctor_name']) . "</td></tr>" : "") . "
-            <tr><td style='padding:8px 0;font-weight:bold;'>Date</td><td>" . htmlspecialchars($data['date']) . "</td></tr>
-            <tr><td style='padding:8px 0;font-weight:bold;'>Time</td><td>" . htmlspecialchars($data['time']) . "</td></tr>
+            <tr><td style='padding:8px 0;font-weight:bold;'>Date</td><td>" . htmlspecialchars($dateLabel) . "</td></tr>
+            <tr><td style='padding:8px 0;font-weight:bold;'>Time</td><td>" . htmlspecialchars($timeLabel) . "</td></tr>
+            <tr><td style='padding:8px 0;font-weight:bold;'>Type</td><td>" . htmlspecialchars($typeLabel) . "</td></tr>
         </table>
     ";
 
@@ -862,10 +939,48 @@ function send_appointment_email( $data) {
         "Phone: {$data['phone']}\n" .
         "Department: {$data['department']}\n" .
         (!empty($data['doctor_name']) ? "Preferred Doctor: {$data['doctor_name']}\n" : "") .
-        "Date: {$data['date']}\n" .
-        "Time: {$data['time']}\n";
+        "Date: {$dateLabel}\n" .
+        "Time: {$timeLabel}\n" .
+        "Type: {$typeLabel}\n";
 
-    (new Mailer())->sendCustom($toEmail, 'Admin', 'New Appointment Booking Request', $bodyHtml, $bodyText);
+    (new Mailer())->sendCustom($adminEmail, 'Admin', 'New Appointment Booking Request', $bodyHtml, $bodyText);
+
+    if ($appt) {
+        // 3️⃣ Patient notification — second. If find_or_create_patient_user()
+        // just created a fresh account for them, fold the temp login
+        // credentials into this same email rather than sending a separate
+        // "welcome" email (keeps the promised 3-emails-per-booking flow intact).
+        (new Mailer())->sendAppointmentRequested(
+            $appt['patient_email'],
+            $appt['patient_name'],
+            [
+                'doctor_name'    => $appt['doctor_name'] ?? ($data['doctor_name'] ?? ''),
+                'date'           => $dateLabel,
+                'time'           => $timeLabel,
+                'type'           => $typeLabel,
+                'meeting_link'   => $patientMeetingLink,
+                'account_created'=> !empty($data['_new_account_temp_password']),
+                'login_email'    => $appt['patient_email'],
+                'temp_password'  => $data['_new_account_temp_password'] ?? null,
+            ]
+        );
+
+        // 4️⃣ Doctor notification — third, only when a specific doctor was matched
+        if (!empty($appt['doctor_id']) && !empty($appt['doctor_email'])) {
+            (new Mailer())->sendNewAppointmentDoctor(
+                $appt['doctor_email'],
+                $appt['doctor_name'],
+                [
+                    'patient_name' => $appt['patient_name'],
+                    'date'         => $dateLabel,
+                    'time'         => $timeLabel,
+                    'type'         => $typeLabel,
+                    'purpose'      => $appt['purpose'],
+                    'meeting_link' => $meetingLink,
+                ]
+            );
+        }
+    }
 
     return $appointmentId;
 }

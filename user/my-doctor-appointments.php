@@ -104,34 +104,34 @@ $total_appointments = 0;
 $total_upcoming = 0;
 $total_past = 0;
 $total_pending = 0;
-$total_confirmed = 0;
+$total_approved = 0;
 $total_completed = 0;
-$total_cancelled = 0;
+$total_rejected = 0;
 
 while ($row = $result->fetch_assoc()) {
     $appointments[] = $row;
     $total_appointments++;
-    
+
     // Count by appointment type
     if ($row['appointment_status'] === 'upcoming') {
         $total_upcoming++;
     } else {
         $total_past++;
     }
-    
-    // Count by status
+
+    // Count by status — appointments.status is ENUM('pending','approved','rejected','completed','no_show')
     switch ($row['status']) {
         case 'pending':
             $total_pending++;
             break;
-        case 'confirmed':
-            $total_confirmed++;
+        case 'approved':
+            $total_approved++;
             break;
         case 'completed':
             $total_completed++;
             break;
-        case 'cancelled':
-            $total_cancelled++;
+        case 'rejected':
+            $total_rejected++;
             break;
     }
 }
@@ -157,7 +157,9 @@ if (isset($_GET['cancel_id'])) {
         $current_datetime = time();
         
         if ($appointment_datetime > $current_datetime) {
-            $cancel_stmt = $conn->prepare("UPDATE appointments SET status = 'cancelled' WHERE id = ?");
+            // 'cancelled' isn't a valid status enum value — reuse 'rejected',
+            // same as the doctor-side cancel action.
+            $cancel_stmt = $conn->prepare("UPDATE appointments SET status = 'rejected' WHERE id = ?");
             $cancel_stmt->bind_param("i", $cancel_id);
             
             if ($cancel_stmt->execute()) {
@@ -217,184 +219,106 @@ if (isset($_GET['success'])) {
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
   <style>
-    /* Custom Styles */
-    .profile-card { padding: 2rem; }
-    .alert { border-radius: 8px; }
-    
-    /* Appointment Cards */
+    /* Page-specific styles only — colors/stat-cards/status-badges/action-btn
+       all come from the shared theme (user/assets/style.css, --primary #0C74C5
+       / --accent #02c9b8), same palette the doctor panel uses. */
+
+    /* ── Appointment cards (mobile) ── */
     .appointment-card {
-        border: 1px solid #e9ecef;
-        border-radius: 10px;
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
-        background: white;
-        transition: all 0.3s ease;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 14px;
+        background: #fff;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, .06);
+        transition: box-shadow .2s;
     }
-    
-    .appointment-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-    }
-    
-    .appointment-card.upcoming {
-        border-left: 4px solid #28a745;
-    }
-    
-    .appointment-card.past {
-        border-left: 4px solid #6c757d;
-    }
-    
-    /* Status Badges */
-    .status-badge {
-        padding: 0.35rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        text-transform: uppercase;
-    }
-    
-    .status-pending { background: #fff3cd; color: #856404; }
-    .status-confirmed { background: #d4edda; color: #155724; }
-    .status-completed { background: #d1ecf1; color: #0c5460; }
-    .status-cancelled { background: #f8d7da; color: #721c24; }
-    
-    /* Doctor Avatar */
+    .appointment-card:hover { box-shadow: 0 6px 18px rgba(0, 0, 0, .1); }
+    .appointment-card.upcoming { border-left: 4px solid var(--primary); }
+    .appointment-card.past     { border-left: 4px solid #9ca3af; }
+
+    /* ── Doctor avatar ── */
     .doctor-avatar {
-        width: 60px;
-        height: 60px;
+        width: 56px;
+        height: 56px;
         border-radius: 50%;
         object-fit: cover;
-        border: 2px solid #2c5aa0;
-    }
-    
-    /* Filter Cards */
-    .filter-card {
-        background: white;
-        border-radius: 10px;
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.08);
-    }
-    
-    .stat-card {
-        text-align: center;
-        padding: 1rem;
-        border-radius: 8px;
-        margin-bottom: 1rem;
-        transition: all 0.3s;
-    }
-    
-    .stat-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-    }
-    
-    .stat-card.total { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-    .stat-card.upcoming { background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; }
-    .stat-card.pending { background: linear-gradient(135deg, #ffc107 0%, #ffdb5c 100%); color: #212529; }
-    .stat-card.confirmed { background: linear-gradient(135deg, #17a2b8 0%, #4dc0b5 100%); color: white; }
-    
-    .stat-number {
-        font-size: 2rem;
-        font-weight: bold;
-        margin-bottom: 0.5rem;
-    }
-    
-    /* Action Buttons */
-    .action-btn {
-        padding: 0.35rem 0.75rem;
-        border-radius: 5px;
-        font-size: 0.875rem;
-        margin: 0 2px;
-        text-decoration: none;
-        display: inline-block;
-    }
-    
-    .btn-cancel { background: #dc3545; color: white; }
-    .btn-reschedule { background: #ffc107; color: #212529; }
-    .btn-view { background: #17a2b8; color: white; }
-    .btn-prescription { background: #28a745; color: white; }
-    
-    /* Table Styles */
-    .booking-table {
-        background: white;
-        border-radius: 10px;
-        overflow: hidden;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.05);
-    }
-    
-    .booking-table table {
-        margin: 0;
-    }
-    
-    .booking-table th {
-        background: linear-gradient(135deg, #2c5aa0 0%, #4a7bc8 100%);
-        color: white;
-        border: none;
-        padding: 15px;
-        font-weight: 600;
-    }
-    
-    .booking-table td {
-        padding: 15px;
-        vertical-align: middle;
-        border-bottom: 1px solid #eee;
-    }
-    
-    .booking-table tr:hover {
-        background: #f8f9ff;
-    }
-    
-    /* Mobile Responsive */
-    .mobile-menu-btn {
-        display: none;
-        background: #2c5aa0;
-        color: white;
-        border: none;
-        padding: 10px 20px;
-        border-radius: 5px;
-        margin-bottom: 20px;
-        width: 100%;
+        border: 2px solid var(--primary);
     }
 
-    @media (max-width: 991px) {
-        /* Stack sidebar below content on tablet */
-        .col-md-3 { order: 2; }
-        .col-lg-9 { order: 1; }
+    /* ── Filter card ── */
+    .filter-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 18px 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, .06);
+    }
+
+    /* ── Table ── */
+    .booking-table {
+        background: #fff;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, .06);
+    }
+    .booking-table table { margin: 0; }
+    .booking-table th {
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        padding: 13px 15px;
+        font-weight: 600;
+        font-size: .82rem;
+    }
+    .booking-table td { padding: 13px 15px; vertical-align: middle; border-bottom: 1px solid #f3f4f6; }
+    .booking-table tr:last-child td { border-bottom: none; }
+    .booking-table tr:hover { background: #f8fafc; }
+
+    /* Video-call hint for online appointments still awaiting approval */
+    .video-pending-hint {
+        font-size: .68rem;
+        color: #9ca3af;
+        white-space: nowrap;
+    }
+
+    /* ── Empty state ── */
+    .no-appointments { text-align: center; padding: 50px 20px; color: #6b7280; }
+    .no-appointments i { font-size: 2.4rem; color: #d1d5db; display: block; margin-bottom: 10px; }
+
+    /* ── Status filter pills ── */
+    .status-tabs .nav-link {
+        color: #6b7280;
+        font-weight: 600;
+        font-size: .84rem;
+        padding: 8px 16px;
+        border-radius: 8px;
+        margin-right: 5px;
+        border: 1px solid transparent;
+    }
+    .status-tabs .nav-link.active {
+        background: var(--primary);
+        color: #fff;
+    }
+
+    /* ── Search box ── */
+    .search-box { position: relative; }
+    .search-box .form-control { padding-right: 40px; border-radius: 10px; }
+    .search-box .search-icon {
+        position: absolute;
+        right: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #9ca3af;
     }
 
     @media (max-width: 768px) {
-        .mobile-menu-btn { display: block; }
-        .sidebar { display: none; }
-        .sidebar.show { display: block; }
-
-        /* Profile card padding */
         .profile-card { padding: 1rem; }
-
-        /* Stat cards: 2 per row, compact */
-        .stat-card { margin-bottom: 10px; padding: .75rem .5rem; }
-        .stat-number { font-size: 1.5rem; }
-
-        /* Filter card */
         .filter-card { padding: 1rem; }
-        .status-tabs .nav-link {
-            padding: 7px 12px;
-            font-size: .8rem;
-            margin-right: 3px;
-            margin-bottom: 4px;
-        }
-
-        /* Appointment card mobile tweaks */
-        .appointment-card { padding: 1rem; }
+        .status-tabs .nav-link { padding: 7px 12px; font-size: .8rem; margin-bottom: 4px; }
         .appointment-card .doctor-avatar { width: 48px; height: 48px; }
-
-        /* Action buttons: full row on mobile */
         .appointment-card .appointment-actions { display: flex; gap: 6px; }
-        .appointment-card .d-flex.justify-content-between { flex-wrap: wrap; gap: 8px; }
-
-        /* Table: hide on mobile handled by d-none d-md-block */
-        /* Header button stacking */
-        .profile-card .d-flex.justify-content-between { flex-direction: column; gap: 10px; }
+        .profile-card .d-flex.justify-content-between { flex-direction: column; gap: 10px; align-items: flex-start !important; }
         .profile-card .d-flex.justify-content-between .btn { width: 100%; text-align: center; }
     }
 
@@ -402,56 +326,6 @@ if (isset($_GET['success'])) {
         .status-tabs .nav { flex-wrap: wrap; }
         .status-tabs .nav-link { font-size: .75rem; padding: 6px 10px; }
         .search-box .form-control { font-size: .88rem; }
-    }
-    
-    /* Empty State */
-    .no-appointments {
-        text-align: center;
-        padding: 50px 20px;
-        color: #666;
-    }
-    
-    .no-appointments i {
-            font-size: 22px;
-    color: #ddd;
-    }
-    
-    /* Tabs */
-    .status-tabs .nav-link {
-        color: #666;
-        font-weight: 500;
-        padding: 10px 20px;
-        border-radius: 5px;
-        margin-right: 5px;
-        border: 1px solid transparent;
-    }
-    
-    .status-tabs .nav-link.active {
-        background: #2c5aa0;
-        color: white;
-        border-color: #2c5aa0;
-    }
-    
-    /* Search Box */
-    .search-box {
-        position: relative;
-    }
-    
-    .search-box .form-control {
-        padding-right: 40px;
-        border-radius: 25px;
-    }
-    
-    .search-box .search-icon {
-        position: absolute;
-        right: 15px;
-        top: 50%;
-        transform: translateY(-50%);
-        color: #666;
-    }
-
-    @meida (max-width: 575.98px){
-     
     }
   </style>
 </head>
@@ -483,33 +357,37 @@ if (isset($_GET['success'])) {
             </div>
             
             <!-- Statistics Cards -->
-            <div class="row mb-4">
+            <div class="row mb-4 g-3">
               <div class="col-md-3 col-6">
-                <div class="stat-card total">
-                  <div class="stat-number"><?= $total_appointments ?></div>
-                  <div>Total</div>
+                <div class="stat-card card-primary">
+                  <i class="fa fa-calendar-check bg-icon"></i>
+                  <div class="num"><?= $total_appointments ?></div>
+                  <div class="lbl">Total</div>
                 </div>
               </div>
               <div class="col-md-3 col-6">
-                <div class="stat-card upcoming">
-                  <div class="stat-number"><?= $total_upcoming ?></div>
-                  <div>Upcoming</div>
+                <div class="stat-card card-accent">
+                  <i class="fa fa-hourglass-half bg-icon"></i>
+                  <div class="num"><?= $total_upcoming ?></div>
+                  <div class="lbl">Upcoming</div>
                 </div>
               </div>
               <div class="col-md-3 col-6">
-                <div class="stat-card pending">
-                  <div class="stat-number"><?= $total_pending ?></div>
-                  <div>Pending</div>
+                <div class="stat-card card-orange">
+                  <i class="fa fa-clock bg-icon"></i>
+                  <div class="num"><?= $total_pending ?></div>
+                  <div class="lbl">Pending</div>
                 </div>
               </div>
               <div class="col-md-3 col-6">
-                <div class="stat-card confirmed">
-                  <div class="stat-number"><?= $total_confirmed ?></div>
-                  <div>Confirmed</div>
+                <div class="stat-card card-green">
+                  <i class="fa fa-check-circle bg-icon"></i>
+                  <div class="num"><?= $total_approved ?></div>
+                  <div class="lbl">Approved</div>
                 </div>
               </div>
             </div>
-            
+
             <!-- Search and Filter -->
             <div class="filter-card mb-4">
               <form method="GET" action="" class="row g-3">
@@ -525,9 +403,9 @@ if (isset($_GET['success'])) {
                     <option value="upcoming" <?= $status_filter === 'upcoming' ? 'selected' : '' ?>>Upcoming</option>
                     <option value="past" <?= $status_filter === 'past' ? 'selected' : '' ?>>Past</option>
                     <option value="pending" <?= $status_filter === 'pending' ? 'selected' : '' ?>>Pending</option>
-                    <option value="confirmed" <?= $status_filter === 'confirmed' ? 'selected' : '' ?>>Confirmed</option>
+                    <option value="approved" <?= $status_filter === 'approved' ? 'selected' : '' ?>>Approved</option>
                     <option value="completed" <?= $status_filter === 'completed' ? 'selected' : '' ?>>Completed</option>
-                    <option value="cancelled" <?= $status_filter === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
+                    <option value="rejected" <?= $status_filter === 'rejected' ? 'selected' : '' ?>>Rejected</option>
                   </select>
                 </div>
                 <div class="col-12">
@@ -543,7 +421,7 @@ if (isset($_GET['success'])) {
                         <a class="nav-link <?= $status_filter === 'pending' ? 'active' : '' ?>" href="?status=pending">Pending</a>
                       </li>
                       <li class="nav-item">
-                        <a class="nav-link <?= $status_filter === 'confirmed' ? 'active' : '' ?>" href="?status=confirmed">Confirmed</a>
+                        <a class="nav-link <?= $status_filter === 'approved' ? 'active' : '' ?>" href="?status=approved">Approved</a>
                       </li>
                     </ul>
                   </div>
@@ -616,33 +494,40 @@ if (isset($_GET['success'])) {
                             </span>
                           </td>
                           <td>
-                            <div class="d-flex">
-                              <a href="appointment-details.php?id=<?= $appointment['id'] ?>" 
-                                 class="action-btn btn-view me-1" title="View Details">
+                            <div class="btn-group btn-group-sm">
+                              <a href="appointment-details.php?id=<?= $appointment['id'] ?>"
+                                 class="btn btn-outline-secondary" title="View Details">
                                 <i class="fa fa-eye"></i>
                               </a>
-                              
-                              <?php if (in_array($appointment['status'], ['pending', 'confirmed']) && $appointment['appointment_status'] === 'upcoming'): ?>
-                                <a href="?cancel_id=<?= $appointment['id'] ?>" 
-                                   class="action-btn btn-cancel me-1" 
+
+                              <?php if (in_array($appointment['status'], ['pending', 'approved'], true) && $appointment['appointment_status'] === 'upcoming'): ?>
+                                <a href="?cancel_id=<?= $appointment['id'] ?>"
+                                   class="btn btn-outline-danger"
                                    title="Cancel"
                                    onclick="return confirm('Are you sure you want to cancel this appointment?')">
                                   <i class="fa fa-times"></i>
                                 </a>
-                                
+
                                 <?php if ($appointment['status'] === 'pending'): ?>
-                                  <a href="?reschedule_id=<?= $appointment['id'] ?>" 
-                                     class="action-btn btn-reschedule" 
+                                  <a href="?reschedule_id=<?= $appointment['id'] ?>"
+                                     class="btn btn-outline-secondary"
                                      title="Reschedule">
                                     <i class="fa fa-calendar-alt"></i>
                                   </a>
                                 <?php endif; ?>
                               <?php endif; ?>
-                              
-                              <?php if ($appointment['status'] === 'confirmed' && $appointment['appointment_status'] === 'upcoming'): ?>
-                                <a href="#" class="action-btn btn-prescription ms-1" title="Join Consultation">
-                                  <i class="fa fa-video"></i>
-                                </a>
+
+                              <?php if ($appointment['appointment_type'] === 'online' && $appointment['meeting_status'] !== 'cancelled'): ?>
+                                <?php if ($appointment['status'] === 'approved'): ?>
+                                  <a href="<?= BASE_URL ?>telemedicine/join.php?appointment_id=<?= $appointment['id'] ?>"
+                                     class="btn btn-success" title="Join Video Call" target="_blank">
+                                    <i class="fa fa-video"></i>
+                                  </a>
+                                <?php elseif ($appointment['status'] === 'pending'): ?>
+                                  <span class="btn btn-outline-secondary disabled" title="Video call unlocks once the doctor approves this appointment">
+                                    <i class="fa fa-video"></i>
+                                  </span>
+                                <?php endif; ?>
                               <?php endif; ?>
                             </div>
                           </td>
@@ -705,18 +590,31 @@ if (isset($_GET['success'])) {
                         <?= ucfirst($appointment['status']) ?>
                       </span>
                       
-                      <div class="appointment-actions">
-                        <a href="appointment-details.php?id=<?= $appointment['id'] ?>" 
-                           class="action-btn btn-view me-1">
+                      <div class="appointment-actions btn-group btn-group-sm">
+                        <a href="appointment-details.php?id=<?= $appointment['id'] ?>"
+                           class="btn btn-outline-secondary">
                           <i class="fa fa-eye"></i>
                         </a>
-                        
-                        <?php if (in_array($appointment['status'], ['pending', 'confirmed']) && $appointment['appointment_status'] === 'upcoming'): ?>
-                          <a href="?cancel_id=<?= $appointment['id'] ?>" 
-                             class="action-btn btn-cancel" 
+
+                        <?php if (in_array($appointment['status'], ['pending', 'approved'], true) && $appointment['appointment_status'] === 'upcoming'): ?>
+                          <a href="?cancel_id=<?= $appointment['id'] ?>"
+                             class="btn btn-outline-danger"
                              onclick="return confirm('Are you sure you want to cancel this appointment?')">
                             <i class="fa fa-times"></i>
                           </a>
+                        <?php endif; ?>
+
+                        <?php if ($appointment['appointment_type'] === 'online' && $appointment['meeting_status'] !== 'cancelled'): ?>
+                          <?php if ($appointment['status'] === 'approved'): ?>
+                            <a href="<?= BASE_URL ?>telemedicine/join.php?appointment_id=<?= $appointment['id'] ?>"
+                               class="btn btn-success" title="Join Video Call" target="_blank">
+                              <i class="fa fa-video"></i>
+                            </a>
+                          <?php elseif ($appointment['status'] === 'pending'): ?>
+                            <span class="btn btn-outline-secondary disabled" title="Video call unlocks once the doctor approves this appointment">
+                              <i class="fa fa-video"></i>
+                            </span>
+                          <?php endif; ?>
                         <?php endif; ?>
                       </div>
                     </div>

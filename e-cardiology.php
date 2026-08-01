@@ -185,23 +185,25 @@ $department_img   = !empty($department['sub_cat_img']) ? BASE_URL . 'admin/uploa
                 <div class="service-details-right-items doctor-card" data-name="<?= strtolower(htmlspecialchars($doctor['name'])) ?>">
 
                   <div class="team-box-items-2">
-                    <div class="team-image">
-                      <?php if (!empty($doctor['profile_image'])): ?>
+                    <div class="doc-profile-inner-body1">
+                    <div class="team-image col-sm-4">
+                      <?php if (!empty($doctor['profile_image']) && file_exists(BASE_URL . "admin/" . $doctor['profile_image'])): ?>
                         <img src="<?= BASE_URL . "admin/" . $doctor['profile_image'] ?>" alt="Profile">
                       <?php else: ?>
-                        <div style="width: 140px; height: 140px; border-radius: 50%; background: #f0f0f0; display: flex; align-items: center; justify-content: center;">
+                        <div class="doctor-default-img">
                           <i class="fas fa-user-md text-muted h2"></i>
                         </div>
                       <?php endif; ?>
                       <div class="exp-badge"><?= $doctor['experience_years'] ?> Year of Exp.</div>
                     </div>
-                    <div class="team-content">
+                    <div class="team-content col-sm-4">
                       <h3><a href="<?= BASE_URL ?>doctor-profile/<?= $doctor['slug_url'] ?>"><?= $doctor['name'] ?></a></h3>
                       <p><?= $doctor['degrees'] ?></p>
                       <p><b>Language known:</b></p>
                       <p><?= $doctor['languages'] ?></p>
                     </div>
-                    <div class="creat-book">
+                    </div>
+                    <div class="creat-book col-sm-4">
                       <p>Consultancy Fee</p>
                       <div class="price">₹<?= $doctor['consultation_fee'] ?> <span class="old-price">₹1598</span></div>
                       <a href="<?= BASE_URL ?>doctor-profile/<?= $doctor['slug_url'] ?>" class="btn view-profile w-100 mt-2">View Profile</a>
@@ -209,7 +211,7 @@ $department_img   = !empty($department['sub_cat_img']) ? BASE_URL . 'admin/uploa
                         onclick="bookWithDoctor(<?= (int) $doctor['id'] ?>, '<?= htmlspecialchars(addslashes($doctor['name'])) ?>')">
                         Book an Appointment
                       </button>
-                      <small class="text-muted d-block mt-1">Get up to 100% cashback* <a href="<?= BASE_URL ?>terms-and-condition/" class="text-danger">T&C Apply</a></small>
+                      <small class="doctor-t-c-text">Get up to 100% cashback* <a href="<?= BASE_URL ?>terms-and-condition/" class="text-danger">T&C Apply</a></small>
                     </div>
                   </div>
                 </div>

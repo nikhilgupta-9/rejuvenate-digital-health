@@ -4,125 +4,8 @@ include_once "functions.php";
 require_once __DIR__ . '/auth/guard.php';
 admin_jwt_guard();
 
-// Handle appointment actions
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['approve_btn'])) {
-        $appointment_id = intval($_POST['appointment_id']);
-        $doctor_id = intval($_POST['doctor_id']);
-
-        // Update appointment status
-        $stmt = $conn->prepare("UPDATE appointments SET status = 'approved' WHERE id = ?");
-        $stmt->bind_param("i", $appointment_id);
-
-        if ($stmt->execute()) {
-            // Get appointment details for email
-            $appointment_sql = "
-                SELECT a.*, u.name as user_name, u.email as user_email, u.dob, u.gender, 
-                       d.name as doctor_name, d.email as doctor_email, d.specialization, d.consultation_fee,
-                       TIME_FORMAT(a.appointment_time, '%h:%i %p') as formatted_time,
-                       DATE_FORMAT(a.appointment_date, '%d %M, %Y') as formatted_date
-                FROM appointments a
-                JOIN users u ON a.user_id = u.id
-                JOIN doctors d ON a.doctor_id = d.id
-                WHERE a.id = ?
-            ";
-            $appointment_stmt = $conn->prepare($appointment_sql);
-            $appointment_stmt->bind_param("i", $appointment_id);
-            $appointment_stmt->execute();
-            $appointment_result = $appointment_stmt->get_result();
-
-            if ($appointment_row = $appointment_result->fetch_assoc()) {
-                // Prepare email data
-                $appointment_details = [
-                    'appointment_id' => 'AP' . str_pad($appointment_id, 6, '0', STR_PAD_LEFT),
-                    'date' => $appointment_row['formatted_date'],
-                    'time' => $appointment_row['formatted_time'],
-                    'fee' => number_format($appointment_row['consultation_fee']),
-                    'type' => 'Clinic Visit',
-                    'purpose' => $appointment_row['purpose']
-                ];
-
-                $doctor_details = [
-                    'name' => $appointment_row['doctor_name'],
-                    'specialization' => $appointment_row['specialization']
-                ];
-
-                $patient_details = [
-                    'name' => $appointment_row['user_name'],
-                    'age' => date_diff(date_create($appointment_row['dob']), date_create('today'))->y,
-                    'gender' => $appointment_row['gender'],
-                    'phone' => 'Not provided', // Add phone field to users table if needed
-                    'email' => $appointment_row['user_email']
-                ];
-
-                // Send confirmation email to patient
-                if (send_appointment_confirmation_email(
-                    $appointment_row['user_email'],
-                    $appointment_row['user_name'],
-                    $appointment_details,
-                    $doctor_details
-                )) {
-                    $success_message = "Appointment approved and confirmation email sent to patient.";
-                } else {
-                    $success_message = "Appointment approved but email sending failed.";
-                }
-
-                // Send assignment email to doctor
-                send_appointment_assignment_email(
-                    $appointment_row['doctor_email'],
-                    $appointment_row['doctor_name'],
-                    $appointment_details,
-                    $patient_details
-                );
-            }
-            $appointment_stmt->close();
-        } else {
-            $error_message = "Failed to approve appointment.";
-        }
-        $stmt->close();
-    } elseif (isset($_POST['reject_btn'])) {
-        $appointment_id = intval($_POST['appointment_id']);
-        $rejection_reason = $conn->real_escape_string($_POST['rejection_reason'] ?? '');
-
-        $stmt = $conn->prepare("UPDATE appointments SET status = 'rejected', rejection_reason = ? WHERE id = ?");
-        $stmt->bind_param("si", $rejection_reason, $appointment_id);
-
-        if ($stmt->execute()) {
-            $success_message = "Appointment rejected successfully.";
-        } else {
-            $error_message = "Failed to reject appointment.";
-        }
-        $stmt->close();
-    } elseif (isset($_POST['assign_doctor'])) {
-        $appointment_id = intval($_POST['appointment_id']);
-        $new_doctor_id = intval($_POST['new_doctor_id']);
-
-        $stmt = $conn->prepare("UPDATE appointments SET doctor_id = ? WHERE id = ?");
-        $stmt->bind_param("ii", $new_doctor_id, $appointment_id);
-
-        if ($stmt->execute()) {
-            $success_message = "Doctor assigned successfully.";
-        } else {
-            $error_message = "Failed to assign doctor.";
-        }
-        $stmt->close();
-    }
-}
-
-// Handle appointment deletion
-if (isset($_GET['delete_id'])) {
-    $delete_id = intval($_GET['delete_id']);
-
-    $stmt = $conn->prepare("DELETE FROM appointments WHERE id = ?");
-    $stmt->bind_param("i", $delete_id);
-
-    if ($stmt->execute()) {
-        $success_message = "Appointment deleted successfully.";
-    } else {
-        $error_message = "Failed to delete appointment.";
-    }
-    $stmt->close();
-}
+// Approve / Reject / Assign Doctor / Delete are all handled via AJAX now
+// (see admin/ajax/appointment-*.php) — this page only renders the list.
 
 // Fetch all appointments with filters
 $status_filter = $_GET['status'] ?? 'pending';
@@ -174,16 +57,17 @@ $stmt->execute();
 $result = $stmt->get_result();
 
 // Fetch available doctors for assignment
-$doctors_sql = "SELECT id, name, specialization FROM doctors WHERE status = 'active' ORDER BY name";
+$doctors_sql = "SELECT id, name, specialization FROM doctors WHERE status = 'Active' ORDER BY name";
 $doctors_result = $conn->query($doctors_sql);
 
-// Count appointments by status
+// Count appointments by status — appointments.status is
+// ENUM('pending','approved','rejected','completed','no_show'); there's no 'cancelled'.
 $count_sql = "
-    SELECT 
+    SELECT
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
         SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
-        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+        SUM(CASE WHEN status = 'no_show' THEN 1 ELSE 0 END) as no_show,
         SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
         COUNT(*) as total
     FROM appointments
@@ -221,7 +105,7 @@ $counts = $count_result->fetch_assoc();
         .stats-card.pending   { background:#ea580c; }
         .stats-card.confirmed { background:#16a34a; }
         .stats-card.completed { background:#0891b2; }
-        .stats-card.cancelled { background:#dc2626; }
+        .stats-card.no-show   { background:#6b7280; }
         .stats-number         { font-size:24px; font-weight:700; margin-bottom:5px; }
         .modal-details .detail-row { border-bottom:1px solid #dee2e6; padding:10px 0; }
         .empty-state          { background:#f8f9fa; border-radius:10px; border:2px dashed #dee2e6; }
@@ -296,7 +180,7 @@ $counts = $count_result->fetch_assoc();
                                         <div class="col-md-2 col-6">
                                             <div class="stats-card confirmed">
                                                 <div class="stats-number"><?= $counts['approved'] ?? 0 ?></div>
-                                                <div>Confirmed</div>
+                                                <div>Approved</div>
                                             </div>
                                         </div>
                                         <div class="col-md-2 col-6">
@@ -306,9 +190,9 @@ $counts = $count_result->fetch_assoc();
                                             </div>
                                         </div>
                                         <div class="col-md-2 col-6">
-                                            <div class="stats-card cancelled">
-                                                <div class="stats-number"><?= $counts['cancelled'] ?? 0 ?></div>
-                                                <div>Cancelled</div>
+                                            <div class="stats-card no-show">
+                                                <div class="stats-number"><?= $counts['no_show'] ?? 0 ?></div>
+                                                <div>No Show</div>
                                             </div>
                                         </div>
                                         <div class="col-md-2 col-6">
@@ -342,9 +226,9 @@ $counts = $count_result->fetch_assoc();
                                                 <select class="form-select" name="status" onchange="this.form.submit()">
                                                     <option value="all" <?= $status_filter === 'all' ? 'selected' : '' ?>>All Status</option>
                                                     <option value="pending" <?= $status_filter === 'pending' ? 'selected' : '' ?>>Pending</option>
-                                                    <option value="approved" <?= $status_filter === 'approved' ? 'selected' : '' ?>>Confirmed</option>
+                                                    <option value="approved" <?= $status_filter === 'approved' ? 'selected' : '' ?>>Approved</option>
                                                     <option value="completed" <?= $status_filter === 'completed' ? 'selected' : '' ?>>Completed</option>
-                                                    <option value="cancelled" <?= $status_filter === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
+                                                    <option value="no_show" <?= $status_filter === 'no_show' ? 'selected' : '' ?>>No Show</option>
                                                     <option value="rejected" <?= $status_filter === 'rejected' ? 'selected' : '' ?>>Rejected</option>
                                                 </select>
                                             </div>
@@ -375,7 +259,7 @@ $counts = $count_result->fetch_assoc();
                                                             ? date_diff(date_create($row['dob']), date_create('today'))->y
                                                             : 'N/A';
                                                     ?>
-                                                        <tr>
+                                                        <tr id="apptRow<?= $row['id'] ?>" data-status="<?= $status_class ?>" data-has-doctor="<?= $row['doctor_id'] ? '1' : '0' ?>">
                                                             <td>
                                                                 <span class="badge bg-dark">AP<?= str_pad($row['id'], 6, '0', STR_PAD_LEFT) ?></span>
                                                             </td>
@@ -392,7 +276,7 @@ $counts = $count_result->fetch_assoc();
                                                                     </div>
                                                                 </div>
                                                             </td>
-                                                            <td>
+                                                            <td id="doctorCell<?= $row['id'] ?>">
                                                                 <?php if ($row['doctor_name']): ?>
                                                                     <div>
                                                                         <strong>Dr. <?= htmlspecialchars($row['doctor_name']) ?></strong>
@@ -417,8 +301,8 @@ $counts = $count_result->fetch_assoc();
                                                                 </span>
                                                             </td>
                                                             <td>
-                                                                <span class="status-badge status-<?= $status_class ?>">
-                                                                    <?= ucfirst($row['status']) ?>
+                                                                <span class="status-badge status-<?= $status_class ?>" id="statusBadge<?= $row['id'] ?>">
+                                                                    <?= ucfirst(str_replace('_', ' ', $row['status'])) ?>
                                                                 </span>
                                                             </td>
                                                             <td>
@@ -433,7 +317,7 @@ $counts = $count_result->fetch_assoc();
                                                                 <small class="text-muted"><?= $row['created_at_formatted'] ?></small>
                                                             </td>
                                                             <td>
-                                                                <div class="d-flex justify-content-center gap-2">
+                                                                <div class="d-flex justify-content-center gap-2" id="actionsCell<?= $row['id'] ?>">
                                                                     <!-- Quick View Button -->
                                                                     <button type="button" class="btn btn-sm btn-outline-info"
                                                                         data-bs-toggle="modal"
@@ -470,12 +354,12 @@ $counts = $count_result->fetch_assoc();
                                                                     <?php endif; ?>
 
                                                                     <!-- Delete Button -->
-                                                                    <a href="?delete_id=<?= $row['id'] ?>"
-                                                                        class="btn btn-sm btn-outline-danger"
-                                                                        onclick="return confirm('Are you sure you want to delete this appointment?')"
+                                                                    <button type="button"
+                                                                        class="btn btn-sm btn-outline-danger btn-delete-appointment"
+                                                                        data-id="<?= $row['id'] ?>"
                                                                         title="Delete">
                                                                         <i class="fas fa-trash"></i>
-                                                                    </a>
+                                                                    </button>
                                                                 </div>
                                                             </td>
                                                         </tr>
@@ -616,7 +500,7 @@ $counts = $count_result->fetch_assoc();
                                                         <div class="modal fade" id="approveModal<?= $row['id'] ?>" tabindex="-1" aria-hidden="true">
                                                             <div class="modal-dialog">
                                                                 <div class="modal-content">
-                                                                    <form method="POST" action="">
+                                                                    <form class="ajax-appt-form" data-action="approve">
                                                                         <div class="modal-header bg-success text-white">
                                                                             <h5 class="modal-title">
                                                                                 <i class="fas fa-check-circle me-2"></i>
@@ -632,20 +516,12 @@ $counts = $count_result->fetch_assoc();
                                                                                 <strong>Date:</strong> <?= $row['formatted_date'] ?><br>
                                                                                 <strong>Time:</strong> <?= $row['formatted_time'] ?>
                                                                             </div>
-                                                                            <p>Are you sure you want to approve this appointment?</p>
-                                                                            <div class="form-check mb-3">
-                                                                                <input class="form-check-input" type="checkbox" id="sendEmail<?= $row['id'] ?>" name="send_email" checked>
-                                                                                <label class="form-check-label" for="sendEmail<?= $row['id'] ?>">
-                                                                                    Send confirmation email to patient
-                                                                                </label>
-                                                                            </div>
+                                                                            <p>Are you sure you want to approve this appointment? A confirmation email will be sent to the patient (and doctor, if assigned).</p>
                                                                             <input type="hidden" name="appointment_id" value="<?= $row['id'] ?>">
-                                                                            <input type="hidden" name="doctor_id" value="<?= $row['doctor_id'] ?>">
-                                                                            <input type="hidden" name="status" value="approved">
                                                                         </div>
                                                                         <div class="modal-footer">
                                                                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                                            <button type="submit" name="approve_btn" class="btn btn-success">
+                                                                            <button type="submit" class="btn btn-success">
                                                                                 <i class="fas fa-check me-1"></i> Approve Appointment
                                                                             </button>
                                                                         </div>
@@ -658,7 +534,7 @@ $counts = $count_result->fetch_assoc();
                                                         <div class="modal fade" id="rejectModal<?= $row['id'] ?>" tabindex="-1" aria-hidden="true">
                                                             <div class="modal-dialog">
                                                                 <div class="modal-content">
-                                                                    <form method="POST" action="">
+                                                                    <form class="ajax-appt-form" data-action="reject">
                                                                         <div class="modal-header bg-danger text-white">
                                                                             <h5 class="modal-title">
                                                                                 <i class="fas fa-times-circle me-2"></i>
@@ -670,7 +546,7 @@ $counts = $count_result->fetch_assoc();
                                                                             <div class="alert alert-warning">
                                                                                 <i class="fas fa-exclamation-triangle me-2"></i>
                                                                                 <strong>Appointment Details:</strong><br>
-                                                                                <strong>Patient:</strong> <?= htmlspecialchars($row['user_name']) ?><br>
+                                                                                <strong>Patient:</strong> <?= htmlspecialchars($row['user_name'] ?? $row['patient_name']) ?><br>
                                                                                 <strong>Date:</strong> <?= $row['formatted_date'] ?><br>
                                                                                 <strong>Time:</strong> <?= $row['formatted_time'] ?>
                                                                             </div>
@@ -689,7 +565,7 @@ $counts = $count_result->fetch_assoc();
                                                                         </div>
                                                                         <div class="modal-footer">
                                                                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                                            <button type="submit" name="reject_btn" class="btn btn-danger">
+                                                                            <button type="submit" class="btn btn-danger">
                                                                                 <i class="fas fa-times me-1"></i> Reject Appointment
                                                                             </button>
                                                                         </div>
@@ -762,69 +638,6 @@ $counts = $count_result->fetch_assoc();
                                                     </tr>
                                                 </tfoot>
                                             </table>
-                                        </div>
-
-                                        <!-- Table Actions -->
-                                        <div class="row mt-3">
-                                            <div class="col-md-6">
-                                                <div class="btn-group">
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectAllRows()">
-                                                        <i class="fas fa-check-square me-1"></i> Select All
-                                                    </button>
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="deselectAllRows()">
-                                                        <i class="fas fa-square me-1"></i> Deselect All
-                                                    </button>
-                                                    <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#bulkActionsModal">
-                                                        <i class="fas fa-tasks me-1"></i> Bulk Actions
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-6 text-end">
-                                                <div class="btn-group">
-                                                    <button type="button" class="btn btn-outline-success btn-sm">
-                                                        <i class="fas fa-file-excel me-1"></i> Export Excel
-                                                    </button>
-                                                    <button type="button" class="btn btn-outline-primary btn-sm">
-                                                        <i class="fas fa-print me-1"></i> Print
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <!-- Bulk Actions Modal -->
-                                        <div class="modal fade" id="bulkActionsModal" tabindex="-1" aria-hidden="true">
-                                            <div class="modal-dialog">
-                                                <div class="modal-content">
-                                                    <form method="POST" action="">
-                                                        <div class="modal-header">
-                                                            <h5 class="modal-title">Bulk Actions</h5>
-                                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                        </div>
-                                                        <div class="modal-body">
-                                                            <div class="mb-3">
-                                                                <label class="form-label">Select Action:</label>
-                                                                <select class="form-select" name="bulk_action" required>
-                                                                    <option value="">-- Choose Action --</option>
-                                                                    <option value="approve">Approve Selected</option>
-                                                                    <option value="reject">Reject Selected</option>
-                                                                    <option value="assign">Assign Doctor to Selected</option>
-                                                                    <option value="delete">Delete Selected</option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="mb-3">
-                                                                <label class="form-label">Selected Appointments: <span id="selectedCount">0</span></label>
-                                                                <div id="selectedAppointments" class="border rounded p-2 bg-light" style="max-height: 200px; overflow-y: auto;">
-                                                                    <!-- Selected appointments will appear here -->
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div class="modal-footer">
-                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                            <button type="submit" class="btn btn-primary">Apply Action</button>
-                                                        </div>
-                                                    </form>
-                                                </div>
-                                            </div>
                                         </div>
 
                                     <?php else: ?>

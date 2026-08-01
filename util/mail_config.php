@@ -376,6 +376,151 @@ class Mailer
     }
 
     /* ══════════════════════════════════════════
+       6b. Appointment Request Received (patient) — sent right after
+       booking, while the appointment is still 'pending' doctor approval.
+       $appt keys: doctor_name, date, time, type, meeting_link (optional),
+       account_created, login_email, temp_password (optional — set when
+       find_or_create_patient_user() just created a fresh account for them)
+    ══════════════════════════════════════════ */
+    public function sendAppointmentRequested(string $toEmail, string $toName, array $appt): bool
+    {
+        $firstName = explode(' ', trim($toName))[0] ?: 'Patient';
+        $dashUrl   = APP_SITE_URL . 'user/my-doctor-appointments.php';
+        $loginUrl  = APP_SITE_URL . 'login.php';
+
+        $accountBlock = '';
+        if (!empty($appt['account_created']) && !empty($appt['temp_password'])) {
+            $accountBlock = "
+            <div style='background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:13px;'>
+              <strong style='color:#166534;'>We've created an account for you</strong>
+              <p style='margin:8px 0;'>So you can track this appointment and join your video call from a dashboard, we've set up a REJUVENATE Digital Health account using this email.</p>
+              <p style='margin:8px 0;'><strong>Login Email:</strong> " . htmlspecialchars($appt['login_email'] ?? $toEmail) . "<br>
+              <strong>Temporary Password:</strong> <code style='background:#fff;padding:2px 8px;border-radius:4px;font-size:14px;border:1px solid #d1d5db;'>" . htmlspecialchars($appt['temp_password']) . "</code></p>
+              <p style='margin:8px 0 0;font-size:12px;color:#4b5563;'>Please <a href='{$loginUrl}' style='color:#166534;font-weight:600;'>log in</a> and change your password as soon as possible.</p>
+            </div>";
+        }
+
+        $meetingBlock = '';
+        if (!empty($appt['meeting_link'])) {
+            $meetingBlock = "
+            <div style='background:#f0fffe;border:1px solid #99f6e4;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:13px;'>
+              <strong style='color:#0f766e;'>Video Consultation Link</strong>
+              <p style='margin:8px 0;'>This is a one-time link tied to your account — clicking it will ask you to log in if you aren't already.</p>
+              <div style='text-align:center;margin:14px 0 4px;'>
+                <a href='" . htmlspecialchars($appt['meeting_link']) . "' style='background:#02c9b8;color:#06281f;text-decoration:none;
+                   padding:11px 28px;border-radius:8px;font-weight:700;font-size:14px;display:inline-block;'>
+                  Join Video Call
+                </a>
+              </div>
+              <p style='margin:8px 0 0;font-size:12px;color:#6b7280;'>This link becomes active once your doctor confirms the appointment. You can also join anytime from <strong>My Appointments</strong> in your dashboard.</p>
+            </div>";
+        }
+
+        $html = $this->layout(
+            'Appointment Request Received',
+            'We\'ve received your booking request',
+            "
+            <p>Hello <strong>{$firstName}</strong>,</p>
+            <p>Thanks for booking with REJUVENATE Digital Health. Here's what you requested:</p>
+
+            {$accountBlock}
+
+            <div style='background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:14px;line-height:2;'>
+              <strong>Doctor:</strong> " . htmlspecialchars($appt['doctor_name'] ?? 'To be assigned') . "<br>
+              <strong>Date:</strong> "   . htmlspecialchars($appt['date']        ?? 'N/A') . "<br>
+              <strong>Time:</strong> "   . htmlspecialchars($appt['time']        ?? 'N/A') . "<br>
+              <strong>Type:</strong> "   . htmlspecialchars($appt['type']        ?? 'Consultation') . "
+            </div>
+
+            {$meetingBlock}
+
+            <div style='background:#fff8e1;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:6px;margin:20px 0;font-size:13px;'>
+              Your appointment is <strong>pending confirmation</strong> from the doctor. We'll notify you as soon as it's approved.
+            </div>
+
+            <div style='text-align:center;margin:24px 0;'>
+              <a href='{$dashUrl}' style='background:#0C74C5;color:#fff;text-decoration:none;
+                 padding:13px 32px;border-radius:10px;font-weight:700;font-size:15px;display:inline-block;'>
+                View My Appointments
+              </a>
+            </div>
+            ",
+            "We've received your appointment request with " . ($appt['doctor_name'] ?? 'a doctor') . " on " . ($appt['date'] ?? '') . " at " . ($appt['time'] ?? '') . ". It's pending confirmation."
+        );
+
+        return $this->send(
+            $toEmail, $toName,
+            'Appointment Request Received — REJUVENATE Digital Health',
+            $html,
+            "Your appointment request with " . ($appt['doctor_name'] ?? '') . " on " . ($appt['date'] ?? '') . " at " . ($appt['time'] ?? '') . " is pending confirmation."
+        );
+    }
+
+    /* ══════════════════════════════════════════
+       6c. New Appointment Request (doctor) — sent right after booking,
+       asking the doctor to review/approve.
+       $appt keys: patient_name, date, time, type, purpose, meeting_link (optional)
+    ══════════════════════════════════════════ */
+    public function sendNewAppointmentDoctor(string $toEmail, string $toName, array $appt): bool
+    {
+        $dashUrl = APP_SITE_URL . 'doctor/appointments.php';
+
+        $meetingBlock = '';
+        if (!empty($appt['meeting_link'])) {
+            $meetingBlock = "
+            <div style='background:#f0fffe;border:1px solid #99f6e4;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:13px;'>
+              <strong style='color:#0f766e;'>Video Consultation Link</strong>
+              <p style='margin:8px 0;'>This link is tied to your doctor account — you'll be asked to log in if you aren't already.</p>
+              <div style='text-align:center;margin:14px 0 4px;'>
+                <a href='" . htmlspecialchars($appt['meeting_link']) . "' style='background:#02c9b8;color:#06281f;text-decoration:none;
+                   padding:11px 28px;border-radius:8px;font-weight:700;font-size:14px;display:inline-block;'>
+                  Join Video Call
+                </a>
+              </div>
+              <p style='margin:8px 0 0;font-size:12px;color:#6b7280;'>You can also join anytime from your <strong>Appointments</strong> dashboard once you approve the request.</p>
+            </div>";
+        }
+
+        $purposeLine = !empty($appt['purpose'])
+            ? "<strong>Purpose:</strong> " . htmlspecialchars($appt['purpose']) . "<br>"
+            : '';
+
+        $html = $this->layout(
+            'New Appointment Request',
+            'A patient has requested a consultation',
+            "
+            <p>Hello <strong>Dr. " . htmlspecialchars($toName) . "</strong>,</p>
+            <p>You have a new appointment request awaiting your approval:</p>
+
+            <div style='background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:14px;line-height:2;'>
+              <strong>Patient:</strong> " . htmlspecialchars($appt['patient_name'] ?? 'N/A') . "<br>
+              <strong>Date:</strong> "    . htmlspecialchars($appt['date']         ?? 'N/A') . "<br>
+              <strong>Time:</strong> "    . htmlspecialchars($appt['time']         ?? 'N/A') . "<br>
+              <strong>Type:</strong> "    . htmlspecialchars($appt['type']         ?? 'Consultation') . "<br>
+              {$purposeLine}
+            </div>
+
+            {$meetingBlock}
+
+            <div style='text-align:center;margin:24px 0;'>
+              <a href='{$dashUrl}' style='background:#0C74C5;color:#fff;text-decoration:none;
+                 padding:13px 32px;border-radius:10px;font-weight:700;font-size:15px;display:inline-block;'>
+                Review &amp; Approve
+              </a>
+            </div>
+            ",
+            "New appointment request from " . ($appt['patient_name'] ?? '') . " on " . ($appt['date'] ?? '') . " at " . ($appt['time'] ?? '') . ". Please review and approve."
+        );
+
+        return $this->send(
+            $toEmail, "Dr. {$toName}",
+            'New Appointment Request — REJUVENATE Digital Health',
+            $html,
+            "New appointment request from " . ($appt['patient_name'] ?? '') . " on " . ($appt['date'] ?? '') . " at " . ($appt['time'] ?? '') . "."
+        );
+    }
+
+    /* ══════════════════════════════════════════
        7. School Member Account Created (by admin/school admin)
     ══════════════════════════════════════════ */
     public function sendSchoolAccountCreated(string $toEmail, string $toName, string $role, string $schoolName, string $uid, string $tempPassword = ''): bool

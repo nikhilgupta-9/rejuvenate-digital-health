@@ -77,10 +77,19 @@ if (!empty($_POST['abha_number'])) {
     $data['abha_number'] = $abha;
 }
 
-// Optional — logged-in patient booking for themselves gets linked by user_id
+// Every booking gets tied to a real users.id — a logged-in patient uses
+// their session; anyone else is matched by email/mobile to an existing
+// account, or a new one is created for them on the spot (see
+// find_or_create_patient_user() in function.php).
 if (session_status() === PHP_SESSION_NONE) session_start();
 if (!empty($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && !empty($_SESSION['user_id'])) {
     $data['user_id'] = (int) $_SESSION['user_id'];
+} else {
+    $match = find_or_create_patient_user($conn, $name, $email, $phone);
+    $data['user_id'] = $match['user_id'];
+    if ($match['created']) {
+        $data['_new_account_temp_password'] = $match['temp_password'];
+    }
 }
 
 // Visit type — booking for self or on behalf of someone else

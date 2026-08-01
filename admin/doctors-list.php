@@ -248,7 +248,7 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
                                                             <tr>
                                                                 <td><?= $doctor['doctor_uid'] ?></td>
                                                                 <td>
-                                                                    <?php if (!empty($doctor['profile_image'])): ?>
+                                                                    <?php if (!empty($doctor['profile_image']) && file_exists(BASE_URL ."admin/". $doctor['profile_image'])): ?>
                                                                         <img src="<?=BASE_URL ."admin/". $doctor['profile_image'] ?>" alt="Profile" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
                                                                     <?php else: ?>
                                                                         <div style="width: 40px; height: 40px; border-radius: 50%; background: #f0f0f0; display: flex; align-items: center; justify-content: center;">

@@ -1,6 +1,8 @@
 <?php
 session_start();
-if (!isset($_SESSION['signup_success'])) {
+// Reached either from process-signup.php (sets 'signup_success') or from
+// process-login.php's unverified-email gate (sets 'verify_email').
+if (!isset($_SESSION['signup_success']) && !isset($_SESSION['verify_email'])) {
     header("Location: signup.php");
     exit();
 }
@@ -12,7 +14,8 @@ $contact = contact_us();
 $logo = get_header_logo();
 
 $email = $_SESSION['user_email'];
-$mobile = $_SESSION['user_mobile'];
+// Only the signup flow sets this — the login flow doesn't collect mobile again.
+$mobile = $_SESSION['user_mobile'] ?? '';
 $user_id = $_SESSION['user_id'];
 
 // Handle OTP resend
@@ -57,8 +60,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['resend_otp'])) {
             if ($update_stmt->execute()) {
                 $_SESSION['success_message'] = "Account verified successfully! You can now login.";
                 
-                // Clear session data
+                // Clear session data (unset() is a no-op for keys that were never set,
+                // so this is safe regardless of which flow — signup or login — got us here)
                 unset($_SESSION['signup_success']);
+                unset($_SESSION['verify_email']);
                 unset($_SESSION['user_email']);
                 unset($_SESSION['user_mobile']);
                 unset($_SESSION['user_id']);
@@ -116,8 +121,8 @@ $can_resend = $time_elapsed > 60; // Can resend after 60 seconds
                         </div>
                         <h3>Verify Your Account</h3>
                         <p>We've sent a 6-digit OTP to:<br>
-                           <strong>Email:</strong> <?= htmlspecialchars($email) ?><br>
-                           <strong>Mobile:</strong> <?= htmlspecialchars($mobile) ?>
+                           <strong>Email:</strong> <?= htmlspecialchars($email) ?>
+                           <?php if ($mobile): ?><br><strong>Mobile:</strong> <?= htmlspecialchars($mobile) ?><?php endif; ?>
                         </p>
                         
                         <?php if (isset($_SESSION['success_message'])): ?>

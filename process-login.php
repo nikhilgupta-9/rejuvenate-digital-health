@@ -75,7 +75,6 @@ if (in_array($role, ['student','teacher','staff'])) {
 if ($role === 'patient' && empty($user['email_verified'])) {
     $otp_code  = (string)random_int(100000, 999999);
     $otp_expiry= date('Y-m-d H:i:s', strtotime('+10 minutes'));
-    $conn->prepare("UPDATE users SET otp_code=?, otp_expiry=? WHERE id=?")->execute() || null;
     $upd = $conn->prepare("UPDATE users SET otp_code=?, otp_expiry=? WHERE id=?");
     $upd->bind_param('ssi', $otp_code, $otp_expiry, $user['id']); $upd->execute();
     send_otp_email($user['email'], $otp_code);

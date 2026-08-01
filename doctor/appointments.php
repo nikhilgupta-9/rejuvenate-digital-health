@@ -98,7 +98,9 @@ if (!empty($date_filter)) {
 }
 
 if (!empty($search_query)) {
-    $where_conditions[] = "(u.name LIKE ? OR u.email LIKE ? OR u.mobile LIKE ?)";
+    // COALESCE so guest bookings (no `users` row, user_id IS NULL) are
+    // still searchable via the patient_* columns stored on appointments.
+    $where_conditions[] = "(COALESCE(u.name, a.patient_name) LIKE ? OR COALESCE(u.email, a.patient_email) LIKE ? OR COALESCE(u.mobile, a.patient_phone) LIKE ?)";
     $search_param = "%" . $search_query . "%";
     $params[] = $search_param;
     $params[] = $search_param;
@@ -116,18 +118,20 @@ $appointments_sql = "
         a.appointment_time,
         a.purpose,
         a.status,
+        a.appointment_type,
+        a.meeting_status,
         a.created_at,
         u.id as patient_id,
-        u.name as patient_name,
-        u.email as patient_email,
-        u.mobile as patient_phone,
+        COALESCE(u.name, a.patient_name) as patient_name,
+        COALESCE(u.email, a.patient_email) as patient_email,
+        COALESCE(u.mobile, a.patient_phone) as patient_phone,
         u.profile_pic as patient_image,
         u.gender,
         u.dob,
         u.blood_group,
         TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) as patient_age
     FROM appointments a
-    INNER JOIN users u ON a.user_id = u.id
+    LEFT JOIN users u ON a.user_id = u.id
     $where_sql
     ORDER BY
         CASE
@@ -685,6 +689,12 @@ require_once __DIR__ . '/inc/sidebar.php';
                                                 class="btn btn-success" title="Add Prescription">
                                                 <i class="fa fa-file-medical"></i>
                                             </a>
+                                            <?php if ($appointment['status'] === 'approved' && $appointment['appointment_type'] === 'online' && $appointment['meeting_status'] !== 'cancelled'): ?>
+                                                <a href="<?= BASE_URL ?>telemedicine/join.php?appointment_id=<?= $appointment['appointment_id'] ?>"
+                                                    class="btn btn-primary" title="Join Video Call" target="_blank">
+                                                    <i class="fa fa-video"></i>
+                                                </a>
+                                            <?php endif; ?>
                                         </div>
                                     </td>
                                 </tr>
