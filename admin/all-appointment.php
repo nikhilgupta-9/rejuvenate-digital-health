@@ -96,8 +96,8 @@ $counts = $count_result->fetch_assoc();
         .status-confirmed,
         .status-approved      { background:#d4edda; color:#155724; border:1px solid #c3e6cb; }
         .status-completed     { background:#d1ecf1; color:#0c5460; border:1px solid #bee5eb; }
-        .status-cancelled     { background:#f8d7da; color:#721c24; border:1px solid #f5c6cb; }
-        .status-rejected      { background:#f5f5f5; color:#666;    border:1px solid #e9ecef; }
+        .status-no_show       { background:#e2e3e5; color:#41464b; border:1px solid #d3d6d8; }
+        .status-rejected      { background:#f8d7da; color:#721c24; border:1px solid #f5c6cb; }
         .detail-row           { display:flex; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #f8f9fa; }
         .detail-label         { font-weight:600; color:#495057; }
         .detail-value         { color:#212529; }
@@ -153,20 +153,8 @@ $counts = $count_result->fetch_assoc();
                                 </div>
                             </div>
                             <div class="white_card_body">
-                                <!-- Success/Error Messages -->
-                                <?php if (isset($success_message)): ?>
-                                    <div class="alert alert-success alert-dismissible fade show" role="alert">
-                                        <?= $success_message ?>
-                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                                    </div>
-                                <?php endif; ?>
-
-                                <?php if (isset($error_message)): ?>
-                                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                                        <?= $error_message ?>
-                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                                    </div>
-                                <?php endif; ?>
+                                <!-- Approve/Reject/Assign/Delete banners are injected here by JS after each AJAX action -->
+                                <div id="ajaxAlerts"></div>
 
                                 <div class="appointment-container">
                                     <!-- Statistics -->
@@ -578,7 +566,7 @@ $counts = $count_result->fetch_assoc();
                                                         <div class="modal fade" id="assignDoctorModal<?= $row['id'] ?>" tabindex="-1" aria-hidden="true">
                                                             <div class="modal-dialog">
                                                                 <div class="modal-content">
-                                                                    <form method="POST" action="">
+                                                                    <form class="ajax-appt-form" data-action="assign">
                                                                         <div class="modal-header bg-warning text-dark">
                                                                             <h5 class="modal-title">
                                                                                 <i class="fas fa-user-md me-2"></i>
@@ -590,7 +578,7 @@ $counts = $count_result->fetch_assoc();
                                                                             <div class="alert alert-info">
                                                                                 <i class="fas fa-info-circle me-2"></i>
                                                                                 <strong>Appointment Details:</strong><br>
-                                                                                <strong>Patient:</strong> <?= htmlspecialchars($row['user_name']) ?><br>
+                                                                                <strong>Patient:</strong> <?= htmlspecialchars($row['user_name'] ?? $row['patient_name']) ?><br>
                                                                                 <strong>Date:</strong> <?= $row['formatted_date'] ?><br>
                                                                                 <strong>Time:</strong> <?= $row['formatted_time'] ?>
                                                                             </div>
@@ -616,7 +604,7 @@ $counts = $count_result->fetch_assoc();
                                                                         </div>
                                                                         <div class="modal-footer">
                                                                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                                            <button type="submit" name="assign_doctor" class="btn btn-warning text-dark">
+                                                                            <button type="submit" class="btn btn-warning text-dark">
                                                                                 <i class="fas fa-user-md me-1"></i> Assign Doctor
                                                                             </button>
                                                                         </div>
@@ -694,92 +682,172 @@ $counts = $count_result->fetch_assoc();
             })
         });
 
-        // Row selection functionality
-        let selectedRows = new Set();
-
-        function selectAllRows() {
-            const checkboxes = document.querySelectorAll('.row-checkbox');
-            checkboxes.forEach(cb => {
-                cb.checked = true;
-                selectedRows.add(cb.value);
-            });
-            updateSelectedCount();
+        /* ── Toast-style banner (replaces the old full-page-reload PHP alerts) ── */
+        function showBanner(type, message) {
+            const wrap = document.getElementById('ajaxAlerts');
+            const div = document.createElement('div');
+            div.className = `alert alert-${type} alert-dismissible fade show`;
+            div.role = 'alert';
+            div.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>`;
+            wrap.appendChild(div);
+            setTimeout(() => {
+                try { bootstrap.Alert.getOrCreateInstance(div).close(); } catch (e) { div.remove(); }
+            }, 5000);
         }
 
-        function deselectAllRows() {
-            const checkboxes = document.querySelectorAll('.row-checkbox');
-            checkboxes.forEach(cb => {
-                cb.checked = false;
-                selectedRows.delete(cb.value);
-            });
-            updateSelectedCount();
+        function closeModalFor(form) {
+            const modalEl = form.closest('.modal');
+            if (!modalEl) return;
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.hide();
         }
 
-        function updateSelectedCount() {
-            document.getElementById('selectedCount').textContent = selectedRows.size;
-
-            const container = document.getElementById('selectedAppointments');
-            container.innerHTML = '';
-
-            if (selectedRows.size > 0) {
-                selectedRows.forEach(id => {
-                    const div = document.createElement('div');
-                    div.className = 'selected-appointment d-flex justify-content-between align-items-center mb-2';
-                    div.innerHTML = `
-                    <span>Appointment ID: AP${String(id).padStart(6, '0')}</span>
-                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeSelected('${id}')">
-                        <i class="fas fa-times"></i>
-                    </button>
-                `;
-                    container.appendChild(div);
-                });
+        function setBusy(btn, busy, busyLabel) {
+            if (!btn) return;
+            if (busy) {
+                btn.dataset.originalHtml = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${busyLabel}`;
             } else {
-                container.innerHTML = '<div class="text-muted text-center py-3">No appointments selected</div>';
+                btn.disabled = false;
+                if (btn.dataset.originalHtml) btn.innerHTML = btn.dataset.originalHtml;
             }
         }
 
-        function removeSelected(id) {
-            const checkbox = document.querySelector(`.row-checkbox[value="${id}"]`);
-            if (checkbox) {
-                checkbox.checked = false;
+        /* Rebuilds the actions cell for a row after its status/doctor changes,
+           mirroring the same PHP logic that rendered it initially. */
+        function renderActionsCell(id, status, hasDoctor) {
+            let html = `
+                <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#viewModal${id}" title="View Details">
+                    <i class="fas fa-eye"></i>
+                </button>`;
+            if (status === 'pending') {
+                html += `
+                <button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#approveModal${id}" title="Approve">
+                    <i class="fas fa-check"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rejectModal${id}" title="Reject">
+                    <i class="fas fa-times"></i>
+                </button>`;
             }
-            selectedRows.delete(id);
-            updateSelectedCount();
+            if (!hasDoctor) {
+                html += `
+                <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#assignDoctorModal${id}" title="Assign Doctor">
+                    <i class="fas fa-user-md"></i>
+                </button>`;
+            }
+            html += `
+                <button type="button" class="btn btn-sm btn-outline-danger btn-delete-appointment" data-id="${id}" title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>`;
+            document.getElementById('actionsCell' + id).innerHTML = html;
         }
 
-        function toggleSelectAll(source) {
-            const checkboxes = document.querySelectorAll('.row-checkbox');
-            checkboxes.forEach(checkbox => {
-                checkbox.checked = source.checked;
-                if (source.checked) {
-                    selectedRows.add(checkbox.value);
-                } else {
-                    selectedRows.delete(checkbox.value);
+        function updateStatusBadge(id, status, label) {
+            const badge = document.getElementById('statusBadge' + id);
+            badge.className = 'status-badge status-' + status;
+            badge.textContent = label;
+            const row = document.getElementById('apptRow' + id);
+            if (row) row.dataset.status = status;
+        }
+
+        async function postJson(url, data) {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams(data),
+            });
+            return res.json();
+        }
+
+        /* ── Approve / Reject / Assign — all three modal forms share this ── */
+        document.querySelectorAll('.ajax-appt-form').forEach(form => {
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const action = form.dataset.action;
+                const submitBtn = form.querySelector('button[type="submit"]');
+                const formData = Object.fromEntries(new FormData(form).entries());
+                const id = formData.appointment_id;
+
+                const endpoints = {
+                    approve: '<?= BASE_URL ?>admin/ajax/appointment-approve.php',
+                    reject: '<?= BASE_URL ?>admin/ajax/appointment-reject.php',
+                    assign: '<?= BASE_URL ?>admin/ajax/appointment-assign-doctor.php',
+                };
+                const busyLabels = { approve: ' Approving…', reject: ' Rejecting…', assign: ' Assigning…' };
+
+                setBusy(submitBtn, true, busyLabels[action]);
+                try {
+                    const data = await postJson(endpoints[action], formData);
+                    setBusy(submitBtn, false);
+
+                    if (!data.success) {
+                        showBanner('danger', data.message || 'Something went wrong.');
+                        return;
+                    }
+
+                    closeModalFor(form);
+                    showBanner('success', data.message);
+
+                    if (action === 'approve' || action === 'reject') {
+                        updateStatusBadge(id, data.status, data.status_label);
+                        const row = document.getElementById('apptRow' + id);
+                        renderActionsCell(id, data.status, row.dataset.hasDoctor === '1');
+                    } else if (action === 'assign') {
+                        document.getElementById('doctorCell' + id).innerHTML = `
+                            <div>
+                                <strong>Dr. ${data.doctor_name}</strong>
+                                <div class="text-muted small">${data.specialization}</div>
+                            </div>`;
+                        const row = document.getElementById('apptRow' + id);
+                        row.dataset.hasDoctor = '1';
+                        renderActionsCell(id, row.dataset.status, true);
+                    }
+                } catch (err) {
+                    setBusy(submitBtn, false);
+                    showBanner('danger', 'Network error — please try again.');
                 }
             });
-            updateSelectedCount();
-        }
+        });
 
-        function updateSelected(checkbox) {
-            if (checkbox.checked) {
-                selectedRows.add(checkbox.value);
-            } else {
-                selectedRows.delete(checkbox.value);
+        /* ── Delete (event delegation, since buttons are re-rendered) ── */
+        document.addEventListener('click', async function(e) {
+            const btn = e.target.closest('.btn-delete-appointment');
+            if (!btn) return;
+
+            const id = btn.dataset.id;
+            if (!confirm('Are you sure you want to delete this appointment? This cannot be undone.')) return;
+
+            setBusy(btn, true, '');
+            try {
+                const data = await postJson('<?= BASE_URL ?>admin/ajax/appointment-delete.php', { appointment_id: id });
+                if (!data.success) {
+                    setBusy(btn, false);
+                    showBanner('danger', data.message || 'Failed to delete appointment.');
+                    return;
+                }
+                showBanner('success', data.message);
+                const row = document.getElementById('apptRow' + id);
+                if (row) {
+                    row.style.transition = 'opacity .25s';
+                    row.style.opacity = '0';
+                    setTimeout(() => row.remove(), 250);
+                }
+                // Remove that row's modals too, so old data doesn't linger in the DOM
+                ['viewModal', 'approveModal', 'rejectModal', 'assignDoctorModal'].forEach(prefix => {
+                    const modal = document.getElementById(prefix + id);
+                    if (modal) modal.remove();
+                });
+            } catch (err) {
+                setBusy(btn, false);
+                showBanner('danger', 'Network error — please try again.');
             }
-            updateSelectedCount();
+        });
 
-            // Update select all checkbox
-            const allCheckboxes = document.querySelectorAll('.row-checkbox');
-            const allChecked = Array.from(allCheckboxes).every(cb => cb.checked);
-            document.getElementById('selectAll').checked = allChecked;
-        }
-    </script>
-    <script>
-        // Auto-close alerts after 5 seconds
+        // Auto-close server-rendered alerts (e.g. none currently, kept for safety) after 5 seconds
         setTimeout(() => {
-            document.querySelectorAll('.alert').forEach(alert => {
-                const bsAlert = new bootstrap.Alert(alert);
-                bsAlert.close();
+            document.querySelectorAll('#ajaxAlerts .alert').forEach(alert => {
+                try { bootstrap.Alert.getOrCreateInstance(alert).close(); } catch (e) {}
             });
         }, 5000);
     </script>
