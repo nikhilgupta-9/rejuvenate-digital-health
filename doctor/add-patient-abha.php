@@ -2,6 +2,7 @@
 require_once __DIR__ . '/auth/guard.php';
 require_once dirname(__DIR__) . '/config/connect.php';
 require_once dirname(__DIR__) . '/config/abdm.php';
+require_once dirname(__DIR__) . '/lib/Security.php';
 $payload = doctor_jwt_guard();
 $doctor_id = (int) ($payload['doctor_id'] ?? $payload['sub'] ?? 0);
 $sidebar_active = 'patients';
@@ -13,6 +14,7 @@ require_once __DIR__ . '/inc/sidebar.php';
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="csrf-token" content="<?= htmlspecialchars(Security::csrfToken()) ?>">
   <title>Verify Patient ABHA — Rejuvenate</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
@@ -104,8 +106,30 @@ require_once __DIR__ . '/inc/sidebar.php';
               </div>
               <input type="password" id="mainInput" class="form-control" placeholder="•••• •••• ••••" maxlength="12"
                 autocomplete="off">
+              <div class="input-group-append" id="qrScanGroup" style="display:none;">
+                <button class="btn btn-outline-secondary" type="button" id="btnScanAbhaQr" title="Scan ABHA QR">
+                  <i class="fa fa-qrcode"></i>
+                </button>
+              </div>
             </div>
             <div class="form-hint" id="inputHint">12-digit Aadhaar — OTP sent to Aadhaar-linked mobile</div>
+          </div>
+
+          <!-- Patient Consent (ABDM: required before Aadhaar-based ABHA enrolment) — Aadhaar method only -->
+          <div id="aadhaarConsentGroup">
+            <div class="mb-3 p-3" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;max-height:110px;overflow-y:auto;font-size:.75rem;color:#374151;line-height:1.6;">
+              <strong>Patient Consent</strong><br>
+              The patient hereby declares that they are voluntarily sharing their Aadhaar number and demographic
+              information issued by UIDAI, with the National Health Authority (NHA), for the sole purpose of
+              creating an ABHA number, and understands their identifiable information may be shared with the
+              treating healthcare professional as per ABDM guidelines.
+            </div>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" id="aadhaar_consent" value="1">
+              <label class="form-check-label font-weight-bold" for="aadhaar_consent" style="font-size:.82rem;">
+                I confirm the patient has read and agreed to the above consent
+              </label>
+            </div>
           </div>
 
           <button class="btn btn-primary-custom" id="btnSend">
@@ -196,12 +220,35 @@ require_once __DIR__ . '/inc/sidebar.php';
     <?php endif; ?>
   </main>
 
+  <script src="<?= BASE_URL ?>assets/js/abha-qr-scanner.js"></script>
   <script>
     const BASE = '<?= BASE_URL ?>';
+    const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
 
     // State
     let currentStep = 1;
     let verificationType = 'aadhaar';
+
+    document.getElementById('btnScanAbhaQr')?.addEventListener('click', function () {
+      AbhaQrScanner.open({
+        title: 'Scan Patient ABHA QR',
+        onResult(parsed) {
+          const input = document.getElementById('mainInput');
+          if (verificationType === 'number' && parsed.abha_number) {
+            input.value = parsed.abha_number;
+          } else if (verificationType === 'address' && parsed.abha_address) {
+            input.value = parsed.abha_address;
+          } else if (parsed.abha_number || parsed.abha_address) {
+            input.value = parsed.abha_number || parsed.abha_address;
+          } else {
+            showError('error1', 'QR did not contain a recognisable ABHA number or address.');
+          }
+        },
+        onUnsupported() {
+          showError('error1', 'QR scanning is not supported in this browser. Please enter the value manually.');
+        }
+      });
+    });
     let txnId = '';
     let timerInterval = null;
     let timerSeconds = 300;
@@ -272,12 +319,15 @@ require_once __DIR__ . '/inc/sidebar.php';
       const noteBox = document.getElementById('methodNote');
       const label = document.getElementById('inputLabel');
       const hint = document.getElementById('inputHint');
+      const qrGroup = document.getElementById('qrScanGroup');
 
       input.value = '';
       input.type = 'text';
       prefix.style.display = 'none';
       noteBox.className = 'alert alert-info alert-custom mb-3';
       document.getElementById('error1').style.display = 'none';
+      qrGroup.style.display = (type === 'number' || type === 'address') ? 'flex' : 'none';
+      document.getElementById('aadhaarConsentGroup').style.display = (type === 'aadhaar') ? 'block' : 'none';
 
       switch (type) {
         case 'aadhaar':
@@ -419,6 +469,10 @@ require_once __DIR__ . '/inc/sidebar.php';
           showError('error1', 'Please enter a valid 12-digit Aadhaar number');
           return;
         }
+        if (!document.getElementById('aadhaar_consent').checked) {
+          showError('error1', 'Please confirm patient consent to continue');
+          return;
+        }
       } else if (verificationType === 'mobile') {
         const clean = value.replace(/\D/g, '');
         if (clean.length !== 10) {
@@ -446,13 +500,14 @@ require_once __DIR__ . '/inc/sidebar.php';
       btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i> Sending...';
 
       const payload = {
+        action: 'send_otp',
         abha_input: value,
-        type: verificationType
+        type: verificationType,
+        consent: verificationType === 'aadhaar' ? 1 : undefined,
+        _csrf: CSRF_TOKEN
       };
 
-      console.log('Sending OTP:', payload);
-
-      fetch(BASE + 'doctor/api/abdm_send_otp.php', {
+      fetch(BASE + 'doctor/api/abdm-api.php', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -545,9 +600,11 @@ require_once __DIR__ . '/inc/sidebar.php';
       btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i> Verifying...';
 
       const payload = {
+        action: 'verify_otp',
         txnId: txnId,
         otp: otp,
-        type: verificationType
+        type: verificationType,
+        _csrf: CSRF_TOKEN
       };
 
       if (verificationType === 'aadhaar') {
@@ -557,9 +614,7 @@ require_once __DIR__ . '/inc/sidebar.php';
         payload.mobile = sessionStorage.getItem('abdm_input_value') || '';
       }
 
-      console.log('Verifying OTP:', payload);
-
-      fetch(BASE + 'doctor/api/abha-otp-verify.php', {
+      fetch(BASE + 'doctor/api/abdm-api.php', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -627,15 +682,17 @@ require_once __DIR__ . '/inc/sidebar.php';
       btn.disabled = true;
       btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
 
-      fetch(BASE + 'doctor/api/abha-select-user.php', {
+      fetch(BASE + 'doctor/api/abdm-api.php', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
+          action: 'select_user',
           txnId: txnId,
           t_token: window.pendingToken,
-          abha_number: abhaNumber
+          abha_number: abhaNumber,
+          _csrf: CSRF_TOKEN
         })
       })
         .then(r => r.json())

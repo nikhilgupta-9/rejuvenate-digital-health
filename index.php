@@ -40,8 +40,10 @@ $contact = contact_us();
                         <p>Doctor Consultation starts from <span class="tags">Rs 149/-</span></p>
                         <div class="search_input mt-4">
                             <form class="d-flex" id="heroSearchForm">
-                                <input type="search" name="search" id="heroSearchInput" class="form-control cutom_search"
-                                    placeholder="Search by department or problem, e.g. Cardiology, chest pain..." autocomplete="off">
+                                <input type="search" name="search" id="heroSearchInput"
+                                    class="form-control cutom_search"
+                                    placeholder="Search by department or problem, e.g. Cardiology, chest pain..."
+                                    autocomplete="off">
                                 <button type="submit" class="btn btn-search"><i class="far fa-search"></i></button>
                             </form>
                         </div>
@@ -199,7 +201,9 @@ $contact = contact_us();
                                 interoperable healthcare services across participating healthcare providers.
                             </p>
                             <p class="about-text">
-                                We also proudly conduct our <strong>School Digital Health Program</strong>, helping
+                                We also proudly conduct our <strong><a href="<?= BASE_URL ?>school-program.php"
+                                        style="text-decoration: underline;" class="text-primary">School Digital Health
+                                        Program</a></strong>, helping
                                 educational institutions promote preventive healthcare through digital health screening,
                                 health awareness initiatives, wellness monitoring, and timely medical guidance for
                                 students and staff.
@@ -245,8 +249,10 @@ $contact = contact_us();
                             <div class="number-content">
                                 <img src="assets/img/icon3.png" alt="Expert Healthcare Professionals" class="img-fluid">
                                 <h2>Qualified Healthcare Professionals</h2>
-                                <p>Connect with experienced doctors and healthcare experts across multiple specialties
-                                    for trusted medical guidance.</p>
+                                <p>Connect with India's top verified doctors across 20+ specialties for trusted medical
+                                    guidance. Are you a doctor? <a href="<?=BASE_URL?>doctor-signup/"
+                                        style="color:inherit; font-weight:600; text-decoration:underline;">Join our
+                                        network</a> and take your practice digital.</p>
                             </div>
                         </div>
                     </div>
@@ -468,10 +474,13 @@ $contact = contact_us();
                 <div class="row g-2">
                     <div class="col-lg-8">
                         <div class="appointment-items">
-                            <span class="subtitle text-uppercase" style="color:#fff;opacity:.8;font-size:.72rem;letter-spacing:.1em;display:inline-block;margin-bottom:6px;">ABDM-Compliant Digital Health Platform</span>
+                            <span class="subtitle text-uppercase"
+                                style="color:#fff;opacity:.8;font-size:.72rem;letter-spacing:.1em;display:inline-block;margin-bottom:6px;">ABDM-Compliant
+                                Digital Health Platform</span>
                             <h3>Book An Appointment</h3>
                             <p style="color:rgba(255,255,255,.82);font-size:14px;margin-top:6px;margin-bottom:16px;">
-                                Send a quick request — our team confirms your slot with a verified doctor. ABHA linking &amp; consent are captured at your appointment.
+                                Send a quick request — our team confirms your slot with a verified doctor. ABHA linking
+                                &amp; consent are captured at your appointment.
                             </p>
 
                             <form id="appointmentForm" novalidate>
@@ -480,21 +489,24 @@ $contact = contact_us();
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-group">
                                             <p class="text-light">Name</p>
-                                            <input type="text" class="form-control" name="name" placeholder="Your name" required>
+                                            <input type="text" class="form-control" name="name" placeholder="Your name"
+                                                required>
                                         </div>
                                     </div>
 
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-group">
                                             <p class="text-light">Email</p>
-                                            <input type="email"class="form-control" name="email" placeholder="Your email" required>
+                                            <input type="email" class="form-control" name="email"
+                                                placeholder="Your email" required>
                                         </div>
                                     </div>
 
                                     <div class="col-xl-4 col-lg-6 col-md-6">
                                         <div class="form-group">
                                             <p class="text-light">Phone</p>
-                                            <input type="text" class="form-control" name="phone" placeholder="Your phone" required>
+                                            <input type="text" class="form-control" name="phone"
+                                                placeholder="Your phone" required>
                                         </div>
                                     </div>
 
@@ -553,8 +565,10 @@ $contact = contact_us();
                                     </div>
 
                                     <div class="col-xl-12 text-center mt-2">
-                                        <a href="<?= BASE_URL ?>book-appointment/" style="color:#fff;font-size:13px;text-decoration:underline;opacity:.9;">
-                                            Prefer to choose your doctor &amp; time slot yourself? Use our guided Booking Wizard <i class="fas fa-arrow-right ms-1"></i>
+                                        <a href="<?= BASE_URL ?>book-appointment/"
+                                            style="color:#fff;font-size:13px;text-decoration:underline;opacity:.9;">
+                                            Prefer to choose your doctor &amp; time slot yourself? Use our guided
+                                            Booking Wizard <i class="fas fa-arrow-right ms-1"></i>
                                         </a>
                                     </div>
 
@@ -567,18 +581,28 @@ $contact = contact_us();
                     <div class="col-lg-4">
                         <div class="appointment-image" style="position:relative;">
                             <img src="assets/img/home-1/appointment-img.jpg" alt="img">
-                            <div style="position:absolute;left:16px;right:16px;bottom:16px;background:#fff;border-radius:12px;padding:14px 16px;box-shadow:0 8px 24px rgba(0,0,0,.18);">
+                            <div
+                                style="position:absolute;left:16px;right:16px;bottom:16px;background:#fff;border-radius:12px;padding:14px 16px;box-shadow:0 8px 24px rgba(0,0,0,.18);">
                                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-                                    <span style="width:32px;height:32px;border-radius:8px;background:#e9f9f0;color:#009f4d;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem;"><i class="fas fa-id-card"></i></span>
-                                    <span style="font-size:13px;font-weight:600;color:#1f2937;">ABHA / ABDM Integrated</span>
+                                    <span
+                                        style="width:32px;height:32px;border-radius:8px;background:#e9f9f0;color:#009f4d;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem;"><i
+                                            class="fas fa-id-card"></i></span>
+                                    <span style="font-size:13px;font-weight:600;color:#1f2937;">ABHA / ABDM
+                                        Integrated</span>
                                 </div>
                                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-                                    <span style="width:32px;height:32px;border-radius:8px;background:#e9f2fe;color:#0C74C5;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem;"><i class="fas fa-user-md"></i></span>
-                                    <span style="font-size:13px;font-weight:600;color:#1f2937;">Verified &amp; HPR-Registered Doctors</span>
+                                    <span
+                                        style="width:32px;height:32px;border-radius:8px;background:#e9f2fe;color:#0C74C5;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem;"><i
+                                            class="fas fa-user-md"></i></span>
+                                    <span style="font-size:13px;font-weight:600;color:#1f2937;">Verified &amp;
+                                        HPR-Registered Doctors</span>
                                 </div>
                                 <div style="display:flex;align-items:center;gap:10px;">
-                                    <span style="width:32px;height:32px;border-radius:8px;background:#fdf2e9;color:#e07e18;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem;"><i class="fas fa-shield-alt"></i></span>
-                                    <span style="font-size:13px;font-weight:600;color:#1f2937;">Secure &amp; Confidential Records</span>
+                                    <span
+                                        style="width:32px;height:32px;border-radius:8px;background:#fdf2e9;color:#e07e18;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem;"><i
+                                            class="fas fa-shield-alt"></i></span>
+                                    <span style="font-size:13px;font-weight:600;color:#1f2937;">Secure &amp;
+                                        Confidential Records</span>
                                 </div>
                             </div>
                         </div>

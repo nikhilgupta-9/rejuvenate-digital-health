@@ -401,11 +401,11 @@ $logo    = get_header_logo();
                 <h5>Parents</h5>
                 <p>Real-time updates, complete peace of mind — receive instant alerts and access your child's health summary anytime.</p>
             </div>
-            <div class="stakeholder-card">
+            <a href="<?= BASE_URL ?>doctor-network.php" class="stakeholder-card" style="display:block; text-decoration:none;">
                 <div class="s-icon doctors"><i class="fas fa-user-md"></i></div>
                 <h5>Doctors</h5>
                 <p>Clinical insights &amp; tele-consultations — provide specialist care without students missing school.</p>
-            </div>
+            </a>
             <div class="stakeholder-card">
                 <div class="s-icon govt"><i class="fas fa-landmark"></i></div>
                 <h5>Government Health Systems</h5>

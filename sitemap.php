@@ -30,6 +30,7 @@ function url(string $l, string $lastmod = '', string $changefreq = 'monthly', st
 /* ── Static pages ── */
 echo url("$base/",                       $today, 'weekly',  '1.0');
 echo url("$base/about-us.php",           $today, 'monthly', '0.8');
+echo url("$base/doctor-network.php",     $today, 'monthly', '0.8');
 echo url("$base/contact-us.php",         $today, 'monthly', '0.8');
 echo url("$base/login.php",              $today, 'monthly', '0.6');
 echo url("$base/signup.php",             $today, 'monthly', '0.6');

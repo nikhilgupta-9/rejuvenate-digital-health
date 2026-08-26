@@ -500,9 +500,14 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
                         </div>
                         <div class="mb-3">
                           <label class="form-label fw-semibold" style="font-size:.84rem;">ABHA Number <span class="text-danger">*</span></label>
-                          <input type="text" class="form-control" id="link_abha_in"
-                            placeholder="XX-XXXX-XXXX-XXXX" maxlength="19" oninput="fmtAbha(this,'prev_num')">
-                          <small class="text-muted">Your 14-digit Ayushman Bharat Health ID</small>
+                          <div class="input-group">
+                            <input type="text" class="form-control" id="link_abha_in"
+                              placeholder="XX-XXXX-XXXX-XXXX" maxlength="19" oninput="fmtAbha(this,'prev_num')">
+                            <button class="btn btn-outline-secondary" type="button" id="btnScanAbhaQr" title="Scan ABHA QR">
+                              <i class="fas fa-qrcode"></i>
+                            </button>
+                          </div>
+                          <small class="text-muted">Your 14-digit Ayushman Bharat Health ID, or scan your ABHA card QR</small>
                         </div>
                         <div class="mb-3">
                           <label class="form-label fw-semibold" style="font-size:.84rem;">Auth Method</label>
@@ -935,7 +940,30 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
           </div><!-- /row -->
   </main>
   <?php include("inc/scripts.php") ?>
+  <script src="<?= BASE_URL ?>assets/js/abha-qr-scanner.js"></script>
   <script>
+    /* ── QR scan: fill ABHA number/address from a scanned card/app QR ── */
+    document.getElementById('btnScanAbhaQr')?.addEventListener('click', function () {
+      AbhaQrScanner.open({
+        title: 'Scan ABHA QR',
+        onResult(parsed) {
+          const input = document.getElementById('link_abha_in');
+          if (parsed.abha_number) {
+            input.value = parsed.abha_number;
+          } else if (parsed.abha_address) {
+            input.value = parsed.abha_address;
+          } else {
+            wAlert('QR did not contain a recognisable ABHA number or address.');
+            return;
+          }
+          fmtAbha(input, 'prev_num');
+        },
+        onUnsupported() {
+          wAlert('QR scanning is not supported in this browser. Please enter the ABHA number manually.');
+        }
+      });
+    });
+
     /* ── Formatters ──────────────────────────────────────────────────── */
     function fmtAbha(el, previewId) {
       let v = el.value.replace(/\D/g, '').substring(0, 14);

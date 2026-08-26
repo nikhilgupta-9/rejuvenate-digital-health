@@ -121,6 +121,7 @@ $logo    = get_header_logo();
         <h4 class="rjv-footer-heading mt-4">Quick Links</h4>
         <ul class="rjv-footer-links">
           <li><a href="<?= BASE_URL ?>about-us.php"><i class="fas fa-chevron-right"></i>About Us</a></li>
+          <li><a href="<?= BASE_URL ?>doctor-network.php"><i class="fas fa-chevron-right"></i>Doctor Network</a></li>
           <li><a href="<?= BASE_URL ?>contact-us.php"><i class="fas fa-chevron-right"></i>Contact Us</a></li>
           <li><a href="<?= BASE_URL ?>privacy-policy.php"><i class="fas fa-chevron-right"></i>Privacy Policy</a></li>
           <li><a href="<?= BASE_URL ?>terms-and-condition.php"><i class="fas fa-chevron-right"></i>Terms &amp; Conditions</a></li>

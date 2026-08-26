@@ -2,6 +2,7 @@
 require_once __DIR__ . '/auth/guard.php';
 require_once dirname(__DIR__) . '/config/connect.php';
 require_once dirname(__DIR__) . '/config/abdm.php';
+require_once dirname(__DIR__) . '/lib/Security.php';
 $payload = doctor_jwt_guard();
 $doctor_id = (int) ($payload['doctor_id'] ?? $payload['sub'] ?? 0);
 $sidebar_active = 'patients';
@@ -13,6 +14,7 @@ require_once __DIR__ . '/inc/sidebar.php';
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="csrf-token" content="<?= htmlspecialchars(Security::csrfToken()) ?>">
   <title>Create New ABHA — Rejuvenate</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
@@ -80,6 +82,23 @@ require_once __DIR__ . '/inc/sidebar.php';
                 maxlength="12" autocomplete="off" inputmode="numeric">
             </div>
             <div class="form-hint">12-digit Aadhaar — OTP will be sent to the Aadhaar-linked mobile number</div>
+          </div>
+
+          <!-- Patient Consent (ABDM: required before Aadhaar-based ABHA enrolment) -->
+          <div class="mb-3 p-3" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;max-height:110px;overflow-y:auto;font-size:.75rem;color:#374151;line-height:1.6;">
+            <strong>Patient Consent</strong><br>
+            The patient hereby declares that they are voluntarily sharing their Aadhaar number and demographic
+            information issued by UIDAI, with the National Health Authority (NHA), for the sole purpose of creating
+            an ABHA number. The patient understands their ABHA number may be used and shared for purposes notified
+            by ABDM from time to time, including provision of healthcare services, and that personal identifiable
+            information (Name, Address, Age, DOB, Gender, Photograph) may be made available to the treating
+            healthcare professional.
+          </div>
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="aadhaar_consent" value="1">
+            <label class="form-check-label font-weight-bold" for="aadhaar_consent" style="font-size:.82rem;">
+              I confirm the patient has read and agreed to the above consent
+            </label>
           </div>
 
           <button class="btn btn-primary-custom" id="btnSend">
@@ -158,6 +177,7 @@ require_once __DIR__ . '/inc/sidebar.php';
 
   <script>
     const BASE = '<?= BASE_URL ?>';
+    const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
 
     let currentStep = 1;
     let txnId = '';
@@ -275,6 +295,10 @@ require_once __DIR__ . '/inc/sidebar.php';
         showError('error1', 'Please enter a valid 12-digit Aadhaar number');
         return;
       }
+      if (!document.getElementById('aadhaar_consent').checked) {
+        showError('error1', 'Please confirm patient consent to continue');
+        return;
+      }
 
       hideError('error1');
 
@@ -282,10 +306,10 @@ require_once __DIR__ . '/inc/sidebar.php';
       btn.disabled = true;
       btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i> Sending...';
 
-      fetch(BASE + 'doctor/api/abdm_send_otp.php', {
+      fetch(BASE + 'doctor/api/abdm-api.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ abha_input: value, type: 'aadhaar' })
+        body: JSON.stringify({ action: 'send_otp', abha_input: value, type: 'aadhaar', consent: 1, _csrf: CSRF_TOKEN })
       })
         .then(r => r.json())
         .then(data => {
@@ -355,10 +379,10 @@ require_once __DIR__ . '/inc/sidebar.php';
       btn.disabled = true;
       btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i> Verifying...';
 
-      fetch(BASE + 'doctor/api/abha-otp-verify.php', {
+      fetch(BASE + 'doctor/api/abdm-api.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ txnId: txnId, otp: otp, type: 'aadhaar', mobile: commMobile })
+        body: JSON.stringify({ action: 'verify_otp', txnId: txnId, otp: otp, type: 'aadhaar', mobile: commMobile, _csrf: CSRF_TOKEN })
       })
         .then(r => r.json())
         .then(data => {

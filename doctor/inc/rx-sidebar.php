@@ -52,7 +52,7 @@
         <?php else: ?>
             <div class="alert alert-warning py-2 px-3 mb-2" style="font-size:.78rem;">
                 Patient ABHA not linked. Records stored locally only.
-                <a href="find-patient-mobile.php" class="alert-link d-block mt-1">Link ABHA →</a>
+                <a href="add-patient-abha.php" class="alert-link d-block mt-1">Link ABHA →</a>
             </div>
         <?php endif; ?>
         <?php if (isset($existing_rx) && $existing_rx): ?>

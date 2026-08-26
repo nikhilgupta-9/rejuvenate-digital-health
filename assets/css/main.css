@@ -13,6 +13,10 @@
   --bg: #eef5f5;
   --bg-2: #051828;
   ---box-shadow: 0px 4px 25px rgba(0, 0, 0, 0.06);
+  --rdh-teal:  #02c9b8;
+  --rdh-blue:  #0C74C5;
+  --rdh-dark:  #1a2340;
+  --rdh-light: #f4fbfb;
 }
 
 /* --------------------------------------------
@@ -18306,4 +18310,251 @@ p.sticky-label {
     padding: 10px 10px;
     font-size: .82rem;
   }
+}
+/* ══════════════════════════════════════════════
+   DOCTOR NETWORK PAGE (doctor-network.php)
+══════════════════════════════════════════════ */
+
+/* ── Hero ── */
+.dn-hero {
+    background: var(--rdh-dark);
+    padding: 80px 0 60px;
+    text-align: center;
+    color: #fff;
+}
+.dn-hero .hero-badge {
+    display: inline-block;
+    background: rgba(2,201,184,.18);
+    border: 1px solid var(--rdh-teal);
+    color: var(--rdh-teal);
+    border-radius: 20px;
+    font-size: .8rem;
+    letter-spacing: .08em;
+    padding: 4px 16px;
+    margin-bottom: 18px;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+.dn-hero h1 { font-size: 2.4rem; font-weight: 700; line-height: 1.25; margin-bottom: 18px; }
+.dn-hero h1 span { color: var(--rdh-teal); }
+.dn-hero p {
+    font-size: 1.05rem;
+    opacity: .88;
+    max-width: 720px;
+    margin: 0 auto 28px;
+    line-height: 1.7;
+}
+.dn-hero .hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: wrap;
+    margin-top: 40px;
+    border-top: 1px solid rgba(255,255,255,.15);
+    padding-top: 32px;
+}
+.dn-hero .hero-stat strong { display: block; font-size: 1.8rem; font-weight: 700; color: var(--rdh-teal); }
+.dn-hero .hero-stat span { font-size: .82rem; opacity: .78; }
+.dn-hero .cta-row { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+
+/* ── Generic section label ── */
+.section-label { text-align: center; margin-bottom: 46px; }
+.section-label span.eyebrow {
+    display: inline-block; color: var(--rdh-teal); font-weight: 700;
+    font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px;
+}
+.section-label h2 { font-size: 1.9rem; font-weight: 700; color: var(--rdh-dark); }
+.section-label p  { color: #6c757d; max-width: 600px; margin: 10px auto 0; line-height: 1.7; }
+
+/* ── Intro / What is RDH ── */
+.intro-section { background: #fff; padding: 70px 0 60px; }
+.intro-text p { color: #495057; font-size: .98rem; line-height: 1.85; margin-bottom: 16px; }
+.intro-text a { color: var(--rdh-blue); font-weight: 600; text-decoration: underline; }
+.intro-panel {
+    background: var(--rdh-dark);
+    border-radius: 18px;
+    padding: 36px 30px;
+    color: #fff;
+    height: 100%;
+}
+.intro-panel h4 { font-size: 1.2rem; font-weight: 700; margin-bottom: 14px; color: var(--rdh-teal); }
+.intro-panel ul { padding-left: 18px; margin: 0; }
+.intro-panel li { font-size: .88rem; opacity: .9; line-height: 1.9; }
+
+/* ── Card grid (role / help style) ── */
+.card-section { padding: 70px 0 60px; }
+.card-section.alt { background: var(--rdh-light); }
+.rdh-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 28px 22px;
+    height: 100%;
+    border: 1.5px solid #e8f5f4;
+    transition: box-shadow .25s, transform .25s;
+}
+.rdh-card:hover { box-shadow: 0 8px 28px rgba(2,201,184,.16); transform: translateY(-4px); }
+.rdh-card .h-icon {
+    width: 52px; height: 52px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem;
+    margin-bottom: 16px;
+    background: #e8f9f8;
+    color: var(--rdh-teal);
+}
+.rdh-card h5 { font-size: .97rem; font-weight: 700; color: var(--rdh-dark); margin-bottom: 8px; }
+.rdh-card p  { font-size: .84rem; color: #6c757d; margin: 0; line-height: 1.6; }
+
+/* ── Numbered process list ── */
+.process-item { display: flex; align-items: flex-start; gap: 16px; padding: 20px 0; border-bottom: 1px solid #f0f0f0; }
+.process-item:last-child { border-bottom: none; }
+.process-item .p-num {
+    width: 44px; height: 44px; flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--rdh-blue);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 1rem;
+}
+.process-item h5 { font-size: 1rem; font-weight: 700; color: var(--rdh-dark); margin: 0 0 5px; }
+.process-item p  { font-size: .85rem; color: #6c757d; margin: 0; line-height: 1.65; }
+
+.side-visual {
+    background: var(--rdh-dark);
+    border-radius: 18px;
+    padding: 40px 30px;
+    color: #fff;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.side-visual h3 { font-size: 1.45rem; font-weight: 700; margin-bottom: 12px; }
+.side-visual p  { opacity: .84; font-size: .9rem; line-height: 1.75; margin-bottom: 14px; }
+.side-visual .sv-stat { margin-top: 20px; }
+.side-visual .sv-stat strong { font-size: 1.8rem; color: var(--rdh-teal); display: block; }
+.side-visual .sv-stat span  { font-size: .82rem; opacity: .75; }
+
+/* ── Benefit checklist ── */
+.benefit-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+@media (max-width: 768px) { .benefit-grid { grid-template-columns: 1fr; } }
+.benefit-item {
+    display: flex; align-items: flex-start; gap: 14px;
+    background: #fff;
+    border: 1.5px solid #e8f5f4;
+    border-radius: 12px;
+    padding: 18px 20px;
+}
+.benefit-item .b-check {
+    width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%;
+    background: #e8f9f8; color: var(--rdh-teal);
+    display: flex; align-items: center; justify-content: center; font-size: .85rem;
+}
+.benefit-item h6 { font-size: .92rem; font-weight: 700; color: var(--rdh-dark); margin: 0 0 4px; }
+.benefit-item p  { font-size: .82rem; color: #6c757d; margin: 0; line-height: 1.6; }
+
+/* ── Vision / Mission ── */
+.vm-section { background: #fff; padding: 70px 0 60px; }
+.vm-card {
+    border-radius: 16px;
+    padding: 34px 28px;
+    height: 100%;
+}
+.vm-card.vision { background: var(--rdh-light); border: 1.5px solid #e0f5f3; }
+.vm-card.mission { background: var(--rdh-dark); color: #fff; }
+.vm-card .vm-icon { font-size: 1.8rem; margin-bottom: 14px; color: var(--rdh-teal); }
+.vm-card h3 { font-size: 1.3rem; font-weight: 700; margin-bottom: 12px; }
+.vm-card.vision h3 { color: var(--rdh-dark); }
+.vm-card.mission h3 { color: var(--rdh-light); }
+.vm-card p { font-size: .92rem; line-height: 1.8; margin: 0; }
+.vm-card.vision p { color: #495057; }
+.vm-card.mission p { opacity: .9; }
+
+/* ── Government Alignment ── */
+.govt-section { background: var(--rdh-light); padding: 60px 0; }
+.govt-badge {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #fff;
+    border: 1.5px solid #e0f5f3;
+    border-radius: 12px;
+    padding: 22px 16px;
+    text-align: center;
+    transition: box-shadow .2s, border-color .2s;
+}
+.govt-badge:hover { box-shadow: 0 4px 18px rgba(2,201,184,.15); border-color: var(--rdh-teal); }
+.govt-badge .g-icon { font-size: 2rem; margin-bottom: 10px; }
+.govt-badge h6 { font-size: .82rem; font-weight: 700; color: var(--rdh-dark); margin: 0; line-height: 1.35; }
+
+/* ── Final CTA (renamed dn-cta-section: main.css already defines .cta-section for the sitewide banner used on index.php / departments.php) ── */
+.dn-cta-section {
+    background: var(--rdh-dark);
+    padding: 60px 0;
+    color: #fff;
+    text-align: center;
+}
+.dn-cta-section h2 { font-size: 2rem; font-weight: 700; margin-bottom: 8px; color: var(--rdh-light);}
+.dn-cta-section h2 span { color: var(--rdh-teal); }
+.dn-cta-section .cta-sub { opacity: .82; max-width: 620px; margin: 0 auto 32px; line-height: 1.7; }
+.dn-cta-section .cta-final { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }
+.dn-cta-section .btn-teal {
+    background: var(--rdh-teal); color: #fff; border: none;
+    padding: 12px 28px; border-radius: 8px; font-weight: 600; font-size: .92rem;
+    text-decoration: none; transition: opacity .2s;
+}
+.dn-cta-section .btn-teal:hover { opacity: .88; color: #fff; text-decoration: none; }
+.dn-cta-section .btn-outline-white {
+    background: transparent; color: #fff; border: 2px solid rgba(255,255,255,.5);
+    padding: 10px 28px; border-radius: 8px; font-weight: 600; font-size: .92rem;
+    text-decoration: none; transition: background .2s, border-color .2s;
+}
+.dn-cta-section .btn-outline-white:hover { background: rgba(255,255,255,.12); border-color: #fff; color: #fff; text-decoration: none; }
+
+/* ── Doctor Network: Mobile Responsive ── */
+@media (max-width: 991px) {
+    .dn-hero { padding: 60px 0 44px; }
+    .dn-hero h1 { font-size: 1.9rem; }
+    .intro-panel, .side-visual { margin-top: 28px; }
+    .section-label h2 { font-size: 1.6rem; }
+    .vm-card { margin-top: 0; }
+}
+
+@media (max-width: 767px) {
+    .card-section, .card-section.alt, .intro-section, .vm-section { padding: 48px 0 40px; }
+    .govt-section, .dn-cta-section { padding: 44px 0; }
+
+    .dn-hero { padding: 50px 0 36px; }
+    .dn-hero h1 { font-size: 1.6rem; line-height: 1.3; }
+    .dn-hero p { font-size: .95rem; }
+    .dn-hero .hero-stats { gap: 22px 28px; margin-top: 28px; padding-top: 24px; }
+    .dn-hero .hero-stat strong { font-size: 1.4rem; }
+    .dn-hero .cta-row { flex-direction: column; align-items: stretch; }
+    .dn-hero .cta-row .btn-teal,
+    .dn-hero .cta-row .btn-outline-white { text-align: center; }
+
+    .section-label { margin-bottom: 32px; }
+    .section-label h2 { font-size: 1.45rem; }
+
+    .rdh-card, .benefit-item { padding: 22px 18px; }
+    .intro-panel, .side-visual { padding: 28px 22px; }
+    .vm-card { padding: 26px 22px; }
+
+    .process-item { gap: 12px; padding: 16px 0; }
+    .process-item .p-num { width: 38px; height: 38px; font-size: .9rem; }
+
+    .dn-cta-section h2 { font-size: 1.5rem; }
+    .dn-cta-section .cta-final { flex-direction: column; align-items: stretch; }
+    .dn-cta-section .cta-final a { text-align: center; }
+}
+
+@media (max-width: 575px) {
+    .dn-hero .hero-stats { justify-content: space-between; gap: 18px 16px; }
+    .dn-hero .hero-stat { flex: 0 0 42%; }
+    .dn-hero h1 { font-size: 1.4rem; }
+
+    .govt-badge { padding: 18px 10px; }
+    .govt-badge .g-icon { font-size: 1.6rem; }
+    .govt-badge h6 { font-size: .76rem; }
+
+    .benefit-item { flex-direction: column; }
+    .benefit-item .b-check { margin-bottom: 4px; }
 }

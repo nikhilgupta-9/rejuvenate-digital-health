@@ -162,7 +162,8 @@ $logo = get_header_logo();
                                         </ul>
                                     </li>
                                     <li> <a href="<?= BASE_URL ?>about-us.php">About Us </a></li>
-                                    <li> <a href="<?= BASE_URL ?>contact/">Contact Us </a></li>
+                                    <li> <a href="<?= BASE_URL ?>doctor-network/">Doctor Network </a></li>
+                                    <!-- <li> <a href="<?= BASE_URL ?>contact/">Contact Us </a></li> -->
                                     <li> <a href="<?= BASE_URL ?>school-program.php">School Programs </a></li>
                                 </ul>
                             </nav>

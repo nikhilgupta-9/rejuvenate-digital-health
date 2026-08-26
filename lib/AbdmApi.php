@@ -17,6 +17,13 @@
  *
  * Sensitive actions additionally need:
  *   T-Token       : Bearer <userToken>  (profile / ABHA-card endpoints)
+ *
+ * NOT IMPLEMENTED: Aadhaar Biometric auth and Aadhaar Demographic (offline)
+ * auth. Both are Government-Application-mandatory but Private-Application
+ * optional/NA in the M1 spec, and require ABDM biometric device SDK /
+ * offline XML integration out of scope for this deployment. Aadhaar-OTP,
+ * Driving Licence, and mobile/ABHA-number/address flows below cover the
+ * mandatory Private-Application surface.
  */
 class AbdmApi
 {
@@ -220,7 +227,10 @@ class AbdmApi
             'otpValue' => $this->rsaEncrypt($otp),
         ];
         if ($mobile) {
-            $otpBlock['mobile'] = $this->rsaEncrypt($mobile);
+            // ABDM v3 sandbox rejects this field when RSA-encrypted (400 "Invalid
+            // Mobile Number") — confirmed empirically against enrol/byAadhaar.
+            // Unlike otpValue/loginId, this one goes over the wire as plain text.
+            $otpBlock['mobile'] = $mobile;
         }
 
         // Spec: no top-level txnId or scope — txnId lives inside authData.otp
@@ -687,6 +697,39 @@ class AbdmApi
         $token = $this->getAccessToken();
         return $this->post('/search/searchByAbhaAddress', [
             'abhaAddress' => $this->normaliseAbhaAddr($abhaAddress),
+        ], $token);
+    }
+
+    /**
+     * Search all ABHA accounts linked to a mobile number (used when a
+     * mobile has more than one ABHA registered against it).
+     * POST /profile/account/abha/search  scope=["search-abha"]
+     * Returns { txnId, ABHAAddresses: [...] } — pass txnId + chosen index
+     * to requestIndexOtp() to continue the login flow.
+     */
+    public function searchAbhaByMobile(string $mobile): array
+    {
+        $token = $this->getAccessToken();
+        return $this->post('/profile/account/abha/search', [
+            'scope'  => ['search-abha'],
+            'mobile' => $this->rsaEncrypt($mobile),
+        ], $token);
+    }
+
+    /**
+     * Request OTP for the ABHA selected by index from searchAbhaByMobile().
+     * POST /profile/login/request/otp  scope=["abha-login","search-abha","mobile-verify"]
+     * $index : 1-based position in the ABHAAddresses list returned by searchAbhaByMobile().
+     */
+    public function requestIndexOtp(int $index, string $txnId): array
+    {
+        $token = $this->getAccessToken();
+        return $this->post('/profile/login/request/otp', [
+            'scope'     => ['abha-login', 'search-abha', 'mobile-verify'],
+            'loginHint' => 'index',
+            'loginId'   => $this->rsaEncrypt((string)$index),
+            'otpSystem' => 'abdm',
+            'txnId'     => $txnId,
         ], $token);
     }
 
