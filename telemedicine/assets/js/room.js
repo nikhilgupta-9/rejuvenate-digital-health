@@ -17,14 +17,16 @@
 
   let localStream = null;
   let pc = null;
-  let ws = null;
-  let peerPresent = false;
-  let isInitiator = false;
+  let peerPresent = null; // null = unknown yet (before the first poll response)
   let pendingCandidates = [];
   let callEnded = false;
   let micOn = true;
   let camOn = true;
-  let wsReconnectAttempts = 0;
+
+  // ── Polling state ──
+  let lastId = 0;
+  let pollTimer = null;
+  let pollInFlight = false;
 
   function toast(msg) {
     let el = document.querySelector('.rt-toast');
@@ -156,88 +158,106 @@
     remoteVideo.srcObject = null;
   }
 
-  /* ── WebSocket signaling ── */
+  /* ── HTTP-polling signaling (no WebSocket — works on plain shared hosting) ──
+   * The browser sends signals via POST (send()) and picks up the peer's
+   * signals by polling every cfg.pollIntervalMs (poll()). Video/audio itself
+   * still flows directly peer-to-peer over WebRTC — only the handshake and
+   * chat go through this relay. */
   function send(obj) {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(obj));
+    const payload = Object.assign({}, obj);
+    delete payload.type;
+
+    const fd = new FormData();
+    fd.append('ticket', cfg.ticket);
+    fd.append('type', obj.type);
+    fd.append('payload', JSON.stringify(payload));
+
+    return fetch(cfg.sendUrl, { method: 'POST', body: fd })
+      .then((r) => r.json())
+      .catch(() => ({ success: false }));
+  }
+
+  function startPolling() {
+    pollOnce();
+    pollTimer = setInterval(pollOnce, cfg.pollIntervalMs);
+  }
+
+  function stopPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
+  function pollOnce() {
+    if (pollInFlight || callEnded) return;
+    pollInFlight = true;
+    fetch(cfg.pollUrl + '?ticket=' + encodeURIComponent(cfg.ticket) + '&since=' + lastId)
+      .then((r) => r.json())
+      .then(handlePollResponse)
+      .catch(() => { /* transient network hiccup — next tick retries */ })
+      .finally(() => { pollInFlight = false; });
+  }
+
+  async function handlePollResponse(res) {
+    if (callEnded) return;
+
+    if (!res || !res.success) {
+      if (res && res.message) toast(res.message);
+      stopPolling();
+      setStatus('ended', 'Session expired');
+      return;
+    }
+
+    if (res.lastId) lastId = res.lastId;
+
+    const wasPresent = peerPresent;
+    peerPresent = !!res.peerPresent;
+    if (peerPresent !== wasPresent) {
+      if (peerPresent) {
+        waitingOverlay.classList.add('hidden');
+      } else {
+        waitingOverlay.classList.remove('hidden');
+        teardownPeerConnection();
+        setStatus('waiting', 'Waiting for the other participant…');
+      }
+    }
+
+    // Sequential, in id order — an offer must finish setting the remote
+    // description before any ice-candidate that follows it is processed.
+    for (const msg of (res.messages || [])) {
+      await handleSignal(msg);
     }
   }
 
-  function connectWs() {
-    const url = cfg.wsUrl + '/?ticket=' + encodeURIComponent(cfg.ticket);
-    ws = new WebSocket(url);
-
-    ws.onopen = () => {
-      wsReconnectAttempts = 0;
-      setStatus('waiting', 'Waiting for the other participant…');
-    };
-
-    ws.onmessage = (evt) => {
-      let msg;
-      try { msg = JSON.parse(evt.data); } catch (e) { return; }
-      handleServerMessage(msg);
-    };
-
-    ws.onclose = () => {
-      if (callEnded) return;
-      setStatus('waiting', 'Reconnecting…');
-      wsReconnectAttempts++;
-      const delay = Math.min(1000 * wsReconnectAttempts, 5000);
-      setTimeout(connectWs, delay);
-    };
-
-    ws.onerror = () => {
-      /* onclose will fire right after and handle reconnect */
-    };
-  }
-
-  async function handleServerMessage(msg) {
+  async function handleSignal(msg) {
+    const p = msg.payload || {};
     switch (msg.type) {
-      case 'joined':
-        break;
-
-      case 'peer-status':
-        peerPresent = !!msg.peerPresent;
-        if (peerPresent) {
-          waitingOverlay.classList.add('hidden');
-        } else {
-          waitingOverlay.classList.remove('hidden');
-          teardownPeerConnection();
-          setStatus('waiting', 'Waiting for the other participant…');
-        }
-        break;
-
       case 'ready':
-        isInitiator = !!msg.initiator;
-        if (isInitiator) await makeOffer();
+        // Doctor is always the WebRTC offer initiator, by convention.
+        if (cfg.role === 'doctor') await makeOffer();
         break;
 
       case 'offer':
-        await handleOffer(msg.sdp);
+        await handleOffer(p.sdp);
         break;
 
       case 'answer':
-        await handleAnswer(msg.sdp);
+        await handleAnswer(p.sdp);
         break;
 
       case 'ice-candidate':
-        await handleRemoteCandidate(msg.candidate);
+        await handleRemoteCandidate(p.candidate);
         break;
 
       case 'chat':
-        appendChatMessage(msg.from, msg.name, msg.message, msg.time);
+        appendChatMessage(p.from, p.name, p.message, p.time);
         break;
 
       case 'peer-media':
-        toast((msg.name || 'The other participant') + (msg.enabled ? ' turned on' : ' turned off') + ' their ' + msg.kind + '.');
+        toast((p.name || 'The other participant') + (p.enabled ? ' turned on' : ' turned off') + ' their ' + p.kind + '.');
         break;
 
       case 'call-ended':
-        endCallUi(msg.by === cfg.role ? 'You ended the call.' : 'The call has ended.');
-        break;
-
-      case 'error':
-        toast(msg.message || 'Something went wrong.');
+        endCallUi(p.by === cfg.role ? 'You ended the call.' : 'The call has ended.');
         break;
     }
   }
@@ -268,8 +288,12 @@
     e.preventDefault();
     const text = chatInput.value.trim();
     if (!text) return;
-    send({ type: 'chat', message: text });
     chatInput.value = '';
+    send({ type: 'chat', message: text }).then((res) => {
+      if (res && res.echo) {
+        appendChatMessage(res.echo.from, res.echo.name, res.echo.message, res.echo.time);
+      }
+    });
   });
 
   endBtn.addEventListener('click', () => {
@@ -280,15 +304,12 @@
   function endCallUi(message) {
     if (callEnded) return;
     callEnded = true;
+    stopPolling();
     setStatus('ended', 'Call ended');
     toast(message);
     teardownPeerConnection();
     if (localStream) {
       localStream.getTracks().forEach((t) => t.stop());
-    }
-    if (ws) {
-      ws.onclose = null;
-      ws.close();
     }
     setTimeout(() => {
       window.location.href = cfg.exitUrl;
@@ -298,7 +319,7 @@
   window.addEventListener('beforeunload', () => {
     if (!callEnded && navigator.sendBeacon) {
       navigator.sendBeacon(
-        'api/end-session.php',
+        cfg.endSessionUrl,
         new Blob([JSON.stringify({ ticket: cfg.ticket })], { type: 'application/json' })
       );
     }
@@ -308,7 +329,7 @@
   (async function boot() {
     try {
       await initMedia();
-      connectWs();
+      startPolling();
     } catch (err) {
       // initMedia() already surfaced a toast + status update; stop boot here.
     }

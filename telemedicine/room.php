@@ -40,8 +40,6 @@ if (!$appt) {
 
 $other_name  = $role === 'doctor' ? ($appt['patient_name'] ?: 'Patient') : ('Dr. ' . $appt['doctor_name']);
 $my_display  = $role === 'doctor' ? ('Dr. ' . $appt['doctor_name']) : ($appt['patient_name'] ?: $my_name);
-
-$ws_url = TELEMED_WS_SCHEME . '://' . TELEMED_WS_HOST . ':' . TELEMED_WS_PORT;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -104,7 +102,10 @@ $ws_url = TELEMED_WS_SCHEME . '://' . TELEMED_WS_HOST . ':' . TELEMED_WS_PORT;
 
     <script>
         window.TELEMED_CONFIG = {
-            wsUrl: <?= json_encode($ws_url) ?>,
+            pollUrl: <?= json_encode(BASE_URL . 'telemedicine/api/poll.php') ?>,
+            sendUrl: <?= json_encode(BASE_URL . 'telemedicine/api/send.php') ?>,
+            endSessionUrl: <?= json_encode(BASE_URL . 'telemedicine/api/end-session.php') ?>,
+            pollIntervalMs: 2000,
             ticket: <?= json_encode($ticket) ?>,
             role: <?= json_encode($role) ?>,
             appointmentId: <?= json_encode($appointment_id) ?>,

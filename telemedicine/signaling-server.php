@@ -1,13 +1,17 @@
 <?php
 /**
- * Telemedicine WebRTC signaling server — a standalone, long-running
- * process. Not a web page; run it from the CLI:
+ * ⚠️ DEPRECATED — not used by the app anymore. room.php/room.js now use
+ * HTTP-polling signaling (see telemedicine/api/poll.php + send.php)
+ * instead of this WebSocket server, because it needs a persistent
+ * background process on a custom port, which Hostinger shared/Business
+ * hosting does not support. Kept only for reference in case a future VPS
+ * deployment wants to switch back to true WebSocket signaling (it would
+ * be lower-latency than polling). See telemedicine/README.md.
+ *
+ * If you do want to revive it, this is still a standalone, long-running
+ * process — not a web page; run it from the CLI:
  *
  *   php telemedicine/signaling-server.php
- *
- * See telemedicine/README.md for hosting requirements (this needs a
- * host that allows a persistent background process + an open port —
- * typical shared cPanel hosting does NOT support this out of the box).
  */
 
 require dirname(__DIR__) . '/vendor/autoload.php';

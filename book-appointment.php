@@ -671,6 +671,11 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
               </label>
             </div>
 
+            <div class="bk-consent" id="bkFeeNotice" style="display:none;background:#eaf4fd;border-color:#bcdcf5;color:var(--bk-ink);">
+              <i class="fas fa-shield-alt me-1" style="color:var(--bk-primary);"></i>
+              Consultation fee of <b id="bkFeeAmount"></b> is payable securely via Razorpay (cards / UPI / netbanking) on the next step, before your appointment is confirmed.
+            </div>
+
             <input type="hidden" name="department" id="bkFieldDepartment">
             <input type="hidden" name="doctor_id" id="bkFieldDoctorId">
             <input type="hidden" name="doctor_name" id="bkFieldDoctorName">
@@ -707,6 +712,7 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
   </section>
 
   <?php include("footer.php") ?>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <script>
     (function () {
       const BASE_URL = "<?= BASE_URL ?>";
@@ -773,7 +779,7 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
               return;
             }
             list.innerHTML = data.doctors.map(d => `
-              <div class="bk-doctor-card mb-3" data-id="${d.id}" data-name="${escHtml(d.name)}">
+              <div class="bk-doctor-card mb-3" data-id="${d.id}" data-name="${escHtml(d.name)}" data-fee="${Number(d.consultation_fee || 0)}">
                 <div class="avatar">${d.profile_image ? `<img src="${d.profile_image}" alt="">` : initials(d.name)}</div>
                 <div style="flex:1;">
                   <div class="name">Dr. ${escHtml(d.name)} ${d.hpr_verified ? '<span class="hpr-badge"><i class="fas fa-check-circle"></i> HPR Verified</span>' : ''}</div>
@@ -788,7 +794,7 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
               card.addEventListener('click', () => {
                 list.querySelectorAll('.bk-doctor-card').forEach(c => c.classList.remove('selected'));
                 card.classList.add('selected');
-                state.doctor = { id: card.dataset.id, name: card.dataset.name };
+                state.doctor = { id: card.dataset.id, name: card.dataset.name, fee: Number(card.dataset.fee || 0) };
                 document.getElementById('bkNext2').disabled = false;
               });
             });
@@ -859,6 +865,15 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
         document.getElementById('bkFieldDate').value = state.date;
         document.getElementById('bkFieldTime').value = state.time;
         document.getElementById('bkFieldMode').value = modeSelect.value;
+
+        const feeNotice = document.getElementById('bkFeeNotice');
+        if (state.doctor.fee > 0) {
+          document.getElementById('bkFeeAmount').textContent = '₹' + state.doctor.fee.toLocaleString('en-IN');
+          feeNotice.style.display = 'block';
+        } else {
+          feeNotice.style.display = 'none';
+        }
+
         goToStep(4);
       });
 
@@ -877,28 +892,36 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
         });
       });
 
-      // ── STEP 4: submit ──
-      document.getElementById('bkForm').addEventListener('submit', function (e) {
-        e.preventDefault();
-        const errorBox = document.getElementById('bkFormError');
-        errorBox.style.display = 'none';
+      // ── STEP 4: submit (with Razorpay payment step when the doctor has a fee) ──
+      const errorBox = document.getElementById('bkFormError');
+      const submitBtn = document.getElementById('bkSubmitBtn');
+      const submitText = document.getElementById('bkSubmitText');
+      const submitSpinner = document.getElementById('bkSubmitSpinner');
 
-        const btn = document.getElementById('bkSubmitBtn');
-        const text = document.getElementById('bkSubmitText');
-        const spinner = document.getElementById('bkSubmitSpinner');
-        btn.disabled = true;
-        text.textContent = 'Booking…';
-        spinner.classList.remove('d-none');
+      function showError(msg) {
+        resetSubmitBtn();
+        errorBox.textContent = msg;
+        errorBox.style.display = 'block';
+        errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
 
-        const formData = new FormData(this);
+      function resetSubmitBtn() {
+        submitBtn.disabled = false;
+        submitText.textContent = 'Confirm Booking';
+        submitSpinner.classList.add('d-none');
+      }
 
+      function busy(label) {
+        submitBtn.disabled = true;
+        submitText.textContent = label;
+        submitSpinner.classList.remove('d-none');
+      }
+
+      function finalizeBooking(formData) {
         fetch(BASE_URL + 'util/appointment-handler.php', { method: 'POST', body: formData })
           .then(r => r.json())
           .then(data => {
-            btn.disabled = false;
-            text.textContent = 'Confirm Booking';
-            spinner.classList.add('d-none');
-
+            resetSubmitBtn();
             if (data.status === 'success') {
               document.getElementById('bkRefNumber').textContent = data.appointment_id || '';
               document.querySelector('.bk-stepper').style.display = 'none';
@@ -906,18 +929,78 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
               panes[4].classList.remove('active');
               document.getElementById('bkSuccess').style.display = 'block';
             } else {
-              errorBox.textContent = data.message || 'Something went wrong. Please try again.';
-              errorBox.style.display = 'block';
-              errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              showError(data.message || 'Something went wrong. Please try again.');
             }
           })
-          .catch(() => {
-            btn.disabled = false;
-            text.textContent = 'Confirm Booking';
-            spinner.classList.add('d-none');
-            errorBox.textContent = 'Network error. Please check your connection and try again.';
-            errorBox.style.display = 'block';
-          });
+          .catch(() => showError('Network error. Please check your connection and try again.'));
+      }
+
+      document.getElementById('bkForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        errorBox.style.display = 'none';
+        busy('Booking…');
+
+        const formData = new FormData(this);
+
+        if (!state.doctor || !state.doctor.fee) {
+          // No consultation fee configured for this doctor — nothing to pay.
+          finalizeBooking(formData);
+          return;
+        }
+
+        // Doctor has a fee — get a Razorpay order for the exact amount
+        // (computed server-side from doctors.consultation_fee) before
+        // opening Checkout.
+        busy('Preparing payment…');
+        const orderData = new FormData();
+        orderData.append('doctor_id', state.doctor.id);
+
+        fetch(BASE_URL + 'util/create-razorpay-order.php', { method: 'POST', body: orderData })
+          .then(r => r.json())
+          .then(order => {
+            if (!order.success) {
+              showError(order.message || 'Could not start the payment. Please try again.');
+              return;
+            }
+            if (!order.payment_required) {
+              finalizeBooking(formData);
+              return;
+            }
+
+            resetSubmitBtn(); // Checkout has its own UI from here
+
+            const rzp = new Razorpay({
+              key: order.key_id,
+              order_id: order.order_id,
+              amount: order.amount,
+              currency: order.currency,
+              name: 'Rejuvenate Digital Health',
+              description: 'Consultation with Dr. ' + (order.doctor_name || state.doctor.name),
+              prefill: {
+                name: formData.get('name') || '',
+                email: formData.get('email') || '',
+                contact: formData.get('phone') || '',
+              },
+              theme: { color: '#0C74C5' },
+              handler: function (response) {
+                formData.append('razorpay_order_id', response.razorpay_order_id);
+                formData.append('razorpay_payment_id', response.razorpay_payment_id);
+                formData.append('razorpay_signature', response.razorpay_signature);
+                busy('Booking…');
+                finalizeBooking(formData);
+              },
+              modal: {
+                ondismiss: function () {
+                  showError('Payment was cancelled. Your appointment was not booked.');
+                },
+              },
+            });
+            rzp.on('payment.failed', function () {
+              showError('Payment failed. Please try again.');
+            });
+            rzp.open();
+          })
+          .catch(() => showError('Network error while starting payment. Please try again.'));
       });
 
       function escHtml(s) {

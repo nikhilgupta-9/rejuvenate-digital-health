@@ -993,7 +993,9 @@ function send_appointment_email( $data) {
  * Optional: doctor_id, doctor_name, abha_number, user_id, notes,
  *           appointment_type ('online'|'clinic', default 'online'),
  *           visit_person ('self'|'other', default 'self'), visited_person_name,
- *           consent_given (bool)
+ *           consent_given (bool), payment_status, payment_amount,
+ *           razorpay_order_id, razorpay_payment_id, razorpay_signature
+ *           (payment_* set by appointment-handler.php after verifying Razorpay)
  */
 function insert_appointment($data) {
     global $conn;
@@ -1022,6 +1024,15 @@ function insert_appointment($data) {
     $consentGiven = !empty($data['consent_given']) ? 1 : 0;
     $consentAt    = $consentGiven ? date('Y-m-d H:i:s') : null;
 
+    // Payment — set by appointment-handler.php after verifying the Razorpay
+    // signature (or 'not_required' when the doctor has no consultation_fee).
+    $paymentStatus  = $data['payment_status'] ?? 'not_required';
+    $paymentAmount  = isset($data['payment_amount']) ? (float) $data['payment_amount'] : null;
+    $razorpayOrder  = $data['razorpay_order_id'] ?? null;
+    $razorpayPayment = $data['razorpay_payment_id'] ?? null;
+    $razorpaySignature = $data['razorpay_signature'] ?? null;
+    $paidAt = $paymentStatus === 'paid' ? date('Y-m-d H:i:s') : null;
+
     $sql = "INSERT INTO appointments (
                 patient_name,
                 patient_email,
@@ -1039,8 +1050,14 @@ function insert_appointment($data) {
                 consent_given,
                 consent_at,
                 status,
+                payment_status,
+                payment_amount,
+                razorpay_order_id,
+                razorpay_payment_id,
+                razorpay_signature,
+                paid_at,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())";
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, NOW())";
 
     $stmt = mysqli_prepare($conn, $sql);
 
@@ -1063,7 +1080,7 @@ function insert_appointment($data) {
     // ✅ THEN BIND
     mysqli_stmt_bind_param(
         $stmt,
-        "ssssiisssssssis",
+        "ssssiisssssssissdssss",
         $name,
         $email,
         $phone,
@@ -1078,7 +1095,13 @@ function insert_appointment($data) {
         $visitPerson,
         $visitedPersonName,
         $consentGiven,
-        $consentAt
+        $consentAt,
+        $paymentStatus,
+        $paymentAmount,
+        $razorpayOrder,
+        $razorpayPayment,
+        $razorpaySignature,
+        $paidAt
     );
 
     // ✅ EXECUTE

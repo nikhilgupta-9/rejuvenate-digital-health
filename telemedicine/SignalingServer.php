@@ -8,6 +8,8 @@ use Ratchet\MessageComponentInterface;
 require_once __DIR__ . '/../lib/JWT.php';
 
 /**
+ * ⚠️ DEPRECATED — not used by the app anymore, see signaling-server.php.
+ *
  * WebRTC signaling for 1:1 doctor/patient video consultations.
  *
  * Auth: the browser connects with ?ticket=<signed JWT> (issued by

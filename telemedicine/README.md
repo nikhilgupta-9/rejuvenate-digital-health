@@ -1,42 +1,36 @@
 # Telemedicine (WebRTC video consultation)
 
-1:1 doctor↔patient video calls, tied to an existing `appointments` row. Video/audio goes **peer-to-peer** (WebRTC) — the PHP server only relays signaling messages (offer/answer/ICE) and chat, so it stays lightweight even under load.
+1:1 doctor↔patient video calls, tied to an existing `appointments` row. Video/audio goes **peer-to-peer** (WebRTC) always. The **signaling** (how the two sides exchange the offer/answer/ICE candidates needed to set up that peer-to-peer link, plus in-call chat) goes over plain **HTTP polling** — no WebSocket, no persistent background process, no custom port. This runs on ordinary shared PHP hosting (built and tested against Hostinger shared/Business hosting).
 
 ## How it fits into the existing app
 
 - No new appointment table. It reuses columns that already existed on `appointments` but were unused: `meeting_provider`, `meeting_link`, `meeting_event_id` (room token), `meeting_status` (`not_created → created → started → completed/cancelled`), `meeting_created_at`, `meeting_started_at`, `meeting_completed_at`.
-- One new table: `telemedicine_chat_messages` (in-call chat history). Migration: `database/migration_telemedicine.sql` — already applied to the local dev DB; run it on any other environment before first use.
+- Three tables support the signaling relay + chat history: `telemedicine_rooms` (presence heartbeat), `telemedicine_signals` (the message mailbox), `telemedicine_chat_messages` (persisted chat history). Migrations: `database/migration_telemedicine.sql` and `database/migration_telemedicine_polling.sql` — already applied to the local dev DB; run both on any other environment before first use.
 - "Join Video Call" buttons were added to `doctor/appointments.php` and `user/my-doctor-appointments.php`, shown only when `appointment_type = 'online'` and `status = 'approved'`.
 
 ## Pieces
 
 | File | Role |
 |---|---|
-| `signaling-server.php` | **Run this from the CLI.** Long-running WebSocket process (Ratchet). Not a normal web-request PHP file. |
-| `SignalingServer.php` | The actual signaling logic: room membership, offer/answer/ICE relay, chat relay + persistence, waiting-room presence, call lifecycle → DB. |
 | `join.php` | Web page a doctor/patient hits from their appointments list. Verifies they own the appointment, creates the room token on first visit, issues a short-lived signed "join ticket," redirects to `room.php`. |
 | `room.php` | The actual call UI (video tiles, mute/camera, chat, end call). Trusts only the signed ticket from `join.php` — never re-touches PHP sessions. |
-| `assets/js/room.js` | `getUserMedia` + `RTCPeerConnection` + the WebSocket client. |
-| `api/end-session.php` | Fallback HTTP endpoint hit via `sendBeacon` on tab close, in case the WebSocket close event doesn't reach the server in time. |
-| `config.php` | Shared constants (WS host/port, ICE servers, ticket signing secret — reuses `JWT_SECRET`). |
+| `assets/js/room.js` | `getUserMedia` + `RTCPeerConnection` for the actual peer-to-peer video/audio, plus the polling client (`send()` posts a signal, a `setInterval` loop calls `poll()` every 2s). |
+| `api/poll.php` | Receive side. Browser calls this every ~2s with its ticket and the last signal `id` it's seen. Marks the caller present (heartbeat), computes whether the peer is currently present, fires the one-time `ready` signal once both sides are simultaneously present (doctor is always the WebRTC offer initiator), and returns any new signals from the other side. |
+| `api/send.php` | Send side. POST `{ticket, type, payload}` — writes one row to `telemedicine_signals` for the peer's next poll to pick up. Handles `offer` / `answer` / `ice-candidate` / `toggle-media` / `chat` (also persisted to `telemedicine_chat_messages`) / `end-call`. |
+| `api/end-session.php` | Fallback HTTP endpoint hit via `sendBeacon` on tab close, in case the browser never gets to click "End call" — marks the appointment completed and posts one last `call-ended` signal so the peer isn't left waiting out the full presence timeout. |
+| `config.php` | Shared constants (ICE servers, ticket signing secret — reuses `JWT_SECRET`). |
 
-## Running it locally
+### Deprecated (kept for reference only)
 
-```bash
-composer require cboden/ratchet   # already installed
-php telemedicine/signaling-server.php
-```
+`signaling-server.php` and `SignalingServer.php` were the original Ratchet-based WebSocket signaling server. **Not used by the app anymore** — see "Why polling, not WebSocket" below. They're left in the repo in case a future move to a VPS makes reviving true WebSocket signaling (lower latency than polling) worthwhile.
 
-It binds to `TELEMED_WS_BIND_HOST:TELEMED_WS_PORT` from `.env` (default `0.0.0.0:8090`). The browser connects to `TELEMED_WS_SCHEME://TELEMED_WS_HOST:TELEMED_WS_PORT` — update `TELEMED_WS_HOST` in `.env` to whatever hostname/IP the browser can actually reach (not `0.0.0.0`).
+## Why polling, not WebSocket
 
-## ⚠️ Production hosting — read before deploying
+A WebSocket signaling server needs a **persistent background process listening on a custom port**. Hostinger shared/Business hosting (cPanel/hPanel) does not support this — only outgoing connections are allowed, and there's no way to open a custom port for incoming traffic or keep a non-PHP-FPM process running. This is a hosting-plan limitation, not something fixable in code, short of moving to a VPS or a managed Node.js hosting product.
 
-Your `.env` points at Hostinger shared cPanel hosting. **Typical shared hosting cannot run this signaling server** — it has no support for long-running background processes or binding to a custom port. Two options:
+HTTP polling works within those constraints because it's just ordinary PHP requests — no different from any other AJAX endpoint in the app.
 
-1. **Get a small VPS** (even the cheapest tier works — this process is very light, it only relays JSON text) and run `signaling-server.php` there under a process supervisor (`systemd`, `supervisord`, or `pm2` via `pm2 start signaling-server.php --interpreter php`), fronted by nginx doing a `wss://` reverse proxy to the PHP process on `127.0.0.1:8090` so it can share your existing domain/SSL cert.
-2. **Ask your host** if they support a persistent Node/PHP process on a custom port (some "Business"/VPS-tier shared hosting does via Cloud Panel or similar — cPanel alone usually doesn't).
-
-The rest of the app (the PHP web pages, MySQL, appointment booking) is unaffected either way — only the signaling server needs this different kind of hosting.
+**Trade-off:** call setup (the offer/answer/ICE handshake) takes a couple of seconds longer than with WebSocket, and chat messages arrive with up to ~2s of latency (the poll interval). **Video/audio quality itself is unaffected** — once connected, the media stream is still direct peer-to-peer WebRTC, not touched by polling at all.
 
 ## What's intentionally out of scope (v1)
 

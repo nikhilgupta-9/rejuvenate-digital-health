@@ -8,6 +8,7 @@
 
 require 'function.php'; // where send_appointment_email() exists
 require_once __DIR__ . '/../lib/AuditLogger.php';
+require_once __DIR__ . '/../config/payment.php';
 
 header('Content-Type: application/json');
 
@@ -117,6 +118,55 @@ if (!empty($_POST['consent_required'])) {
     $data['consent_given'] = true;
 }
 
+// Payment (Razorpay) — only applies when a specific doctor was chosen AND
+// that doctor has a consultation_fee configured. The fee is re-read from
+// the DB here, never trusted from the client, so the amount actually
+// charged (fixed at order-creation time in create-razorpay-order.php)
+// can be verified against what this doctor is really meant to charge.
+// Deliberately the LAST validation before insert: the browser only opens
+// Razorpay Checkout (and captures money) after every other field here has
+// already passed, so a payment is never taken for a request that then
+// turns out to fail some earlier check.
+if ($doctorId) {
+    $feeStmt = $conn->prepare("SELECT consultation_fee FROM doctors WHERE id = ? LIMIT 1");
+    $feeStmt->bind_param('i', $doctorId);
+    $feeStmt->execute();
+    $feeRow = $feeStmt->get_result()->fetch_assoc();
+    $consultationFee = (float) ($feeRow['consultation_fee'] ?? 0);
+
+    if ($consultationFee > 0) {
+        $rpOrderId   = trim($_POST['razorpay_order_id'] ?? '');
+        $rpPaymentId = trim($_POST['razorpay_payment_id'] ?? '');
+        $rpSignature = trim($_POST['razorpay_signature'] ?? '');
+
+        if (!$rpOrderId || !$rpPaymentId || !$rpSignature) {
+            echo json_encode(['status' => 'error', 'message' => 'Payment was not completed. Please try again.']);
+            exit;
+        }
+
+        if (!RAZORPAY_KEY_SECRET) {
+            echo json_encode(['status' => 'error', 'message' => 'Online payment is temporarily unavailable. Please try again later or contact us.']);
+            exit;
+        }
+
+        $expectedSignature = hash_hmac('sha256', $rpOrderId . '|' . $rpPaymentId, RAZORPAY_KEY_SECRET);
+        if (!hash_equals($expectedSignature, $rpSignature)) {
+            try {
+                (new AuditLogger($conn))->logValidationFailure('razorpay_signature', 'Signature mismatch on appointment payment', $data['user_id'] ?? 0, 'patient');
+            } catch (Throwable $e) {
+            }
+            echo json_encode(['status' => 'error', 'message' => 'Payment verification failed. If money was deducted, it will be refunded automatically — please contact us.']);
+            exit;
+        }
+
+        $data['payment_status']      = 'paid';
+        $data['payment_amount']      = $consultationFee;
+        $data['razorpay_order_id']   = $rpOrderId;
+        $data['razorpay_payment_id'] = $rpPaymentId;
+        $data['razorpay_signature']  = $rpSignature;
+    }
+}
+
 // Prevent double-booking the same doctor's slot (best-effort — same
 // check-then-insert pattern already used by the admin booking screen).
 if ($doctorId) {
@@ -139,7 +189,8 @@ if ($appointmentId) {
             'patient',
             $data['user_id'] ?? 0,
             'appointment_booking',
-            'Patient booked an appointment (consent: ' . (!empty($data['consent_given']) ? 'Y' : 'not requested') . ')'
+            'Patient booked an appointment (consent: ' . (!empty($data['consent_given']) ? 'Y' : 'not requested')
+                . ', payment: ' . ($data['payment_status'] ?? 'not_required') . ')'
         );
     } catch (Throwable $e) {
         // Audit failure must never block a successful booking
