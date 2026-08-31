@@ -3,6 +3,7 @@ require_once __DIR__ . '/db-conn.php';
 include_once "functions.php";
 require_once __DIR__ . '/auth/guard.php';
 admin_jwt_guard();
+require_once __DIR__ . '/../util/prescription-render.php';   // render_prescription_view()
 
 // Approve / Reject / Assign Doctor / Delete are all handled via AJAX now
 // (see admin/ajax/appointment-*.php) — this page only renders the list.
@@ -468,6 +469,38 @@ $counts = $count_result->fetch_assoc();
                                                                                 </div>
                                                                             </div>
                                                                         </div>
+
+                                                                        <?php
+                                                                        /* ── Finalised consultation record ── */
+                                                                        $adm_rx = null;
+                                                                        if (!empty($row['doctor_id']) && !empty($row['user_id'])) {
+                                                                            $arx = $conn->prepare("SELECT * FROM prescriptions WHERE appointment_id=? AND status='final' LIMIT 1");
+                                                                            $arx->bind_param('i', $row['id']);
+                                                                            $arx->execute();
+                                                                            $adm_rx = $arx->get_result()->fetch_assoc();
+                                                                            $arx->close();
+                                                                        }
+                                                                        if ($adm_rx):
+                                                                            $ad_doc = $conn->prepare("SELECT name, degrees, specialization, hpr_id, phone FROM doctors WHERE id=? LIMIT 1");
+                                                                            $ad_doc->bind_param('i', $row['doctor_id']); $ad_doc->execute();
+                                                                            $adm_doctor = $ad_doc->get_result()->fetch_assoc() ?: []; $ad_doc->close();
+                                                                            $ad_pat = $conn->prepare("SELECT name, abha_id AS abha_number, abha_address, TIMESTAMPDIFF(YEAR,dob,CURDATE()) AS patient_age, gender FROM users WHERE id=? LIMIT 1");
+                                                                            $ad_pat->bind_param('i', $row['user_id']); $ad_pat->execute();
+                                                                            $adm_patient = $ad_pat->get_result()->fetch_assoc() ?: []; $ad_pat->close();
+                                                                            $ad_dl = $conn->prepare("SELECT document_name, document_type, description, file_path, file_type, uploaded_at FROM patient_documents WHERE appointment_id=? ORDER BY uploaded_at DESC");
+                                                                            $ad_dl->bind_param('i', $row['id']); $ad_dl->execute();
+                                                                            $adm_docs = $ad_dl->get_result()->fetch_all(MYSQLI_ASSOC); $ad_dl->close();
+                                                                        ?>
+                                                                        <div class="card mt-3">
+                                                                            <div class="card-header bg-light"><h6 class="mb-0">Consultation Record</h6></div>
+                                                                            <div class="card-body">
+                                                                                <?php render_prescription_view($adm_rx, $adm_doctor, $adm_patient, $adm_docs, [
+                                                                                    'doc_base' => BASE_URL,
+                                                                                    'pdf_url'  => BASE_URL . 'doctor/opd-slip.php?appointment_id=' . $row['id'],
+                                                                                ]); ?>
+                                                                            </div>
+                                                                        </div>
+                                                                        <?php endif; ?>
                                                                     </div>
                                                                     <div class="modal-footer">
                                                                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>

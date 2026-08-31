@@ -105,7 +105,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         
         $documents_json = json_encode($documents);
-        
+
+        // Derive the display specialization string from the selected departments
+        $selected_dept_names = [];
+        foreach ($departments as $dept) {
+            if (in_array((int) $dept['cate_id'], $doctor_departments, true)) {
+                $selected_dept_names[] = $dept['categories'];
+            }
+        }
+        $specialization = implode(', ', $selected_dept_names);
+
         // Insert doctor
         $referred_by = $referring_doctor['id'] ?? null;
 
@@ -133,7 +142,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $doc_stmt->execute();
                 }
             }
-            
+
+            // Insert selected departments
+            if (!empty($doctor_departments)) {
+                $dept_stmt = $conn->prepare("INSERT INTO doctor_departments (doctor_id, category_id, added_on) VALUES (?, ?, NOW())");
+                foreach ($doctor_departments as $dept_id) {
+                    $dept_stmt->bind_param('ii', $doctor_id, $dept_id);
+                    $dept_stmt->execute();
+                }
+                $dept_stmt->close();
+            }
+
             $success_message = "Registration successful! Your account is pending approval. We'll notify you once it's approved.";
             
             // Clear form
@@ -166,7 +185,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/swiper-bundle.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
   <style>
-   
+
+    .multi-select-dropdown { position: relative; }
+    .multi-select-dropdown .dropdown-menu { max-height: 250px; overflow-y: auto; width: 100%; }
+
     .password-strength {
       height: 5px;
       border-radius: 5px;
@@ -280,18 +302,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                   </div>
                   <div class="col-md-6">
                     <div class="mb-3">
-                      <label for="specialization" class="form-label">Specialization <span class="text-danger">*</span></label>
-                      <select class="form-control" id="specialization" name="specialization" required>
-                        <option value="">Please Select Department</option>
-                        <option value="General Surgery" <?= ($_POST['specialization'] ?? '') == 'General Surgery' ? 'selected' : '' ?>>General Surgery</option>
-                        <option value="Urology" <?= ($_POST['specialization'] ?? '') == 'Urology' ? 'selected' : '' ?>>Urology</option>
-                        <option value="Neuro Surgery" <?= ($_POST['specialization'] ?? '') == 'Neuro Surgery' ? 'selected' : '' ?>>Neuro Surgery</option>
-                        <option value="GI Surgery" <?= ($_POST['specialization'] ?? '') == 'GI Surgery' ? 'selected' : '' ?>>GI Surgery</option>
-                        <option value="Cardiology" <?= ($_POST['specialization'] ?? '') == 'Cardiology' ? 'selected' : '' ?>>Cardiology</option>
-                        <option value="Neurology" <?= ($_POST['specialization'] ?? '') == 'Neurology' ? 'selected' : '' ?>>Neurology</option>
-                        <option value="Pulmonology" <?= ($_POST['specialization'] ?? '') == 'Pulmonology' ? 'selected' : '' ?>>Pulmonology</option>
-                        <!-- Add more specializations as needed -->
-                      </select>
+                      <label class="form-label">Specialization / Departments <span class="text-danger">*</span></label>
+                      <div class="multi-select-dropdown">
+                        <button class="btn btn-light form-control text-start dropdown-toggle" type="button"
+                                id="specializationDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                          <span id="specializationDropdownText">Select Department(s)</span>
+                        </button>
+                        <ul class="dropdown-menu p-3" id="specializationDropdownMenu" style="max-height: 250px; overflow-y: auto; width: 100%;">
+                          <?php if (empty($departments)): ?>
+                            <li><span class="text-muted">No departments found</span></li>
+                          <?php else: foreach ($departments as $dept):
+                            $checked = in_array((int) $dept['cate_id'], array_map('intval', $_POST['department'] ?? []), true) ? 'checked' : '';
+                          ?>
+                            <li>
+                              <label class="form-check mb-2 d-block">
+                                <input class="form-check-input specialization-dept-checkbox" type="checkbox"
+                                       name="department[]" value="<?= (int) $dept['cate_id'] ?>" <?= $checked ?>>
+                                <?= htmlspecialchars($dept['categories']) ?>
+                              </label>
+                            </li>
+                          <?php endforeach; endif; ?>
+                        </ul>
+                      </div>
+                      <div id="specializationSelectedDepartments" class="mt-2">
+                        <small class="text-muted">No departments selected</small>
+                      </div>
                     </div>
                   </div>
                   <div class="col-md-12">
@@ -375,6 +410,45 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
       } else {
         matchDiv.innerHTML = '<small class="text-danger"><i class="fa fa-times"></i> Passwords do not match</small>';
       }
+    });
+  </script>
+  <script>
+    // Department multi-select dropdown (Specialization)
+    document.addEventListener("DOMContentLoaded", function() {
+      const checkboxes = document.querySelectorAll('.specialization-dept-checkbox');
+      const selectedContainer = document.getElementById('specializationSelectedDepartments');
+      const dropdownText = document.getElementById('specializationDropdownText');
+      const dropdownMenu = document.getElementById('specializationDropdownMenu');
+
+      function updateSelectedDepartments() {
+        const selected = [];
+        checkboxes.forEach(cb => {
+          if (cb.checked) selected.push(cb.parentElement.textContent.trim());
+        });
+        if (selected.length > 0) {
+          selectedContainer.innerHTML = selected.map(dept =>
+            `<span class="badge bg-primary me-1 mb-1">${dept}</span>`
+          ).join('');
+          dropdownText.textContent = `${selected.length} department(s) selected`;
+        } else {
+          selectedContainer.innerHTML = '<small class="text-muted">No departments selected</small>';
+          dropdownText.textContent = 'Select Department(s)';
+        }
+      }
+
+      checkboxes.forEach(cb => cb.addEventListener("change", updateSelectedDepartments));
+      updateSelectedDepartments(); // reflects re-checked boxes after a failed submit too
+
+      if (dropdownMenu) {
+        dropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
+      }
+
+      document.getElementById('doctorSignupForm').addEventListener('submit', function(e) {
+        if (document.querySelectorAll('.specialization-dept-checkbox:checked').length === 0) {
+          e.preventDefault();
+          alert('Please select at least one department.');
+        }
+      });
     });
   </script>
 </body>

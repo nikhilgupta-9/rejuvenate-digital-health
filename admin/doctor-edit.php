@@ -10,6 +10,18 @@ include_once "functions.php";
 $doctor = null;
 $success_message = $error_message = '';
 
+// Pick up flash messages set by the verify/unverify actions below (they
+// redirect back to this same page after acting, so the message has to
+// survive via session rather than a local variable).
+if (!empty($_SESSION['success_message'])) {
+    $success_message = $_SESSION['success_message'];
+    unset($_SESSION['success_message']);
+}
+if (!empty($_SESSION['error_message'])) {
+    $error_message = $_SESSION['error_message'];
+    unset($_SESSION['error_message']);
+}
+
 // Fetch doctor data for editing
 if (isset($_GET['id'])) {
     $doctor_id = intval($_GET['id']);
@@ -18,7 +30,7 @@ if (isset($_GET['id'])) {
     $stmt->bind_param('i', $doctor_id);
     $stmt->execute();
     $result = $stmt->get_result();
-    
+
     if ($result->num_rows > 0) {
         $doctor = $result->fetch_assoc();
     } else {
@@ -29,6 +41,82 @@ if (isset($_GET['id'])) {
 } else {
     header("Location: doctors-list.php");
     exit();
+}
+
+// Handle doctor verify / unverify — same logic as doctors-list.php, but
+// redirects back here so the admin can review documents/details and act
+// on them from one page instead of doing it blind from the list.
+if (isset($_GET['verify'])) {
+    try {
+        $admin_id = $_SESSION['admin_id'] ?? 1;
+        $admin_stmt = $conn->prepare("SELECT username FROM admin_user WHERE id = ?");
+        $admin_stmt->bind_param('i', $admin_id);
+        $admin_stmt->execute();
+        $admin_data = $admin_stmt->get_result()->fetch_assoc();
+        $verified_by = $admin_data ? $admin_data['username'] : 'Administrator';
+
+        $update_stmt = $conn->prepare("UPDATE doctors SET is_verified = 1, verified_at = NOW(), verified_by = ? WHERE id = ?");
+        $update_stmt->bind_param('ii', $admin_id, $doctor_id);
+
+        if ($update_stmt->execute()) {
+            $mailSent = send_doctor_verification_email($doctor['email'], $doctor['name'], $verified_by);
+            $_SESSION['success_message'] = "Doctor verified successfully!" . ($mailSent ? '' : " <small class='text-warning'>(Verification email failed to send)</small>");
+        } else {
+            throw new Exception("Failed to verify doctor");
+        }
+    } catch (Exception $e) {
+        $_SESSION['error_message'] = $e->getMessage();
+    }
+    header("Location: doctor-edit.php?id=" . $doctor_id);
+    exit();
+}
+
+if (isset($_GET['unverify'])) {
+    $stmt = $conn->prepare("UPDATE doctors SET is_verified = 0, verified_at = NULL, verified_by = NULL WHERE id = ?");
+    $stmt->bind_param('i', $doctor_id);
+    if ($stmt->execute()) {
+        $_SESSION['success_message'] = "Doctor verification removed.";
+    } else {
+        $_SESSION['error_message'] = "Failed to remove verification.";
+    }
+    header("Location: doctor-edit.php?id=" . $doctor_id);
+    exit();
+}
+
+// Per-document verification toggle (doctor_documents.is_verified)
+if (isset($_GET['verify_doc'])) {
+    $doc_id = intval($_GET['verify_doc']);
+    $stmt = $conn->prepare("UPDATE doctor_documents SET is_verified = 1 WHERE id = ? AND doctor_id = ?");
+    $stmt->bind_param('ii', $doc_id, $doctor_id);
+    $stmt->execute();
+    header("Location: doctor-edit.php?id=" . $doctor_id);
+    exit();
+}
+
+if (isset($_GET['unverify_doc'])) {
+    $doc_id = intval($_GET['unverify_doc']);
+    $stmt = $conn->prepare("UPDATE doctor_documents SET is_verified = 0 WHERE id = ? AND doctor_id = ?");
+    $stmt->bind_param('ii', $doc_id, $doctor_id);
+    $stmt->execute();
+    header("Location: doctor-edit.php?id=" . $doctor_id);
+    exit();
+}
+
+// Uploaded documents for verification review
+$docs_stmt = $conn->prepare("SELECT * FROM doctor_documents WHERE doctor_id = ? ORDER BY uploaded_at DESC");
+$docs_stmt->bind_param('i', $doctor_id);
+$docs_stmt->execute();
+$doctor_documents = $docs_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$docs_stmt->close();
+
+// Referring doctor's name, if this doctor signed up via a referral link
+$referring_doctor_name = null;
+if (!empty($doctor['referred_by'])) {
+    $rd_stmt = $conn->prepare("SELECT name FROM doctors WHERE id = ?");
+    $rd_stmt->bind_param('i', $doctor['referred_by']);
+    $rd_stmt->execute();
+    $rd_row = $rd_stmt->get_result()->fetch_assoc();
+    $referring_doctor_name = $rd_row['name'] ?? null;
 }
 
 // Get current doctor departments
@@ -426,6 +514,99 @@ if (!empty($doctor['gallery_images'])) {
                                     <i class="fas fa-arrow-left me-2"></i> Back to List
                                 </a>
                             </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-12">
+                        <div class="doctor-form mb-4">
+                            <h4 class="section-title">Verification &amp; Documents</h4>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <div class="mb-2"><strong>Email:</strong> <?= htmlspecialchars($doctor['email'] ?: '—') ?></div>
+                                    <div class="mb-2">
+                                        <strong>Phone:</strong> <?= htmlspecialchars($doctor['phone'] ?: '—') ?>
+                                        <?php if ($doctor['mobile_verified']): ?>
+                                            <span class="badge bg-success ms-1"><i class="fas fa-check"></i> Mobile Verified</span>
+                                        <?php else: ?>
+                                            <span class="badge bg-secondary ms-1">Mobile Not Verified</span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <?php if ($referring_doctor_name): ?>
+                                        <div class="mb-2"><strong>Referred By:</strong> Dr. <?= htmlspecialchars($referring_doctor_name) ?></div>
+                                    <?php endif; ?>
+                                    <div class="mb-2">
+                                        <strong>HPR ID:</strong> <?= htmlspecialchars($doctor['hpr_id'] ?: 'Not provided') ?>
+                                        <?php if ($doctor['hpr_verified']): ?>
+                                            <span class="badge bg-success ms-1"><i class="fas fa-check"></i> HPR Verified</span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <?php if (!empty($doctor['nmc_reg_number'])): ?>
+                                        <div class="mb-2"><strong>NMC Reg. No.:</strong> <?= htmlspecialchars($doctor['nmc_reg_number']) ?></div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($doctor['council_name'])): ?>
+                                        <div class="mb-2"><strong>State Medical Council:</strong> <?= htmlspecialchars($doctor['council_name']) ?></div>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="mb-2">
+                                        <strong>Verification Status:</strong><br>
+                                        <?php if ($doctor['is_verified']): ?>
+                                            <span class="badge bg-success"><i class="fas fa-check-circle"></i> Verified</span>
+                                            <?php if ($doctor['verified_at']): ?>
+                                                <small class="text-muted d-block">on <?= date('d M Y, h:i A', strtotime($doctor['verified_at'])) ?></small>
+                                            <?php endif; ?>
+                                        <?php else: ?>
+                                            <span class="badge bg-warning text-dark"><i class="fas fa-clock"></i> Pending</span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <?php if ($doctor['is_verified']): ?>
+                                        <a href="doctor-edit.php?id=<?= $doctor_id ?>&unverify=1" class="btn btn-sm btn-outline-warning"
+                                           onclick="return confirm('Remove verification for this doctor?')">
+                                            <i class="fas fa-times-circle me-1"></i> Unverify Doctor
+                                        </a>
+                                    <?php else: ?>
+                                        <a href="doctor-edit.php?id=<?= $doctor_id ?>&verify=1" class="btn btn-sm btn-success"
+                                           onclick="return confirm('Verify this doctor? A confirmation email will be sent.')">
+                                            <i class="fas fa-check-circle me-1"></i> Verify Doctor
+                                        </a>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+
+                            <hr>
+                            <h6 class="fw-bold mb-3">Uploaded Documents (<?= count($doctor_documents) ?>)</h6>
+                            <?php if (empty($doctor_documents)): ?>
+                                <p class="text-muted mb-0">No documents uploaded.</p>
+                            <?php else: ?>
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle">
+                                        <thead><tr><th>Type</th><th>File</th><th>Uploaded</th><th>Status</th><th>Action</th></tr></thead>
+                                        <tbody>
+                                        <?php foreach ($doctor_documents as $doc): ?>
+                                            <tr>
+                                                <td><?= htmlspecialchars(strtoupper($doc['document_type'])) ?></td>
+                                                <td><a href="<?= BASE_URL . htmlspecialchars($doc['file_path']) ?>" target="_blank" rel="noopener"><?= htmlspecialchars($doc['document_name']) ?></a></td>
+                                                <td><?= date('d M Y', strtotime($doc['uploaded_at'])) ?></td>
+                                                <td>
+                                                    <?php if ($doc['is_verified']): ?>
+                                                        <span class="badge bg-success">Verified</span>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-secondary">Unverified</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <?php if ($doc['is_verified']): ?>
+                                                        <a href="doctor-edit.php?id=<?= $doctor_id ?>&unverify_doc=<?= $doc['id'] ?>" class="btn btn-sm btn-outline-secondary">Unmark</a>
+                                                    <?php else: ?>
+                                                        <a href="doctor-edit.php?id=<?= $doctor_id ?>&verify_doc=<?= $doc['id'] ?>" class="btn btn-sm btn-outline-success">Mark Verified</a>
+                                                    <?php endif; ?>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php endif; ?>
                         </div>
                     </div>
 

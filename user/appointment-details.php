@@ -82,6 +82,42 @@ $status_icons = [
     'no_show'   => 'fa-user-times',
 ];
 $status_icon = $status_icons[$appt['status']] ?? 'fa-question';
+
+/* ── Finalised prescription for this visit (read-only) ── */
+$rx = null;
+$rx_docs = [];
+$rx_doctor = [];
+$rx_patient = [];
+$rs = $conn->prepare("SELECT * FROM prescriptions WHERE appointment_id = ? AND status = 'final' LIMIT 1");
+$rs->bind_param('i', $appt_id);
+$rs->execute();
+$rx = $rs->get_result()->fetch_assoc();
+$rs->close();
+
+if ($rx) {
+    require_once __DIR__ . '/../util/prescription-render.php';
+
+    $ds = $conn->prepare("SELECT name, degrees, specialization, hpr_id, phone FROM doctors WHERE id = ? LIMIT 1");
+    $ds->bind_param('i', $appt['doctor_id']);
+    $ds->execute();
+    $rx_doctor = $ds->get_result()->fetch_assoc() ?: [];
+    $ds->close();
+
+    $ps = $conn->prepare("SELECT name, abha_id AS abha_number, abha_address,
+                                 TIMESTAMPDIFF(YEAR, dob, CURDATE()) AS patient_age, gender
+                          FROM users WHERE id = ? LIMIT 1");
+    $ps->bind_param('i', $user_id);
+    $ps->execute();
+    $rx_patient = $ps->get_result()->fetch_assoc() ?: [];
+    $ps->close();
+
+    $das = $conn->prepare("SELECT document_name, document_type, description, file_path, file_type, uploaded_at
+                           FROM patient_documents WHERE appointment_id = ? ORDER BY uploaded_at DESC");
+    $das->bind_param('i', $appt_id);
+    $das->execute();
+    $rx_docs = $das->get_result()->fetch_all(MYSQLI_ASSOC);
+    $das->close();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -283,6 +319,20 @@ $status_icon = $status_icons[$appt['status']] ?? 'fa-question';
                         <?php endif; ?>
                     </div>
                 </div>
+
+                <?php if ($rx): ?>
+                <div class="profile-card shadow">
+                    <?php render_prescription_view($rx, $rx_doctor, $rx_patient, $rx_docs, [
+                        'title'   => 'Prescription & Reports',
+                        'pdf_url' => BASE_URL . 'doctor/opd-slip.php?appointment_id=' . $appt_id,
+                    ]); ?>
+                </div>
+                <?php elseif (in_array($appt['status'], ['completed'], true)): ?>
+                <div class="profile-card shadow" style="font-size:.85rem;color:#6b7280;">
+                    <i class="fa fa-file-medical me-2 text-primary-theme"></i>
+                    Your prescription for this visit will appear here once the doctor finalises it.
+                </div>
+                <?php endif; ?>
 
             </div>
 
