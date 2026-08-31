@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/auth/guard.php';
 require_once dirname(__DIR__) . '/config/connect.php';
-require_once dirname(__DIR__) . '/config/abdm.php';
 $payload = doctor_jwt_guard();
 $doctor_id = (int) ($payload['doctor_id'] ?? $payload['sub'] ?? 0);
 $sidebar_active = 'patients';
@@ -17,6 +16,14 @@ require_once __DIR__ . '/inc/sidebar.php';
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/style.css">
+  <style>
+    .ap-divider{display:flex;align-items:center;gap:12px;margin:26px 0 16px;color:#9ca3af;
+      font-size:.72rem;font-weight:700;letter-spacing:.8px;text-transform:uppercase;}
+    .ap-divider::before,.ap-divider::after{content:'';flex:1;height:1px;background:#e5e7eb;}
+    .m-badge.soon{background:#9ca3af;}
+    .ptype{border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px;font-size:.82rem;color:#4b5563;background:#fbfbfd;}
+    .ptype b{color:#1f2937;}
+  </style>
 </head>
 
 <body>
@@ -25,7 +32,7 @@ require_once __DIR__ . '/inc/sidebar.php';
     <div class="ap-header">
       <div>
         <h5 class="mb-0 font-weight-bold" style="color:#1f2937;">Add Patient</h5>
-        <div class="ap-sub">Choose how you want to add this patient to your panel</div>
+        <div class="ap-sub">Register a new patient or link one that is already on the portal</div>
       </div>
       <a href="<?= BASE_URL ?>doctor/my-patients.php" class="btn-back">
         <i class="fa fa-arrow-left mr-1"></i> Back
@@ -35,73 +42,62 @@ require_once __DIR__ . '/inc/sidebar.php';
     <div class="row">
       <div class="col-lg-8">
 
-        <?php if (!ABDM_CONFIGURED): ?>
-          <div class="alert alert-warning mb-3" style="border-radius:10px;font-size:.82rem;">
-            <i class="fa fa-exclamation-triangle mr-2"></i>
-            <strong>ABDM not configured.</strong> Set <code>ABDM_CLIENT_ID</code> and <code>ABDM_CLIENT_SECRET</code> in
-            <code>.env</code>.
-          </div>
-        <?php endif; ?>
+        <div class="ptype mb-3">
+          <i class="fa fa-info-circle mr-1" style="color:#0C74C5;"></i>
+          Two kinds of patient: <b>with an ABHA</b> and <b>without an ABHA</b>. Both register the same way &mdash;
+          verified by <b>WhatsApp OTP</b>. If the patient has an ABHA number, add it in the form; live ABDM
+          verification will switch on once the integration is ready.
+        </div>
 
-        <!-- Primary: ABHA Verification -->
-        <a href="<?= BASE_URL ?>doctor/add-patient-abha.php" class="method-card mb-3" style="--c:#0C74C5;">
-          <div class="m-icon"><i class="fa fa-id-card"></i></div>
+        <!-- Primary: register with WhatsApp OTP -->
+        <a href="<?= BASE_URL ?>doctor/add-patient-manual.php" class="method-card mb-3" style="--c:#0C74C5;">
+          <div class="m-icon"><i class="fa fa-user-plus"></i></div>
           <div class="m-body">
             <div class="m-badge">RECOMMENDED</div>
-            <div class="m-title">Verify Existing ABHA</div>
-            <div class="m-desc">Patient already has ABHA? Verify using Aadhaar OTP or mobile OTP — ABDM will find their
-              existing ABHA and pull the full profile instantly.</div>
+            <div class="m-title">Register New Patient</div>
+            <div class="m-desc">Fill the patient's details and verify their mobile with a WhatsApp OTP.
+              Works whether or not they have an ABHA &mdash; add the ABHA number if they have one.</div>
             <div class="m-tags">
-              <span class="text-success"><i class="fa fa-check-circle"></i> Aadhaar OTP</span>
-              <span class="text-info">Mobile OTP</span>
-              <span class="text-secondary">ABHA Number</span>
-              <span class="text-secondary">ABHA Address</span>
+              <span class="text-success"><i class="fa fa-whatsapp"></i> WhatsApp OTP</span>
+              <span class="text-info">ABHA optional</span>
+              <span class="text-secondary">No ABHA needed</span>
             </div>
           </div>
           <div class="m-chevron"><i class="fa fa-chevron-right"></i></div>
         </a>
 
-        <!-- Create New ABHA -->
-        <a href="<?= BASE_URL ?>doctor/add-patient-new-abha.php" class="method-card mb-3" style="--c:#02c9b8;">
-          <div class="m-icon"><i class="fa fa-plus-circle"></i></div>
-          <div class="m-body">
-            <div class="m-badge" style="background:#02c9b8;">NEW</div>
-            <div class="m-title">Create New ABHA for Patient</div>
-            <div class="m-desc">Patient has no ABHA yet. Enter their Aadhaar → OTP → Create new ABHA number on ABDM in
-              seconds.</div>
-            <div class="m-tags">
-              <span class="text-success"><i class="fa fa-check-circle"></i> Aadhaar OTP required</span>
-            </div>
-          </div>
-          <div class="m-chevron"><i class="fa fa-chevron-right"></i></div>
-        </a>
-
-        <!-- Mobile Search -->
+        <!-- Link an existing portal patient -->
         <a href="<?= BASE_URL ?>doctor/add-patient-mobile.php" class="method-card mb-3" style="--c:#7c3aed;">
           <div class="m-icon"><i class="fa fa-phone"></i></div>
           <div class="m-body">
             <div class="m-title">Search by Mobile Number</div>
-            <div class="m-desc">Already in your portal? Search by 10-digit mobile and link instantly without ABDM
-              verification.</div>
+            <div class="m-desc">Patient already registered on the portal? Search by their 10-digit mobile
+              and link them to your panel instantly.</div>
             <div class="m-tags">
-              <span><i class="fa fa-search"></i> Quick search</span>
+              <span><i class="fa fa-search"></i> Quick link</span>
             </div>
           </div>
           <div class="m-chevron"><i class="fa fa-chevron-right"></i></div>
         </a>
 
-        <!-- Manual Entry -->
-        <a href="<?= BASE_URL ?>doctor/add-patient-manual.php" class="method-card mb-3" style="--c:#e07e18;">
-          <div class="m-icon"><i class="fa fa-pencil"></i></div>
+        <div class="ap-divider">ABHA verification</div>
+
+        <!-- Coming soon: live ABDM verification -->
+        <div class="method-card disabled mb-3" style="--c:#02c9b8;">
+          <div class="m-icon"><i class="fa fa-id-card"></i></div>
           <div class="m-body">
-            <div class="m-title">Fill Form Manually</div>
-            <div class="m-desc">No Aadhaar, no ABHA. Fill basic details manually. ABHA can be linked later.</div>
+            <div class="m-badge soon">COMING SOON</div>
+            <div class="m-title">Verify / Create ABHA via ABDM</div>
+            <div class="m-desc">Live Aadhaar-OTP and mobile-OTP ABHA verification, and new ABHA creation,
+              through the ABDM gateway. Being integrated &mdash; for now, record the ABHA number
+              directly on the registration form.</div>
             <div class="m-tags">
-              <span><i class="fa fa-user"></i> Manual entry</span>
+              <span><i class="fa fa-clock-o"></i> Aadhaar OTP</span>
+              <span>Mobile OTP</span>
+              <span>Create new ABHA</span>
             </div>
           </div>
-          <div class="m-chevron"><i class="fa fa-chevron-right"></i></div>
-        </a>
+        </div>
 
       </div>
 
@@ -110,18 +106,19 @@ require_once __DIR__ . '/inc/sidebar.php';
         <div class="info-panel">
           <div class="info-head"><i class="fa fa-info-circle"></i> How it works</div>
           <div class="info-body">
-            <div class="info-item"><i class="fa fa-check-circle"></i> <span><strong>ABHA</strong> = Ayushman Bharat
-                Health Account</span></div>
-            <div class="info-item"><i class="fa fa-check-circle"></i> <span>One ABHA per patient across India</span>
-            </div>
-            <div class="info-item"><i class="fa fa-check-circle"></i> <span>Verify via Aadhaar OTP in under a
-                minute</span></div>
-            <div class="info-item"><i class="fa fa-check-circle"></i> <span>Automatic profile pull from ABDM</span>
-            </div>
-            <div class="info-item"><i class="fa fa-check-circle"></i> <span>No duplicate ABHA creation</span></div>
+            <div class="info-item"><i class="fa fa-check-circle"></i> <span>Every patient is verified by a
+                <strong>WhatsApp OTP</strong> sent to their mobile (and email)</span></div>
+            <div class="info-item"><i class="fa fa-check-circle"></i> <span>The OTP goes to the patient &mdash;
+                they read the code back to you</span></div>
+            <div class="info-item"><i class="fa fa-check-circle"></i> <span><strong>Has ABHA:</strong> enter the
+                14-digit number on the form (stored now, verified later)</span></div>
+            <div class="info-item"><i class="fa fa-check-circle"></i> <span><strong>No ABHA:</strong> just register
+                &mdash; ABHA can be linked any time</span></div>
+            <div class="info-item"><i class="fa fa-check-circle"></i> <span>Already on the portal? Use
+                <strong>Search by Mobile</strong> &mdash; no OTP needed</span></div>
             <div class="info-footer">
               <span><i class="fa fa-shield"></i> Secure</span>
-              <span><i class="fa fa-lock"></i> Encrypted</span>
+              <span><i class="fa fa-lock"></i> Consent logged</span>
             </div>
           </div>
         </div>

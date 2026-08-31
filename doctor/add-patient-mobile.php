@@ -101,10 +101,11 @@ document.getElementById('btnSearch').addEventListener('click',function(){
       area.innerHTML='<div class="not-found-card">'
         +'<div style="font-weight:700;font-size:.9rem;color:#92400e;">No patient found with this mobile</div>'
         +'<div style="font-size:.82rem;color:#78350f;margin-top:6px;">This number is not registered in the portal.</div>'
-        +'<div class="mt-3 d-flex" style="gap:8px;">'
-        +'<a href="'+BASE+'doctor/add-patient-abha.php" class="btn btn-outline-primary btn-sm"><i class="fa fa-id-card-o mr-1"></i> Verify via ABHA</a>'
-        +'<a href="'+BASE+'doctor/add-patient-manual.php?mobile='+mob+'" class="btn btn-outline-secondary btn-sm"><i class="fa fa-pencil mr-1"></i> Create Manually</a>'
-        +'</div></div>';
+        +'<div class="mt-3">'
+        +'<a href="'+BASE+'doctor/add-patient-manual.php?mobile='+mob+'" class="btn btn-primary btn-sm"><i class="fa fa-user-plus mr-1"></i> Register this patient</a>'
+        +'</div>'
+        +'<div style="font-size:.74rem;color:#9ca3af;margin-top:6px;">You\'ll verify their mobile with a WhatsApp OTP on the next step.</div>'
+        +'</div>';
     }
   }).catch(()=>{btn.disabled=false;btn.innerHTML='<i class="fa fa-search mr-1"></i> Search';
     document.getElementById('errSearch').style.display='block';document.getElementById('errSearch').textContent='Network error';});

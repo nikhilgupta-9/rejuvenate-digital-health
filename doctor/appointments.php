@@ -154,6 +154,7 @@ if (!empty($params)) {
 
 $appointments_stmt->execute();
 $appointments_result = $appointments_stmt->get_result();
+$appointments = $appointments_result->fetch_all(MYSQLI_ASSOC);
 
 // Get appointment statistics
 $stats_sql = "
@@ -189,7 +190,7 @@ $next_week = (clone $week_start_dt)->modify('+7 days')->format('Y-m-d');
 function appt_url($overrides, $status_filter, $search_query)
 {
     $params = array_filter([
-        'status' => $status_filter,
+        'status' => $overrides['status'] ?? $status_filter,
         'search' => $search_query,
         'date'   => $overrides['date'] ?? null,
     ], fn($v) => $v !== null && $v !== '' && $v !== 'all');
@@ -198,263 +199,118 @@ function appt_url($overrides, $status_filter, $search_query)
 
 $sidebar_active = 'appointments';
 require_once __DIR__ . '/inc/sidebar.php';
+
+/* Status → colour map (shared by badges + week strip) */
+$STATUS_META = [
+    'pending'   => ['Pending',   '#f59e0b', '#fff7e6'],
+    'approved'  => ['Approved',  '#0C74C5', '#e7f2fb'],
+    'completed' => ['Completed', '#0e7c5b', '#e6f6f0'],
+    'rejected'  => ['Cancelled', '#dc2626', '#fdecec'],
+    'no_show'   => ['No Show',   '#6b7280', '#f1f2f4'],
+];
+function stat_card_link($key, $status_filter, $search_query)
+{
+    return appt_url(['status' => $key], $status_filter, $search_query);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="author" content="modinatheme">
-    <meta name="description" content="">
-    <title>REJUVENATE Digital Health - Appointments</title>
+    <title>Appointments — REJUVENATE Digital Health</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
     <style>
-        .profile-card {
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            border: 1px solid #dee2e6;
+        .ap-h { font-size: 1.15rem; font-weight: 700; color: #1f2937; margin: 0; }
+        .ap-sub { font-size: .8rem; color: #9ca3af; }
+
+        /* ── Week strip ── */
+        .week-strip-card { background: linear-gradient(135deg, var(--primary), var(--primary-dk)); border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; color: #fff; }
+        .week-strip-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .week-strip-nav a { color: #fff; text-decoration: none; padding: 2px 10px; font-size: 1rem; }
+        .week-strip-label { font-weight: 600; font-size: .9rem; }
+        .week-strip-days { display: flex; gap: 4px; }
+        .week-day { flex: 1; text-align: center; text-decoration: none; color: rgba(255,255,255,.85); padding: 6px 2px; border-radius: 10px; transition: .15s; }
+        .week-day:hover { background: rgba(255,255,255,.14); color: #fff; }
+        .week-day .wd-label { font-size: .62rem; text-transform: uppercase; letter-spacing: .5px; display: block; margin-bottom: 3px; }
+        .week-day .wd-num { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; font-weight: 600; font-size: .85rem; }
+        .week-day.is-today .wd-num { border: 2px solid #fff; }
+        .week-day.is-selected .wd-num { background: #fff; color: var(--primary); }
+        .week-strip-all { font-size: .72rem; color: rgba(255,255,255,.9); text-decoration: underline; }
+
+        /* ── Stat chips ── */
+        .stat-row { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 16px; -webkit-overflow-scrolling: touch; }
+        .stat-chip { flex: 1 0 96px; min-width: 96px; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 12px; text-decoration: none; transition: .15s; }
+        .stat-chip:hover { border-color: var(--primary); box-shadow: 0 4px 14px rgba(12,116,197,.12); transform: translateY(-2px); }
+        .stat-chip.active { border-color: var(--primary); background: #f0f7ff; }
+        .stat-chip .sc-num { font-size: 1.35rem; font-weight: 800; line-height: 1; }
+        .stat-chip .sc-lbl { font-size: .68rem; text-transform: uppercase; letter-spacing: .4px; color: #6b7280; margin-top: 4px; }
+
+        /* ── Card ── */
+        .ap-panel { background: #fff; border-radius: 14px; box-shadow: 0 2px 14px rgba(17,24,39,.06); padding: 18px; }
+        .ap-panel-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+        .filter-bar { display: flex; flex-wrap: wrap; gap: 8px; }
+        .filter-bar .form-control, .filter-bar .form-select { font-size: .85rem; }
+
+        .badge-status { padding: 3px 10px; border-radius: 20px; font-size: .72rem; font-weight: 700; display: inline-block; }
+        .patient-avatar { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; background: #eef2f7; display: flex; align-items: center; justify-content: center; color: #9ca3af; flex-shrink: 0; }
+        .status-dropdown { padding: 3px 6px; border-radius: 6px; font-size: .78rem; border: 1px solid #d1d5db; max-width: 130px; }
+        .ap-actions .btn { padding: 4px 9px; font-size: .8rem; }
+
+        /* desktop table vs mobile cards */
+        .ap-table-wrap { display: none; }
+        .ap-cards-wrap { display: block; }
+        @media (min-width: 768px) {
+            .ap-table-wrap { display: block; }
+            .ap-cards-wrap { display: none; }
         }
+        table.ap-table { width: 100%; border-collapse: collapse; }
+        table.ap-table th { background: #f0f7ff; color: var(--primary); font-size: .72rem; text-transform: uppercase; letter-spacing: .4px; padding: 9px 10px; text-align: left; white-space: nowrap; }
+        table.ap-table td { padding: 10px; border-bottom: 1px solid #eef2f7; vertical-align: middle; font-size: .86rem; }
+        table.ap-table tr.is-today td { background: #f0f7ff; }
 
-        .stats-card {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            margin-bottom: 15px;
-            text-align: center;
-        }
+        .ap-card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+        .ap-card.is-today { border-color: var(--primary); background: #f6fbff; }
+        .ap-card .ac-top { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
+        .ap-card .ac-meta { font-size: .78rem; color: #6b7280; }
+        .ap-card .ac-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
 
-        .badge-status {
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 500;
-        }
-
-        .badge-pending {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        .badge-approved {
-            background: #d1ecf1;
-            color: #0c5460;
-        }
-
-        .badge-completed {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .badge-rejected {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .badge-no_show {
-            background: #e2e3e5;
-            color: #383d41;
-        }
-
-        .filter-section {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-
-        .calendar-icon {
-            cursor: pointer;
-            background: #02c9b8;
-            color: white;
-            padding: 8px 12px;
-            border-radius: 0 5px 5px 0;
-        }
-
-        .appointment-time {
-            font-weight: bold;
-            color: #2c5aa0;
-        }
-
-        .patient-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            object-fit: cover;
-            margin-right: 10px;
-        }
-
-        .status-dropdown {
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            border: 1px solid #ddd;
-        }
-
-        .appointment-id {
-            font-size: 10px;
-            color: #666;
-            font-family: monospace;
-        }
-
-        /* ── Week-strip date navigator ── */
-        .week-strip-card {
-            background: linear-gradient(135deg, var(--primary), var(--primary-dk));
-            border-radius: 14px;
-            padding: 14px 16px;
-            margin-bottom: 20px;
-            color: #fff;
-        }
-
-        .week-strip-nav {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 10px;
-        }
-
-        .week-strip-nav a {
-            color: #fff;
-            font-size: 1.1rem;
-            text-decoration: none;
-            padding: 4px 10px;
-        }
-
-        .week-strip-nav a:hover {
-            opacity: .75;
-        }
-
-        .week-strip-label {
-            font-weight: 600;
-            font-size: .92rem;
-        }
-
-        .week-strip-days {
-            display: flex;
-            justify-content: space-between;
-            gap: 6px;
-        }
-
-        .week-day {
-            flex: 1;
-            text-align: center;
-            text-decoration: none;
-            color: rgba(255, 255, 255, .85);
-            padding: 8px 2px;
-            border-radius: 10px;
-            transition: .15s;
-        }
-
-        .week-day:hover {
-            background: rgba(255, 255, 255, .12);
-            color: #fff;
-            text-decoration: none;
-        }
-
-        .week-day .wd-label {
-            font-size: .68rem;
-            text-transform: uppercase;
-            letter-spacing: .5px;
-            display: block;
-            margin-bottom: 4px;
-        }
-
-        .week-day .wd-num {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            font-weight: 600;
-            font-size: .9rem;
-        }
-
-        .week-day.is-today .wd-num {
-            border: 2px solid #fff;
-        }
-
-        .week-day.is-selected .wd-num {
-            background: #fff;
-            color: var(--primary);
-        }
-
-        .week-strip-all {
-            font-size: .74rem;
-            color: rgba(255, 255, 255, .85);
-            text-decoration: underline;
-        }
-
-        .week-strip-all:hover {
-            color: #fff;
-        }
-
-        /* ── Floating add button ── */
-        .fab-add {
-            position: fixed;
-            right: 28px;
-            bottom: 28px;
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-            background: #e07e18;
-            color: #fff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.4rem;
-            box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
-            z-index: 1040;
-            text-decoration: none;
-            transition: .15s;
-        }
-
-        .fab-add:hover {
-            background: #c96b0f;
-            color: #fff;
-            transform: scale(1.05);
-        }
-
-        @media (max-width: 768px) {
-            .table-responsive {
-                font-size: 12px;
-            }
-
-            .week-day .wd-label {
-                font-size: .6rem;
-            }
-
-            .week-day .wd-num {
-                width: 26px;
-                height: 26px;
-                font-size: .8rem;
-            }
-        }
+        .fab-add { position: fixed; right: 20px; bottom: 20px; width: 52px; height: 52px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; box-shadow: 0 4px 14px rgba(0,0,0,.22); z-index: 1040; text-decoration: none; }
+        .fab-add:hover { background: var(--accent-dk); color: #fff; }
+        @media (min-width: 992px) { .fab-add { display: none; } }
     </style>
 </head>
 
 <body>
     <main class="doctor-content">
-        <!-- Success/Error Messages -->
-        <?php if (!empty($success_message)): ?>
+
+        <?php if ($success_message): ?>
             <div class="alert alert-success alert-dismissible fade show" role="alert">
-                <?= htmlspecialchars($success_message) ?>
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                <i class="fa fa-check-circle me-1"></i><?= htmlspecialchars($success_message) ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         <?php endif; ?>
-
-        <?php if (!empty($error_message)): ?>
+        <?php if ($error_message): ?>
             <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                <?= htmlspecialchars($error_message) ?>
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                <i class="fa fa-exclamation-circle me-1"></i><?= htmlspecialchars($error_message) ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         <?php endif; ?>
 
-        <!-- Week-strip date navigator -->
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <div>
+                <h1 class="ap-h">Appointments</h1>
+                <div class="ap-sub">Manage your patient consultations</div>
+            </div>
+            <a href="add-appointment.php" class="btn btn-primary btn-sm d-none d-lg-inline-flex align-items-center" style="background:var(--primary);border-color:var(--primary);">
+                <i class="fa fa-plus me-1"></i> New Appointment
+            </a>
+        </div>
+
+        <!-- Week strip -->
         <div class="week-strip-card">
             <div class="week-strip-nav">
                 <a href="<?= appt_url(['date' => $prev_week], $status_filter, $search_query) ?>"><i class="fa fa-chevron-left"></i></a>
@@ -482,268 +338,257 @@ require_once __DIR__ . '/inc/sidebar.php';
             <?php endif; ?>
         </div>
 
-        <!-- Statistics Cards -->
-        <div class="row mb-4">
-            <div class="col-md-2 col-6">
-                <div class="stats-card">
-                    <h6>Total</h6>
-                    <h4 class="text-primary"><?= $stats['total_appointments'] ?? 0 ?></h4>
-                </div>
-            </div>
-            <div class="col-md-2 col-6">
-                <div class="stats-card">
-                    <h6>Today</h6>
-                    <h4 class="text-info"><?= $stats['today_count'] ?? 0 ?></h4>
-                </div>
-            </div>
-            <div class="col-md-2 col-6">
-                <div class="stats-card">
-                    <h6>Pending</h6>
-                    <h4 class="text-warning"><?= $stats['pending_count'] ?? 0 ?></h4>
-                </div>
-            </div>
-            <div class="col-md-2 col-6">
-                <div class="stats-card">
-                    <h6>Approved</h6>
-                    <h4 class="text-success"><?= $stats['approved_count'] ?? 0 ?></h4>
-                </div>
-            </div>
-            <div class="col-md-2 col-6">
-                <div class="stats-card">
-                    <h6>Completed</h6>
-                    <h4 class="text-secondary"><?= $stats['completed_count'] ?? 0 ?></h4>
-                </div>
-            </div>
-            <div class="col-md-2 col-6">
-                <div class="stats-card">
-                    <h6>Rejected</h6>
-                    <h4 class="text-danger"><?= $stats['rejected_count'] ?? 0 ?></h4>
-                </div>
-            </div>
-        </div>
-
-        <!-- Filter Section -->
-        <div class="filter-section">
-            <form method="GET" action="" class="row g-3">
-                <input type="hidden" name="date" value="<?= htmlspecialchars($date_filter) ?>">
-                <div class="col-md-4">
-                    <label>Status Filter</label>
-                    <select name="status" class="form-select">
-                        <option value="all" <?= $status_filter == 'all' ? 'selected' : '' ?>>All Appointments</option>
-                        <option value="pending" <?= $status_filter == 'pending' ? 'selected' : '' ?>>Pending</option>
-                        <option value="approved" <?= $status_filter == 'approved' ? 'selected' : '' ?>>Approved</option>
-                        <option value="completed" <?= $status_filter == 'completed' ? 'selected' : '' ?>>Completed</option>
-                        <option value="rejected" <?= $status_filter == 'rejected' ? 'selected' : '' ?>>Rejected</option>
-                        <option value="no_show" <?= $status_filter == 'no_show' ? 'selected' : '' ?>>No Show</option>
-                    </select>
-                </div>
-                <div class="col-md-5">
-                    <label>Search Patient</label>
-                    <input type="text" name="search" class="form-control"
-                        placeholder="Name, Email or Phone"
-                        value="<?= htmlspecialchars($search_query) ?>">
-                </div>
-                <div class="col-md-3 d-flex align-items-end">
-                    <button type="submit" class="btn btn-primary me-2">Apply Filter</button>
-                    <a href="appointments.php" class="btn btn-secondary">Reset</a>
-                </div>
-            </form>
-        </div>
-
-        <!-- Appointments Table -->
-        <div class="profile-card shadow">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h4 class="mb-0">Appointments (<?= $appointments_result->num_rows ?>)</h4>
-                <a href="add-appointment.php" class="btn btn-primary btn-sm">
-                    <i class="fa fa-plus"></i> Add New Appointment
+        <!-- Stat chips (click to filter) -->
+        <div class="stat-row">
+            <a class="stat-chip <?= $status_filter === 'all' ? 'active' : '' ?>" href="<?= appt_url(['status' => 'all'], 'all', $search_query) ?>">
+                <div class="sc-num" style="color:#1f2937;"><?= (int)($stats['total_appointments'] ?? 0) ?></div>
+                <div class="sc-lbl">Total</div>
+            </a>
+            <a class="stat-chip" href="<?= appt_url(['date' => date('Y-m-d')], $status_filter, $search_query) ?>">
+                <div class="sc-num" style="color:var(--accent-dk);"><?= (int)($stats['today_count'] ?? 0) ?></div>
+                <div class="sc-lbl">Today</div>
+            </a>
+            <?php foreach (['pending' => 'pending_count', 'approved' => 'approved_count', 'completed' => 'completed_count', 'rejected' => 'rejected_count'] as $key => $col): ?>
+                <a class="stat-chip <?= $status_filter === $key ? 'active' : '' ?>" href="<?= appt_url(['status' => $key], $status_filter, $search_query) ?>">
+                    <div class="sc-num" style="color:<?= $STATUS_META[$key][1] ?>;"><?= (int)($stats[$col] ?? 0) ?></div>
+                    <div class="sc-lbl"><?= $STATUS_META[$key][0] ?></div>
                 </a>
+            <?php endforeach; ?>
+        </div>
+
+        <div class="ap-panel">
+            <div class="ap-panel-head">
+                <h5 class="mb-0" style="font-size:1rem;font-weight:700;color:#1f2937;">
+                    <?= count($appointments) ?> appointment<?= count($appointments) === 1 ? '' : 's' ?>
+                </h5>
+                <form method="GET" action="" class="filter-bar">
+                    <input type="hidden" name="date" value="<?= htmlspecialchars($date_filter) ?>">
+                    <select name="status" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+                        <?php foreach (['all' => 'All statuses', 'pending' => 'Pending', 'approved' => 'Approved', 'completed' => 'Completed', 'rejected' => 'Cancelled', 'no_show' => 'No Show'] as $k => $lbl): ?>
+                            <option value="<?= $k ?>" <?= $status_filter === $k ? 'selected' : '' ?>><?= $lbl ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <input type="text" name="search" class="form-control form-control-sm" style="width:170px;"
+                        placeholder="Name / phone / email" value="<?= htmlspecialchars($search_query) ?>">
+                    <button type="submit" class="btn btn-primary btn-sm" style="background:var(--primary);border-color:var(--primary);">
+                        <i class="fa fa-search"></i>
+                    </button>
+                    <?php if ($status_filter !== 'all' || $search_query !== '' || $date_filter !== ''): ?>
+                        <a href="appointments.php" class="btn btn-outline-secondary btn-sm">Reset</a>
+                    <?php endif; ?>
+                </form>
             </div>
 
-            <?php if ($appointments_result->num_rows == 0): ?>
+            <?php if (empty($appointments)): ?>
                 <div class="text-center py-5">
-                    <h5>No appointments found</h5>
-                    <p class="text-muted">
-                        <?= !empty($date_filter) ? 'No appointments on ' . date('d M Y', strtotime($date_filter)) . '.' : "You don't have any appointments yet." ?>
+                    <i class="fa fa-calendar-o" style="font-size:2.4rem;color:#d1d5db;"></i>
+                    <h6 class="mt-3 mb-1">No appointments found</h6>
+                    <p class="text-muted" style="font-size:.85rem;">
+                        <?= !empty($date_filter) ? 'Nothing on ' . date('d M Y', strtotime($date_filter)) . '.' : 'Adjust the filters or add a new appointment.' ?>
                     </p>
-                    <a href="add-appointment.php" class="btn btn-primary">
-                        <i class="fa fa-plus"></i> Create an Appointment
+                    <a href="add-appointment.php" class="btn btn-primary btn-sm" style="background:var(--primary);border-color:var(--primary);">
+                        <i class="fa fa-plus me-1"></i> Add Appointment
                     </a>
                 </div>
             <?php else: ?>
-                <div class="table-responsive">
-                    <table class="table table-striped">
+
+                <?php
+                /* Reusable per-row bits */
+                $render_status_form = function ($a) {
+                    $disabled = in_array($a['status'], ['completed', 'rejected'], true) ? 'disabled' : '';
+                    ob_start(); ?>
+                    <form method="POST" action="" class="d-inline">
+                        <input type="hidden" name="appointment_id" value="<?= $a['appointment_id'] ?>">
+                        <input type="hidden" name="update_status" value="1">
+                        <select name="status" class="status-dropdown" onchange="this.form.submit()" <?= $disabled ?>>
+                            <?php foreach (['pending' => 'Pending', 'approved' => 'Approved', 'completed' => 'Completed', 'rejected' => 'Cancelled', 'no_show' => 'No Show'] as $k => $lbl): ?>
+                                <option value="<?= $k ?>" <?= $a['status'] === $k ? 'selected' : '' ?>><?= $lbl ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </form>
+                    <?php return ob_get_clean();
+                };
+                $render_actions = function ($a) {
+                    ob_start(); ?>
+                    <div class="btn-group btn-group-sm ap-actions">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#apView<?= $a['appointment_id'] ?>" title="Details">
+                            <i class="fa fa-eye"></i>
+                        </button>
+                        <a href="patient-form.php?appointment_id=<?= $a['appointment_id'] ?>" class="btn btn-outline-success" title="Prescription">
+                            <i class="fa fa-file-medical"></i>
+                        </a>
+                        <?php if ($a['status'] === 'approved' && $a['appointment_type'] === 'online' && $a['meeting_status'] !== 'cancelled'): ?>
+                            <a href="<?= BASE_URL ?>telemedicine/join.php?appointment_id=<?= $a['appointment_id'] ?>" class="btn btn-primary" target="_blank" title="Join video call" style="background:var(--primary);border-color:var(--primary);">
+                                <i class="fa fa-video"></i>
+                            </a>
+                        <?php endif; ?>
+                        <?php if (!in_array($a['status'], ['rejected', 'completed'], true)): ?>
+                            <a href="appointments.php?cancel_appointment=<?= $a['appointment_id'] ?>" class="btn btn-outline-danger"
+                                onclick="return confirm('Cancel this appointment?')" title="Cancel">
+                                <i class="fa fa-times"></i>
+                            </a>
+                        <?php endif; ?>
+                    </div>
+                    <?php return ob_get_clean();
+                };
+                ?>
+
+                <!-- Desktop table -->
+                <div class="ap-table-wrap">
+                    <table class="ap-table">
                         <thead>
                             <tr>
-                                <th>ID</th>
                                 <th>Patient</th>
-                                <th>Appointment Date & Time</th>
+                                <th>Date &amp; Time</th>
                                 <th>Purpose</th>
-                                <th>Contact</th>
                                 <th>Status</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php $counter = 1; ?>
-                            <?php while ($appointment = $appointments_result->fetch_assoc()): ?>
+                            <?php foreach ($appointments as $a): ?>
                                 <?php
-                                $status_class = 'badge-' . ($appointment['status'] ?: 'pending');
-                                $status_label = ucfirst(str_replace('_', ' ', $appointment['status'] ?: 'pending'));
-
-                                // Check if appointment is today
-                                $is_today = date('Y-m-d') == date('Y-m-d', strtotime($appointment['appointment_date']));
-                                $is_past = strtotime($appointment['appointment_date']) < strtotime(date('Y-m-d'));
+                                $meta = $STATUS_META[$a['status']] ?? $STATUS_META['pending'];
+                                $is_today = date('Y-m-d') === date('Y-m-d', strtotime($a['appointment_date']));
+                                $is_past  = strtotime($a['appointment_date']) < strtotime(date('Y-m-d'));
                                 ?>
-
-                                <tr <?= $is_today ? 'style="background-color: #e8f4f8;"' : '' ?>>
+                                <tr class="<?= $is_today ? 'is-today' : '' ?>">
                                     <td>
-                                        <div class="appointment-id">APT<?= str_pad($appointment['appointment_id'], 6, '0', STR_PAD_LEFT) ?></div>
-                                        <small class="text-muted">#<?= $counter ?></small>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex align-items-center">
-                                            <?php if (!empty($appointment['patient_image'])): ?>
-                                                <img src="<?= BASE_URL . $appointment['patient_image'] ?>"
-                                                    class="patient-avatar"
-                                                    onerror="this.src='<?= BASE_URL ?>assets/img/dummy.png'">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <?php if (!empty($a['patient_image'])): ?>
+                                                <img src="<?= BASE_URL . $a['patient_image'] ?>" class="patient-avatar" alt="">
                                             <?php else: ?>
-                                                <div class="patient-avatar bg-light d-flex align-items-center justify-content-center">
-                                                    <i class="fa fa-user text-muted"></i>
-                                                </div>
+                                                <span class="patient-avatar"><i class="fa fa-user"></i></span>
                                             <?php endif; ?>
                                             <div>
-                                                <strong><?= htmlspecialchars($appointment['patient_name']) ?></strong><br>
-                                                <small class="text-muted">
-                                                    <?= $appointment['gender'] ?? 'N/A' ?> |
-                                                    <?= $appointment['patient_age'] ?? '?' ?> yrs
-                                                </small>
+                                                <strong><?= htmlspecialchars($a['patient_name'] ?? 'Unknown') ?></strong><br>
+                                                <small class="text-muted"><?= htmlspecialchars($a['gender'] ?? '—') ?> · <?= $a['patient_age'] !== null ? $a['patient_age'] . ' yrs' : '—' ?></small>
                                             </div>
                                         </div>
                                     </td>
                                     <td>
-                                        <div class="appointment-time">
-                                            <?= date('h:i A', strtotime($appointment['appointment_time'])) ?>
-                                        </div>
-                                        <div class="text-muted">
-                                            <?= date('d/m/Y', strtotime($appointment['appointment_date'])) ?>
-                                        </div>
-                                        <?php if ($is_today): ?>
-                                            <span class="badge bg-info">Today</span>
-                                        <?php elseif ($is_past): ?>
-                                            <span class="badge bg-secondary">Past</span>
-                                        <?php endif; ?>
+                                        <div style="font-weight:600;color:var(--primary);"><?= date('h:i A', strtotime($a['appointment_time'])) ?></div>
+                                        <small class="text-muted"><?= date('d M Y', strtotime($a['appointment_date'])) ?></small>
+                                        <?php if ($is_today): ?><span class="badge-status" style="background:#e7f2fb;color:var(--primary);">Today</span>
+                                        <?php elseif ($is_past): ?><span class="badge-status" style="background:#f1f2f4;color:#6b7280;">Past</span><?php endif; ?>
+                                    </td>
+                                    <td style="max-width:200px;">
+                                        <small><?= htmlspecialchars($a['purpose'] ?: 'General consultation') ?></small>
                                     </td>
                                     <td>
-                                        <small><?= htmlspecialchars($appointment['purpose'] ?? 'General Consultation') ?></small><br>
-                                        <small class="text-muted">
-                                            Created: <?= date('d/m/y', strtotime($appointment['created_at'])) ?>
-                                        </small>
+                                        <span class="badge-status" style="background:<?= $meta[2] ?>;color:<?= $meta[1] ?>;"><?= $meta[0] ?></span>
+                                        <div class="mt-1"><?= $render_status_form($a) ?></div>
                                     </td>
-                                    <td>
-                                        <?php if ($appointment['patient_phone']): ?>
-                                            <a href="tel:<?= $appointment['patient_phone'] ?>"
-                                                class="btn btn-sm btn-outline-primary">
-                                                <i class="fa fa-phone"></i> Call
-                                            </a><br>
-                                        <?php endif; ?>
-                                        <?php if ($appointment['patient_email']): ?>
-                                            <a href="mailto:<?= $appointment['patient_email'] ?>"
-                                                class="btn btn-sm btn-outline-secondary mt-1">
-                                                <i class="fa fa-envelope"></i> Email
-                                            </a>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <form method="POST" action="" class="d-inline">
-                                            <input type="hidden" name="appointment_id" value="<?= $appointment['appointment_id'] ?>">
-                                            <select name="status" class="status-dropdown"
-                                                onchange="this.form.submit()"
-                                                <?= in_array($appointment['status'], ['completed', 'rejected'], true) ? 'disabled' : '' ?>>
-                                                <option value="pending" <?= $appointment['status'] == 'pending' ? 'selected' : '' ?>>Pending</option>
-                                                <option value="approved" <?= $appointment['status'] == 'approved' ? 'selected' : '' ?>>Approved</option>
-                                                <option value="completed" <?= $appointment['status'] == 'completed' ? 'selected' : '' ?>>Completed</option>
-                                                <option value="rejected" <?= $appointment['status'] == 'rejected' ? 'selected' : '' ?>>Rejected</option>
-                                                <option value="no_show" <?= $appointment['status'] == 'no_show' ? 'selected' : '' ?>>No Show</option>
-                                            </select>
-                                            <input type="hidden" name="update_status" value="1">
-                                        </form>
-                                        <div class="mt-1">
-                                            <span class="badge-status <?= $status_class ?>">
-                                                <?= $status_label ?>
-                                            </span>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="btn-group btn-group-sm">
-                                            <a href="patient-profile.php?id=<?= $appointment['appointment_id'] ?>" class="btn btn-info"
-                                                title="View Details">
-                                                <i class="fa fa-eye"></i>
-                                        </a>
-                                            <a href="appointments.php?cancel_appointment=<?= $appointment['appointment_id'] ?>"
-                                                class="btn btn-danger" title="Cancel"
-                                                onclick="return confirm('Cancel this appointment?')"
-                                                <?= in_array($appointment['status'], ['rejected', 'completed'], true) ? 'disabled' : '' ?>>
-                                                <i class="fa fa-times"></i>
-                                            </a>
-                                            <a href="patient-form.php?appointment_id=<?= $appointment['appointment_id'] ?>"
-                                                class="btn btn-success" title="Add Prescription">
-                                                <i class="fa fa-file-medical"></i>
-                                            </a>
-                                            <?php if ($appointment['status'] === 'approved' && $appointment['appointment_type'] === 'online' && $appointment['meeting_status'] !== 'cancelled'): ?>
-                                                <a href="<?= BASE_URL ?>telemedicine/join.php?appointment_id=<?= $appointment['appointment_id'] ?>"
-                                                    class="btn btn-primary" title="Join Video Call" target="_blank">
-                                                    <i class="fa fa-video"></i>
-                                                </a>
-                                            <?php endif; ?>
-                                        </div>
-                                    </td>
+                                    <td><?= $render_actions($a) ?></td>
                                 </tr>
-                                <?php $counter++; ?>
-                            <?php endwhile; ?>
+                            <?php endforeach; ?>
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Mobile cards -->
+                <div class="ap-cards-wrap">
+                    <?php foreach ($appointments as $a): ?>
+                        <?php
+                        $meta = $STATUS_META[$a['status']] ?? $STATUS_META['pending'];
+                        $is_today = date('Y-m-d') === date('Y-m-d', strtotime($a['appointment_date']));
+                        ?>
+                        <div class="ap-card <?= $is_today ? 'is-today' : '' ?>">
+                            <div class="ac-top">
+                                <div class="d-flex align-items-center gap-2">
+                                    <?php if (!empty($a['patient_image'])): ?>
+                                        <img src="<?= BASE_URL . $a['patient_image'] ?>" class="patient-avatar">
+                                    <?php else: ?>
+                                        <span class="patient-avatar"><i class="fa fa-user"></i></span>
+                                    <?php endif; ?>
+                                    <div>
+                                        <strong><?= htmlspecialchars($a['patient_name'] ?? 'Unknown') ?></strong>
+                                        <div class="ac-meta"><?= htmlspecialchars($a['gender'] ?? '—') ?> · <?= $a['patient_age'] !== null ? $a['patient_age'] . ' yrs' : '—' ?></div>
+                                    </div>
+                                </div>
+                                <span class="badge-status" style="background:<?= $meta[2] ?>;color:<?= $meta[1] ?>;"><?= $meta[0] ?></span>
+                            </div>
+                            <div class="ac-meta mt-2">
+                                <i class="fa fa-clock-o me-1"></i><?= date('h:i A', strtotime($a['appointment_time'])) ?>
+                                &nbsp;·&nbsp; <i class="fa fa-calendar me-1"></i><?= date('d M Y', strtotime($a['appointment_date'])) ?>
+                                <?php if ($is_today): ?> &nbsp;<span class="badge-status" style="background:#e7f2fb;color:var(--primary);">Today</span><?php endif; ?>
+                            </div>
+                            <?php if (!empty($a['purpose'])): ?>
+                                <div class="ac-meta mt-1"><i class="fa fa-comment-o me-1"></i><?= htmlspecialchars($a['purpose']) ?></div>
+                            <?php endif; ?>
+                            <div class="ac-row">
+                                <?= $render_status_form($a) ?>
+                                <?= $render_actions($a) ?>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+
             <?php endif; ?>
         </div>
     </main>
 
-    <a href="add-appointment.php" class="fab-add" title="Add New Appointment">
-        <i class="fa fa-plus"></i>
-    </a>
+    <a href="add-appointment.php" class="fab-add" title="New appointment"><i class="fa fa-plus"></i></a>
 
-    <!-- Modal for Appointment Details -->
-    <div class="modal fade" id="appointmentModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Appointment Details</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body" id="appointmentDetails">
-                    <!-- Content will be loaded here -->
+    <!-- Per-appointment detail modals -->
+    <?php foreach ($appointments as $a): ?>
+        <?php $meta = $STATUS_META[$a['status']] ?? $STATUS_META['pending']; ?>
+        <div class="modal fade" id="apView<?= $a['appointment_id'] ?>" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header" style="background:var(--primary);color:#fff;">
+                        <h5 class="modal-title" style="font-size:1rem;">
+                            <i class="fa fa-calendar-check me-2"></i>APT<?= str_pad($a['appointment_id'], 6, '0', STR_PAD_LEFT) ?>
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" style="font-size:.88rem;">
+                        <div class="d-flex align-items-center gap-2 mb-3">
+                            <?php if (!empty($a['patient_image'])): ?>
+                                <img src="<?= BASE_URL . $a['patient_image'] ?>" class="patient-avatar" style="width:48px;height:48px;">
+                            <?php else: ?>
+                                <span class="patient-avatar" style="width:48px;height:48px;font-size:1.1rem;"><i class="fa fa-user"></i></span>
+                            <?php endif; ?>
+                            <div>
+                                <div style="font-weight:700;"><?= htmlspecialchars($a['patient_name'] ?? 'Unknown') ?></div>
+                                <div class="text-muted" style="font-size:.8rem;">
+                                    <?= htmlspecialchars($a['gender'] ?? '—') ?> · <?= $a['patient_age'] !== null ? $a['patient_age'] . ' yrs' : '—' ?>
+                                    <?php if (!empty($a['blood_group'])): ?> · <?= htmlspecialchars($a['blood_group']) ?><?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6"><div class="text-muted small">Date</div><div><?= date('d M Y', strtotime($a['appointment_date'])) ?></div></div>
+                            <div class="col-6"><div class="text-muted small">Time</div><div><?= date('h:i A', strtotime($a['appointment_time'])) ?></div></div>
+                            <div class="col-6"><div class="text-muted small">Type</div><div><?= $a['appointment_type'] === 'online' ? 'Online consultation' : 'In-clinic visit' ?></div></div>
+                            <div class="col-6"><div class="text-muted small">Status</div><div><span class="badge-status" style="background:<?= $meta[2] ?>;color:<?= $meta[1] ?>;"><?= $meta[0] ?></span></div></div>
+                            <?php if (!empty($a['patient_phone'])): ?>
+                                <div class="col-6"><div class="text-muted small">Phone</div><div><a href="tel:<?= htmlspecialchars($a['patient_phone']) ?>"><?= htmlspecialchars($a['patient_phone']) ?></a></div></div>
+                            <?php endif; ?>
+                            <?php if (!empty($a['patient_email'])): ?>
+                                <div class="col-6"><div class="text-muted small">Email</div><div class="text-truncate"><a href="mailto:<?= htmlspecialchars($a['patient_email']) ?>"><?= htmlspecialchars($a['patient_email']) ?></a></div></div>
+                            <?php endif; ?>
+                        </div>
+                        <?php if (!empty($a['purpose'])): ?>
+                            <div class="mt-3"><div class="text-muted small">Purpose / Complaint</div><div class="border rounded p-2 mt-1"><?= nl2br(htmlspecialchars($a['purpose'])) ?></div></div>
+                        <?php endif; ?>
+                        <div class="text-muted small mt-3">Booked <?= date('d M Y', strtotime($a['created_at'])) ?></div>
+                    </div>
+                    <div class="modal-footer">
+                        <a href="patient-form.php?appointment_id=<?= $a['appointment_id'] ?>" class="btn btn-success btn-sm">
+                            <i class="fa fa-file-medical me-1"></i> Prescription
+                        </a>
+                        <a href="opd-slip.php?appointment_id=<?= $a['appointment_id'] ?>" target="_blank" class="btn btn-outline-primary btn-sm">
+                            <i class="fa fa-download me-1"></i> Rx PDF
+                        </a>
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    <?php endforeach; ?>
 
-    <script>
-        // View appointment details
-        function viewAppointmentDetails(appointmentId) {
-            fetch('get-appointment-details.php?id=' + appointmentId)
-                .then(response => response.text())
-                .then(data => {
-                    document.getElementById('appointmentDetails').innerHTML = data;
-                    var modal = new bootstrap.Modal(document.getElementById('appointmentModal'));
-                    modal.show();
-                })
-                .catch(error => {
-                    document.getElementById('appointmentDetails').innerHTML =
-                        '<div class="alert alert-danger">Error loading appointment details</div>';
-                    var modal = new bootstrap.Modal(document.getElementById('appointmentModal'));
-                    modal.show();
-                });
-        }
-    </script>
+    <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>

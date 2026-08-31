@@ -8,6 +8,7 @@
  */
 require_once dirname(__DIR__) . '/auth/guard.php';
 require_once dirname(dirname(__DIR__)) . '/config/connect.php';
+require_once dirname(dirname(__DIR__)) . '/util/otp-service.php';
 
 header('Content-Type: application/json');
 
@@ -58,6 +59,19 @@ $state            = $post['state']            ?? '';
 $address          = $post['address']          ?? '';
 $reference_doctor = $post['reference_doctor'] ?? '';
 
+// ABHA number is recorded as-is for now (no live ABDM verification yet).
+// Accept a 14-digit number in any spacing and store it normalised.
+if ($abha_number !== '') {
+    $abha_digits = preg_replace('/\D/', '', $abha_number);
+    if (strlen($abha_digits) !== 14) {
+        echo json_encode(['success'=>false,'error'=>'ABHA number must be 14 digits (XX-XXXX-XXXX-XXXX).']); exit;
+    }
+    $abha_number = substr($abha_digits,0,2).'-'.substr($abha_digits,2,4).'-'.substr($abha_digits,6,4).'-'.substr($abha_digits,10,4);
+}
+if ($abha_address !== '' && !preg_match('/^[a-zA-Z0-9._]{3,}@[a-zA-Z]+$/', $abha_address)) {
+    echo json_encode(['success'=>false,'error'=>'ABHA address looks invalid (expected e.g. name@abdm).']); exit;
+}
+
 // Convert dob dd/mm/yyyy → yyyy-mm-dd if needed
 if ($dob && strpos($dob, '/') !== false) {
     $parts = explode('/', $dob);
@@ -96,6 +110,12 @@ if ($existing) {
     exit;
 }
 
+// New patient — the patient's mobile must have been OTP-verified on the form
+// (code sent to the patient's WhatsApp/email, read back to the doctor).
+if (!otp_consume_token('patient', $mobile, $post['mobile_verify_token'] ?? ($raw['mobile_verify_token'] ?? ''))) {
+    echo json_encode(['success'=>false,'error'=>'Patient mobile not verified. Send an OTP to the patient and enter the code before creating the record.']); exit;
+}
+
 // Generate a temporary password (patient can reset via OTP)
 $temp_pass = bin2hex(random_bytes(8));
 $hash      = password_hash($temp_pass, PASSWORD_BCRYPT, ['cost'=>12]);
@@ -105,8 +125,8 @@ $ins = $conn->prepare("
     INSERT INTO users
       (name, email, mobile, password, gender, dob, blood_group,
        abha_id, abha_address, abha_linked, abha_verified,
-       zip_code, city, state, address, created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())
+       zip_code, city, state, address, mobile_verified, mobile_verified_at, created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,NOW(),NOW())
 ");
 
 $abha_linked = ($abha_number || $abha_address) ? 1 : 0;

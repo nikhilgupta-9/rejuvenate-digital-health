@@ -9,7 +9,7 @@ $doctor_id   = (int)$jwt_doctor['sub'];
 $doctor_name = $jwt_doctor['name'] ?? 'Doctor';
 
 // Get doctor's profile details
-$doctor_sql = "SELECT name, email, profile_image, phone, specialization, experience_years, rating, hpr_id, hpr_verified FROM doctors WHERE id = ?";
+$doctor_sql = "SELECT doctor_uid, name, email, profile_image, phone, specialization, experience_years, rating, hpr_id, hpr_verified FROM doctors WHERE id = ?";
 $doctor_stmt = $conn->prepare($doctor_sql);
 $doctor_stmt->bind_param('i', $doctor_id);
 $doctor_stmt->execute();
@@ -25,6 +25,28 @@ $doctor_experience = $doctor_data['experience_years'] ?? 0;
 $doctor_rating = $doctor_data['rating'] ?? 0;
 $doctor_hpr_id = $doctor_data['hpr_id'] ?? '';
 $doctor_hpr_verified = (bool)($doctor_data['hpr_verified'] ?? false);
+$doctor_uid = $doctor_data['doctor_uid'] ?? '';
+
+// Membership (subscription) status — latest paid row's expiry, if any
+$sub_stmt = $conn->prepare("SELECT expires_at FROM doctor_subscriptions WHERE doctor_id = ? AND status = 'paid' ORDER BY expires_at DESC LIMIT 1");
+$sub_stmt->bind_param('i', $doctor_id);
+$sub_stmt->execute();
+$sub_row = $sub_stmt->get_result()->fetch_assoc();
+$membership_expires_at = $sub_row['expires_at'] ?? null;
+$membership_active = $membership_expires_at && strtotime($membership_expires_at) > time();
+
+$plan_row = $conn->query("SELECT id, name, price FROM doctor_plans WHERE is_active = 1 ORDER BY id ASC LIMIT 1")->fetch_assoc();
+
+// Referral stats — doctors this doctor referred, and running commission balance
+$referral_stats_stmt = $conn->prepare("
+    SELECT
+        (SELECT COUNT(*) FROM doctors WHERE referred_by = ?) AS referred_count,
+        (SELECT COALESCE(SUM(commission_amount), 0) FROM doctor_referral_earnings WHERE referring_doctor_id = ?) AS total_earned
+");
+$referral_stats_stmt->bind_param('ii', $doctor_id, $doctor_id);
+$referral_stats_stmt->execute();
+$referral_stats = $referral_stats_stmt->get_result()->fetch_assoc();
+$referral_link = BASE_URL . 'doctor-signup.php?ref=' . urlencode($doctor_uid);
 
 /*
  * appointments.status is an ENUM('pending','approved','rejected','completed','no_show').
@@ -316,9 +338,11 @@ $earnings = $earnings_result->fetch_assoc();
     <div class="dash-header">
       <div class="d-flex align-items-center" style="gap:14px;">
         <?php if (!empty($doctor_data['profile_image'])): ?>
-          <img src="<?= BASE_URL . htmlspecialchars($doctor_data['profile_image']) ?>" class="dash-avatar">
+          <img src="<?= BASE_URL . htmlspecialchars($doctor_data['profile_image']) ?>" class="dash-avatar"
+            onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+          <div class="dash-avatar-fallback" style="display:none;"><i class="fa fa-user"></i></div>
         <?php else: ?>
-          <div class="dash-avatar-fallback"><?= strtoupper(substr($doctor_name, 0, 1)) ?></div>
+          <div class="dash-avatar-fallback"><i class="fa fa-user"></i></div>
         <?php endif; ?>
         <div>
           <div class="dash-greeting">Welcome back, Dr. <?= htmlspecialchars($doctor_name) ?></div>
@@ -419,6 +443,53 @@ $earnings = $earnings_result->fetch_assoc();
           </a>
         </div>
       <?php endforeach; ?>
+    </div>
+
+    <!-- ── Membership & Referrals ── -->
+    <p class="section-title mt-4">Membership &amp; Referrals</p>
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div class="card border-0 shadow-sm rounded-3 h-100">
+          <div class="card-body">
+            <h6 class="fw-bold mb-2"><i class="fa fa-id-card me-2" style="color:var(--primary)"></i>Membership</h6>
+            <?php if ($membership_active): ?>
+              <span class="badge-pill badge-ok mb-2"><i class="fa fa-check-circle"></i> Active</span>
+              <p class="mb-2" style="font-size:.85rem;color:#6b7280;">Valid until <strong><?= date('d M Y', strtotime($membership_expires_at)) ?></strong></p>
+            <?php else: ?>
+              <span class="badge-pill badge-pending mb-2"><i class="fa fa-exclamation-circle"></i> <?= $membership_expires_at ? 'Expired' : 'Not subscribed' ?></span>
+              <p class="mb-2" style="font-size:.85rem;color:#6b7280;">
+                <?= $membership_expires_at ? 'Expired on ' . date('d M Y', strtotime($membership_expires_at)) . '.' : '' ?>
+                <?php if ($plan_row): ?>Subscribe to <strong><?= htmlspecialchars($plan_row['name']) ?></strong> — ₹<?= number_format($plan_row['price']) ?>/<?= (int)($plan_row['billing_cycle_days'] ?? 30) === 30 ? 'month' : ((int)$plan_row['billing_cycle_days']) . ' days' ?>.<?php endif; ?>
+              </p>
+            <?php endif; ?>
+            <?php if ($plan_row): ?>
+              <button type="button" class="btn btn-sm bg-primary-theme text-white" id="btnSubscribe">
+                <?= $membership_active ? 'Renew Early' : 'Subscribe Now' ?> — ₹<?= number_format($plan_row['price']) ?>
+              </button>
+              <div id="subscribeMsg" class="mt-2" style="font-size:.8rem;"></div>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card border-0 shadow-sm rounded-3 h-100">
+          <div class="card-body">
+            <h6 class="fw-bold mb-2"><i class="fa fa-users me-2" style="color:var(--primary)"></i>Refer a Doctor</h6>
+            <p class="mb-2" style="font-size:.85rem;color:#6b7280;">
+              Share your link — when a doctor you refer pays for their membership, you earn 10% of that payment.
+            </p>
+            <div class="input-group input-group-sm mb-2">
+              <input type="text" class="form-control" id="referralLinkInput" value="<?= htmlspecialchars($referral_link) ?>" readonly>
+              <button type="button" class="btn btn-outline-primary" id="btnCopyReferral"><i class="fa fa-copy"></i> Copy</button>
+            </div>
+            <div style="font-size:.85rem;color:#1f2937;">
+              <strong><?= (int)($referral_stats['referred_count'] ?? 0) ?></strong> doctor<?= (int)($referral_stats['referred_count'] ?? 0) === 1 ? '' : 's' ?> referred
+              &nbsp;·&nbsp; <strong>₹<?= number_format($referral_stats['total_earned'] ?? 0, 2) ?></strong> earned
+              <span class="text-muted">(paid out manually by admin)</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ── Chart + Today's Appointments ── -->
@@ -636,6 +707,87 @@ $earnings = $earnings_result->fetch_assoc();
       });
     });
   </script>
+  <script>
+    document.getElementById('btnCopyReferral').addEventListener('click', function() {
+      var input = document.getElementById('referralLinkInput');
+      input.select();
+      input.setSelectionRange(0, 99999);
+      navigator.clipboard.writeText(input.value).then(function() {
+        var btn = document.getElementById('btnCopyReferral');
+        var original = btn.innerHTML;
+        btn.innerHTML = '<i class="fa fa-check"></i> Copied';
+        setTimeout(function() { btn.innerHTML = original; }, 1800);
+      });
+    });
+  </script>
+  <?php if ($plan_row): ?>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script>
+      document.getElementById('btnSubscribe').addEventListener('click', function() {
+        var btn = this;
+        var msg = document.getElementById('subscribeMsg');
+        msg.textContent = '';
+        btn.disabled = true;
+        var originalLabel = btn.innerHTML;
+        btn.innerHTML = 'Preparing payment…';
+
+        fetch('<?= BASE_URL ?>doctor/create-subscription-order.php', { method: 'POST' })
+          .then(function(r) { return r.json(); })
+          .then(function(order) {
+            btn.disabled = false;
+            btn.innerHTML = originalLabel;
+            if (!order.success) {
+              msg.className = 'mt-2 text-danger';
+              msg.textContent = order.message || 'Could not start the payment.';
+              return;
+            }
+
+            var rzp = new Razorpay({
+              key: order.key_id,
+              order_id: order.order_id,
+              amount: order.amount,
+              currency: order.currency,
+              name: 'Rejuvenate Digital Health',
+              description: order.plan_name + ' — Doctor Membership',
+              theme: { color: '#0C74C5' },
+              handler: function(response) {
+                var fd = new FormData();
+                fd.append('razorpay_order_id', response.razorpay_order_id);
+                fd.append('razorpay_payment_id', response.razorpay_payment_id);
+                fd.append('razorpay_signature', response.razorpay_signature);
+                fetch('<?= BASE_URL ?>doctor/verify-subscription-payment.php', { method: 'POST', body: fd })
+                  .then(function(r) { return r.json(); })
+                  .then(function(res) {
+                    if (res.success) {
+                      window.location.reload();
+                    } else {
+                      msg.className = 'mt-2 text-danger';
+                      msg.textContent = res.message || 'Payment verification failed.';
+                    }
+                  });
+              },
+              modal: {
+                ondismiss: function() {
+                  msg.className = 'mt-2 text-muted';
+                  msg.textContent = 'Payment was cancelled.';
+                },
+              },
+            });
+            rzp.on('payment.failed', function() {
+              msg.className = 'mt-2 text-danger';
+              msg.textContent = 'Payment failed. Please try again.';
+            });
+            rzp.open();
+          })
+          .catch(function() {
+            btn.disabled = false;
+            btn.innerHTML = originalLabel;
+            msg.className = 'mt-2 text-danger';
+            msg.textContent = 'Network error. Please try again.';
+          });
+      });
+    </script>
+  <?php endif; ?>
 </body>
 
 </html>

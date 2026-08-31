@@ -2,6 +2,8 @@
 require_once __DIR__ . '/db-conn.php';
 require_once __DIR__ . '/auth/guard.php';
 admin_jwt_guard();
+require_once dirname(__DIR__) . '/util/otp-service.php';
+require_once dirname(__DIR__) . '/util/otp-widget.php';
 
 $errors = [];
 $success_message = '';
@@ -26,7 +28,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $emergency_contact = trim($_POST['emergency_contact'] ?? '');
     $status = $_POST['status'] ?? 'Active';
     $email_verified = isset($_POST['email_verified']) ? 1 : 0;
-    $mobile_verified = isset($_POST['mobile_verified']) ? 1 : 0;
+    $mobile_manual_override = isset($_POST['mobile_verified']);   // "mark verified manually" checkbox
+    $mobile_verify_token = $_POST['mobile_verify_token'] ?? '';
+    $mobile_verified = 0;
 
     // Validation
     if (empty($name)) {
@@ -63,6 +67,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors['mobile'] = "Mobile number already registered";
         }
         mysqli_stmt_close($check_mobile_stmt);
+
+        // Mobile verification: OTP (code sent to the patient's WhatsApp/email and
+        // read back to the admin) or an explicit manual override.
+        if (!isset($errors['mobile'])) {
+            if (otp_consume_token('patient', $mobile, $mobile_verify_token)) {
+                $mobile_verified = 1;
+            } elseif ($mobile_manual_override) {
+                $mobile_verified = 1;
+                try {
+                    (new AuditLogger($conn))->logValidationFailure(
+                        'mobile_verified',
+                        'manual override by admin #' . (int)($_SESSION['admin_id'] ?? 0),
+                        0,
+                        'patient'
+                    );
+                } catch (\Throwable $e) { /* non-fatal */ }
+            } else {
+                $errors['mobile'] = 'Verify the patient\'s mobile via OTP, or tick "mark verified manually".';
+            }
+        }
     }
 
     if (empty($password)) {
@@ -180,7 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     </div>
                                 <?php endif; ?>
 
-                                <form method="POST" action="" novalidate>
+                                <form method="POST" action="" novalidate id="addCustomerForm">
                                     <!-- Personal Information -->
                                     <div class="form-card">
                                         <div class="form-card-header">
@@ -211,12 +235,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                 </div>
                                                 <div class="col-md-6 mb-3">
                                                     <label class="form-label">Mobile <span class="text-danger">*</span></label>
-                                                    <input type="text" class="form-control <?= isset($errors['mobile']) ? 'is-invalid' : '' ?>" 
-                                                           name="mobile" value="<?= htmlspecialchars($_POST['mobile'] ?? '') ?>" 
-                                                           pattern="[0-9]{10}" maxlength="10" required>
+                                                    <input type="text" class="form-control <?= isset($errors['mobile']) ? 'is-invalid' : '' ?>"
+                                                           name="mobile" value="<?= htmlspecialchars($_POST['mobile'] ?? '') ?>"
+                                                           pattern="[0-9]{10}" maxlength="10" inputmode="numeric" required>
                                                     <?php if (isset($errors['mobile'])): ?>
                                                         <div class="error"><?= $errors['mobile'] ?></div>
                                                     <?php endif; ?>
+                                                    <small class="text-muted">Send a code to the patient's WhatsApp &amp; email and enter what they read back — or use the manual override under Account Settings.</small>
+                                                    <?php render_otp_widget([
+                                                        'role'           => 'patient',
+                                                        'mobile_field'   => 'mobile',
+                                                        'email_field'    => 'email',
+                                                        'name_field'     => 'name',
+                                                        'allow_existing' => true,
+                                                        'optional'       => true,
+                                                        'send_url'       => BASE_URL . 'admin/patient-otp-send.php',
+                                                        'verify_url'     => BASE_URL . 'admin/patient-otp-verify.php',
+                                                    ]); ?>
                                                 </div>
                                                 <div class="col-md-6 mb-3">
                                                     <label class="form-label">Password <span class="text-danger">*</span></label>
@@ -349,10 +384,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                 </div>
                                                 <div class="col-md-4 mb-3">
                                                     <div class="form-check mt-4">
-                                                        <input class="form-check-input" type="checkbox" name="mobile_verified" id="mobile_verified" value="1" 
+                                                        <input class="form-check-input" type="checkbox" name="mobile_verified" id="mobile_verified" value="1"
                                                                <?= isset($_POST['mobile_verified']) ? 'checked' : '' ?>>
                                                         <label class="form-check-label" for="mobile_verified">
-                                                            Mobile Verified
+                                                            Mark mobile verified manually <small class="text-muted">(override — logged)</small>
                                                         </label>
                                                     </div>
                                                 </div>

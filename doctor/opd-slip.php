@@ -1,473 +1,298 @@
 <?php
-// Use TCPDF for better Unicode support (Hindi text)
+/**
+ * Branded prescription / OPD slip (PDF).
+ *
+ *   opd-slip.php?appointment_id=<id>
+ *
+ * Built from the SAVED prescription (doctor/patient-form.php). Viewable by:
+ *   - the treating doctor           (rdh_doctor_token JWT)
+ *   - any admin                     (rdh_admin_token JWT)
+ *   - the patient who owns the appt (session $_SESSION['logged_in'])
+ * Patient / admin only see it once the doctor has set status = 'final'.
+ */
+
 require_once(__DIR__ . '/../vendor/tecnickcom/tcpdf/tcpdf.php');
-// OR download TCPDF from: https://github.com/tecnickcom/TCPDF
+include_once(__DIR__ . '/../config/connect.php');   // starts session, $conn, BASE_URL, JWT_SECRET
+include_once(__DIR__ . '/../util/function.php');    // get_header_logo()
+require_once(__DIR__ . '/../lib/JWT.php');
 
-include_once(__DIR__ . "/../config/connect.php");
-include_once(__DIR__ . "/../util/function.php");
+$ROOT = dirname(__DIR__);
 
-// Start session and check doctor login
-session_start();
-if (!isset($_SESSION['doctor_logged_in']) || $_SESSION['doctor_logged_in'] !== true) {
-    header("Location: " . BASE_URL . "doctor-login.php");
+/* ── who is asking? ─────────────────────────────────────────── */
+$viewer_role = null;   // 'doctor' | 'admin' | 'patient'
+$viewer_id   = 0;
+
+$secret = defined('JWT_SECRET') ? JWT_SECRET : '';
+if ($secret && !empty($_COOKIE['rdh_doctor_token'])) {
+    try {
+        $p = JWT::verify($_COOKIE['rdh_doctor_token'], $secret);
+        if (($p['role'] ?? '') === 'doctor') { $viewer_role = 'doctor'; $viewer_id = (int)($p['sub'] ?? $p['doctor_id'] ?? 0); }
+    } catch (Throwable $e) {}
+}
+if (!$viewer_role && $secret && !empty($_COOKIE['rdh_admin_token'])) {
+    try {
+        $p = JWT::verify($_COOKIE['rdh_admin_token'], $secret);
+        if (($p['role'] ?? '') === 'admin') { $viewer_role = 'admin'; $viewer_id = (int)($p['sub'] ?? 0); }
+    } catch (Throwable $e) {}
+}
+if (!$viewer_role && !empty($_SESSION['logged_in']) && !empty($_SESSION['user_id'])) {
+    $viewer_role = 'patient';
+    $viewer_id   = (int)$_SESSION['user_id'];
+}
+
+if (!$viewer_role) {
+    header('Location: ' . BASE_URL . 'login.php');
     exit();
 }
 
-$doctor_id = $_SESSION['doctor_id'];
-$appointment_id = isset($_GET['appointment_id']) ? intval($_GET['appointment_id']) : 0;
-$patient_id = isset($_GET['patient_id']) ? intval($_GET['patient_id']) : 0;
+$appointment_id = isset($_GET['appointment_id']) ? (int)$_GET['appointment_id'] : 0;
 
-// Get doctor's complete profile
-$doctor_sql = "SELECT * FROM doctors WHERE id = ?";
-$doctor_stmt = $conn->prepare($doctor_sql);
-$doctor_stmt->bind_param('i', $doctor_id);
-$doctor_stmt->execute();
-$doctor_result = $doctor_stmt->get_result();
-
-if ($doctor_result->num_rows === 1) {
-    $doctor = $doctor_result->fetch_assoc();
-} else {
-    die("Doctor not found.");
-}
-
-// Parse doctor degrees
-$degrees = explode(',', $doctor['degrees']);
-$primary_degree = trim($degrees[0] ?? '');
-
-// Get patient information from users table
-$patient = null;
-$appointment = null;
-
-if ($appointment_id > 0) {
-    $appointment_sql = "
-        SELECT 
-            a.*,
-            u.id as patient_id,
-            u.name as patient_name,
-            u.email as patient_email,
-            u.mobile as patient_phone,
-            u.dob,
-            u.gender,
-            u.blood_group,
-            u.identification_number,
-            u.emergency_contact,
-            TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) as patient_age
-        FROM appointments a
-        INNER JOIN users u ON a.user_id = u.id
-        WHERE a.id = ? AND a.doctor_id = ?
-    ";
-    
-    $appointment_stmt = $conn->prepare($appointment_sql);
-    $appointment_stmt->bind_param('ii', $appointment_id, $doctor_id);
-    $appointment_stmt->execute();
-    $appointment_result = $appointment_stmt->get_result();
-    
-    if ($appointment_result->num_rows === 1) {
-        $appointment = $appointment_result->fetch_assoc();
-        $patient = [
-            'id' => $appointment['patient_id'],
-            'name' => $appointment['patient_name'],
-            'email' => $appointment['patient_email'],
-            'phone' => $appointment['patient_phone'],
-            'dob' => $appointment['dob'],
-            'age' => $appointment['patient_age'],
-            'gender' => $appointment['gender'],
-            'blood_group' => $appointment['blood_group'],
-        ];
-    }
-} elseif ($patient_id > 0) {
-    $patient_sql = "
-        SELECT 
-            u.*,
-            TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) as age
-        FROM users u
-        WHERE u.id = ?
-    ";
-    
-    $patient_stmt = $conn->prepare($patient_sql);
-    $patient_stmt->bind_param('i', $patient_id);
-    $patient_stmt->execute();
-    $patient_result = $patient_stmt->get_result();
-    
-    if ($patient_result->num_rows === 1) {
-        $patient_data = $patient_result->fetch_assoc();
-        $patient = [
-            'id' => $patient_data['id'],
-            'name' => $patient_data['name'],
-            'email' => $patient_data['email'],
-            'phone' => $patient_data['mobile'],
-            'dob' => $patient_data['dob'],
-            'age' => $patient_data['age'],
-            'gender' => $patient_data['gender'],
-            'blood_group' => $patient_data['blood_group'],
-        ];
-    }
-}
-
-// If no patient selected, show selection page
-if (!$patient) {
-    ?>
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <title>Select Patient for OPD Slip</title>
-        <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
-        <style>
-            .container { max-width: 600px; margin: 50px auto; }
-            .card { padding: 30px; }
-            .patient-list { max-height: 400px; overflow-y: auto; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="card shadow">
-                <h3 class="mb-4">Generate OPD Slip</h3>
-                <div class="patient-list">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Patient Name</th>
-                                <th>Phone</th>
-                                <th>Age/Gender</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php
-                            $patients_sql = "
-                                SELECT DISTINCT 
-                                    u.id, 
-                                    u.name, 
-                                    u.mobile,
-                                    u.gender,
-                                    TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) as age
-                                FROM users u
-                                INNER JOIN appointments a ON u.id = a.user_id
-                                WHERE a.doctor_id = ?
-                                ORDER BY u.name ASC
-                            ";
-                            $patients_stmt = $conn->prepare($patients_sql);
-                            $patients_stmt->bind_param('i', $doctor_id);
-                            $patients_stmt->execute();
-                            $patients_result = $patients_stmt->get_result();
-                            
-                            if ($patients_result->num_rows > 0):
-                                while ($p = $patients_result->fetch_assoc()):
-                            ?>
-                            <tr>
-                                <td><?= htmlspecialchars($p['name']) ?></td>
-                                <td><?= $p['mobile'] ?></td>
-                                <td><?= $p['age'] ?>y / <?= $p['gender'] ?></td>
-                                <td>
-                                    <a href="opd-slip.php?patient_id=<?= $p['id'] ?>" 
-                                       target="_blank" class="btn btn-sm btn-primary">
-                                        Generate OPD
-                                    </a>
-                                </td>
-                            </tr>
-                            <?php 
-                                endwhile;
-                            else:
-                            ?>
-                            <tr>
-                                <td colspan="4" class="text-center text-muted">
-                                    No patients found.
-                                </td>
-                            </tr>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="mt-3">
-                    <a href="doctor-dashboard.php" class="btn btn-secondary">Back to Dashboard</a>
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>
-    <?php
+function opd_notice(string $msg): void
+{
+    echo '<!doctype html><meta charset="utf-8"><title>Prescription</title>'
+       . '<div style="font-family:Segoe UI,Arial,sans-serif;max-width:520px;margin:80px auto;text-align:center;color:#374151;">'
+       . '<div style="font-size:44px;color:#0C74C5;">&#9877;</div>'
+       . '<h2 style="color:#0C74C5;">Prescription</h2>'
+       . '<p>' . htmlspecialchars($msg) . '</p>'
+       . '<a href="javascript:history.back()" style="color:#0C74C5;">&larr; Go back</a></div>';
     exit();
 }
 
-// Create PDF using TCPDF (better Unicode support)
-class OPD_PDF extends TCPDF {
-    // Page header
-    public function Header() {
-        // Hospital name in Hindi
-        $this->SetFont('dejavusans', 'B', 20);
-        $this->Cell(0, 10, 'एस. एस. डी. हॉस्पिटल', 0, 1, 'C');
-        
-        // Hospital name in English
-        $this->SetFont('helvetica', 'B', 16);
-        $this->Cell(0, 8, 'S.S.D. SAMARPAN HOSPITAL', 0, 1, 'C');
-        
-        // Registration number
-        $this->SetFont('helvetica', '', 10);
-        $this->Cell(0, 6, 'Reg. No.: RMEE19325', 0, 1, 'C');
-        
-        // Hospital address
-        $this->SetFont('dejavusans', '', 10);
-        $this->Cell(0, 6, 'सरकारी अस्पताल वाले पुल के नीचे पुराने घास कांटे के पास, सहारनपुर', 0, 1, 'C');
-        
-        // Line separator
-        $this->SetLineWidth(0.5);
-        $this->Line(10, $this->GetY(), 200, $this->GetY());
-        $this->Ln(5);
-    }
-    
-    // Page footer
-    public function Footer() {
-        // Position at 15 mm from bottom
-        $this->SetY(-25);
-        
-        // Timing information
-        $this->SetFont('helvetica', '', 9);
-        $this->Cell(0, 6, 'Timing: 10.00 A.M. to 2.00 P.M. | 6.00 P.M. to 8.00 P.M.', 0, 1, 'L');
-        
-        // Disclaimer
-        $this->SetFont('helvetica', 'I', 8);
-        $this->Cell(0, 6, 'Disclaimer: NOT FOR MEDICO LEGAL PURPOSES', 0, 1, 'L');
-        
-        // Page number
+if (!$appointment_id) opd_notice('No appointment specified.');
+
+/* ── load appointment + patient + doctor ───────────────────── */
+$as = $conn->prepare("
+    SELECT a.id, a.user_id, a.doctor_id, a.appointment_date, a.appointment_time, a.purpose,
+           u.name AS patient_name, u.last_name AS patient_last, u.mobile AS patient_phone,
+           u.email AS patient_email, u.gender, u.blood_group,
+           u.abha_id AS abha_number, u.abha_address,
+           TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) AS patient_age,
+           d.name AS doctor_name, d.degrees, d.specialization, d.phone AS doctor_phone,
+           d.email AS doctor_email, d.hpr_id, d.nmc_reg_number
+    FROM appointments a
+    JOIN users u   ON a.user_id = u.id
+    JOIN doctors d ON a.doctor_id = d.id
+    WHERE a.id = ? LIMIT 1
+");
+$as->bind_param('i', $appointment_id);
+$as->execute();
+$row = $as->get_result()->fetch_assoc();
+$as->close();
+
+if (!$row) opd_notice('Appointment not found.');
+
+/* ── authorise ─────────────────────────────────────────────── */
+if ($viewer_role === 'doctor'  && (int)$row['doctor_id'] !== $viewer_id) opd_notice('This appointment is not assigned to you.');
+if ($viewer_role === 'patient' && (int)$row['user_id']   !== $viewer_id) opd_notice('This appointment does not belong to your account.');
+
+/* ── load prescription ─────────────────────────────────────── */
+$rs = $conn->prepare("SELECT * FROM prescriptions WHERE appointment_id = ? LIMIT 1");
+$rs->bind_param('i', $appointment_id);
+$rs->execute();
+$rx = $rs->get_result()->fetch_assoc();
+$rs->close();
+
+if (!$rx) opd_notice('The doctor has not created a prescription for this visit yet.');
+if ($viewer_role !== 'doctor' && ($rx['status'] ?? 'draft') !== 'final') {
+    opd_notice('The prescription for this visit is not finalised yet. Please check back later.');
+}
+
+/* ── attachments ───────────────────────────────────────────── */
+$att_s = $conn->prepare("SELECT document_name, document_type FROM patient_documents WHERE appointment_id = ? ORDER BY uploaded_at DESC");
+$att_s->bind_param('i', $appointment_id);
+$att_s->execute();
+$attachments = $att_s->get_result()->fetch_all(MYSQLI_ASSOC);
+$att_s->close();
+
+$vitals = json_decode($rx['vitals'] ?? '{}', true) ?: [];
+$meds   = array_values(array_filter(json_decode($rx['medications'] ?? '[]', true) ?: [], fn($m) => trim($m['name'] ?? '') !== ''));
+
+$logo_rel  = get_header_logo();                 // e.g. admin/uploads/logo/xxx.png
+$logo_path = $logo_rel ? $ROOT . '/' . ltrim($logo_rel, '/') : '';
+if ($logo_path && !is_file($logo_path)) $logo_path = '';
+
+$patient_full = trim($row['patient_name'] . ' ' . ($row['patient_last'] ?? ''));
+$care_ref     = $rx['care_context_ref'] ?: ('CC-' . $appointment_id);
+$slip_number  = 'RX' . str_pad($appointment_id, 6, '0', STR_PAD_LEFT) . date('ymd');
+
+/* ═══════════════════════════ PDF ═══════════════════════════ */
+class Rx_PDF extends TCPDF
+{
+    public $rdh_logo = '';
+    public $rdh_care = '';
+    public $rdh_gen  = '';
+
+    public function Header()
+    {
+        if ($this->rdh_logo) {
+            $this->Image($this->rdh_logo, 12, 8, 0, 16, '', '', 'T', false, 300, 'L', false, false, 0);
+        }
+        $this->SetY(9);
+        $this->SetFont('helvetica', 'B', 15);
+        $this->SetTextColor(12, 116, 197);
+        $this->Cell(0, 8, 'REJUVENATE Digital Health', 0, 1, 'R');
         $this->SetFont('helvetica', '', 8);
-        $this->Cell(0, 6, 'Page ' . $this->getAliasNumPage() . '/' . $this->getAliasNbPages(), 0, 0, 'C');
+        $this->SetTextColor(120, 120, 120);
+        $this->Cell(0, 4, 'Digital Prescription  |  ABDM / ABHA aligned', 0, 1, 'R');
+        $this->SetDrawColor(12, 116, 197);
+        $this->SetLineWidth(0.5);
+        $this->Line(12, 26, 198, 26);
+        $this->SetTextColor(0, 0, 0);
+    }
+
+    public function Footer()
+    {
+        $this->SetY(-16);
+        $this->SetDrawColor(200, 200, 200);
+        $this->SetLineWidth(0.2);
+        $this->Line(12, $this->GetY(), 198, $this->GetY());
+        $this->SetY(-13);
+        $this->SetFont('helvetica', '', 7);
+        $this->SetTextColor(120, 120, 120);
+        $this->Cell(0, 4, 'Care Context: ' . $this->rdh_care . '   |   Generated: ' . $this->rdh_gen
+            . '   |   Digitally generated - not valid for medico-legal use without doctor signature', 0, 1, 'C');
+        $this->Cell(0, 4, 'Page ' . $this->getAliasNumPage() . '/' . $this->getAliasNbPages(), 0, 0, 'C');
     }
 }
 
-// Create PDF
-$pdf = new OPD_PDF('P', 'mm', 'A4');
+$pdf = new Rx_PDF('P', 'mm', 'A4');
+$pdf->rdh_logo = $logo_path;
+$pdf->rdh_care = $care_ref;
+$pdf->rdh_gen  = date('d M Y, h:i A');
 $pdf->SetCreator('REJUVENATE Digital Health');
-$pdf->SetAuthor('Dr. ' . $doctor['name']);
-$pdf->SetTitle('OPD Slip - ' . $patient['name']);
-$pdf->SetSubject('Medical Prescription');
-$pdf->SetKeywords('OPD, Prescription, Medical');
-
-// Add a page
+$pdf->SetAuthor('Dr. ' . $row['doctor_name']);
+$pdf->SetTitle('Prescription - ' . $patient_full);
+$pdf->SetMargins(12, 30, 12);
+$pdf->SetAutoPageBreak(true, 20);
 $pdf->AddPage();
 
-// Set font for English text
-$pdf->SetFont('helvetica', '', 10);
+/* helper: section heading */
+$h = function ($t) use ($pdf) {
+    $pdf->Ln(1.5);
+    $pdf->SetFont('helvetica', 'B', 9.5);
+    $pdf->SetTextColor(12, 116, 197);
+    $pdf->Cell(0, 5.5, strtoupper($t), 0, 1, 'L');
+    $pdf->SetTextColor(0, 0, 0);
+    $pdf->SetFont('helvetica', '', 9.5);
+};
+$para = function ($t) use ($pdf) {
+    $pdf->SetFont('helvetica', '', 9.5);
+    $pdf->MultiCell(0, 5, $t, 0, 'L');
+};
 
-// Doctor Information Section
-$pdf->SetFont('helvetica', 'B', 12);
-$pdf->Cell(95, 8, 'DOCTOR INFORMATION', 0, 0, 'L');
-$pdf->Cell(95, 8, 'DOCTOR INFORMATION', 0, 1, 'L');
+/* ── Doctor + Patient blocks ── */
+$pdf->SetFont('helvetica', 'B', 10.5);
+$pdf->Cell(96, 5.5, 'Dr. ' . $row['doctor_name'], 0, 0, 'L');
+$pdf->SetFont('helvetica', 'B', 9);
+$pdf->Cell(0, 5.5, $patient_full, 0, 1, 'L');
 
-// Left doctor (main doctor)
-$pdf->SetFont('dejavusans', 'B', 11);
-$pdf->Cell(95, 6, 'डॉ ' . $doctor['name'], 0, 0, 'L');
+$pdf->SetFont('helvetica', '', 8.5);
+$pdf->SetTextColor(90, 90, 90);
+$pdf->Cell(96, 4.6, trim(($row['degrees'] ?? '') . '  ' . ($row['specialization'] ? '(' . $row['specialization'] . ')' : '')), 0, 0, 'L');
+$pdf->Cell(0, 4.6, trim(($row['patient_age'] !== null ? $row['patient_age'] . ' yrs' : '') . '  |  ' . ($row['gender'] ?: '-')
+    . ($row['blood_group'] ? '  |  ' . $row['blood_group'] : '')), 0, 1, 'L');
 
-// Right doctor (fixed)
-$pdf->SetFont('dejavusans', 'B', 11);
-$pdf->Cell(95, 6, 'डॉ आस्था चौहान', 0, 1, 'L');
+$pdf->Cell(96, 4.6, ($row['hpr_id'] ? 'HPR: ' . $row['hpr_id'] : 'HPR: not registered')
+    . ($row['nmc_reg_number'] ? '   NMC: ' . $row['nmc_reg_number'] : ''), 0, 0, 'L');
+$pdf->Cell(0, 4.6, $row['abha_number'] ? 'ABHA: ' . $row['abha_number'] : 'ABHA: not linked', 0, 1, 'L');
 
-$pdf->SetFont('helvetica', '', 10);
-$pdf->Cell(95, 6, $primary_degree, 0, 0, 'L');
-$pdf->Cell(95, 6, 'B.D.S.', 0, 1, 'L');
+$pdf->Cell(96, 4.6, trim(($row['doctor_phone'] ?? '') . '  ' . ($row['doctor_email'] ?? '')), 0, 0, 'L');
+$pdf->Cell(0, 4.6, trim(($row['patient_phone'] ?? '') . ($row['abha_address'] ? '  ' . $row['abha_address'] : '')), 0, 1, 'L');
 
-$pdf->SetFont('helvetica', '', 9);
-$pdf->Cell(95, 6, '(' . $doctor['specialization'] . ')', 0, 0, 'L');
-$pdf->Cell(95, 6, '(Dentist)', 0, 1, 'L');
+$pdf->SetTextColor(0, 0, 0);
+$pdf->Ln(1);
+$pdf->SetFont('helvetica', '', 8.5);
+$pdf->Cell(0, 4.6, 'Visit Date: ' . date('d M Y', strtotime($rx['visit_date'] ?: $row['appointment_date']))
+    . '     Appt #' . $appointment_id . '     Slip: ' . $slip_number, 0, 1, 'L');
+$pdf->SetDrawColor(220, 220, 220);
+$pdf->Line(12, $pdf->GetY() + 1, 198, $pdf->GetY() + 1);
+$pdf->Ln(2);
 
-$pdf->SetFont('helvetica', '', 9);
-$pdf->Cell(95, 6, 'Mobile: ' . $doctor['phone'], 0, 0, 'L');
-$pdf->Cell(95, 6, 'Mobile: 9876543210', 0, 1, 'L');
+/* ── Clinical ── */
+if (trim($rx['chief_complaints'] ?? '') !== '') { $h('Chief Complaints'); $para($rx['chief_complaints']); }
 
-$pdf->SetFont('helvetica', '', 9);
-$pdf->Cell(95, 6, 'Email: ' . $doctor['email'], 0, 0, 'L');
-$pdf->Cell(95, 6, 'Email: dentist@ssdhospital.com', 0, 1, 'L');
+$vlabels = ['bp_systolic'=>'BP Sys','bp_diastolic'=>'BP Dia','pulse'=>'Pulse','temperature'=>'Temp F',
+    'spo2'=>'SpO2 %','weight_kg'=>'Wt kg','height_cm'=>'Ht cm','rr'=>'RR'];
+$vparts = [];
+foreach ($vlabels as $k => $lbl) { if (trim((string)($vitals[$k] ?? '')) !== '') $vparts[] = $lbl . ': ' . $vitals[$k]; }
+if ($vparts) { $h('Vitals'); $para(implode('    ', $vparts)); }
 
-$pdf->Ln(8);
+if (trim($rx['examination'] ?? '') !== '') { $h('Examination'); $para($rx['examination']); }
 
-// Patient Information Section
-$pdf->SetFont('helvetica', 'B', 12);
-$pdf->Cell(0, 8, 'PATIENT INFORMATION', 0, 1, 'L');
-$pdf->SetLineWidth(0.2);
-$pdf->Line(10, $pdf->GetY()-2, 200, $pdf->GetY()-2);
-
-// Create patient details table
-$pdf->SetFont('helvetica', '', 10);
-
-$patient_data = [
-    ['Patient Name:', $patient['name']],
-    ['Age / Gender:', $patient['age'] . ' Years / ' . $patient['gender']],
-    ['Phone Number:', $patient['phone']],
-    ['Blood Group:', $patient['blood_group'] ?: 'Not specified'],
-    ['Email:', $patient['email']],
-    ['Date:', date('d/m/Y')],
-];
-
-foreach ($patient_data as $row) {
-    $pdf->Cell(40, 7, $row[0], 0, 0);
-    $pdf->SetFont('helvetica', 'B', 10);
-    $pdf->Cell(0, 7, $row[1], 0, 1);
-    $pdf->SetFont('helvetica', '', 10);
+if (trim($rx['diagnosis'] ?? '') !== '') {
+    $h('Diagnosis');
+    $para($rx['diagnosis'] . ($rx['icd_codes'] ? "\nICD-10: " . $rx['icd_codes'] : ''));
 }
 
-$pdf->Ln(8);
-
-// Prescription Area
-$pdf->SetFont('helvetica', 'B', 12);
-$pdf->Cell(0, 8, 'PRESCRIPTION / CLINICAL NOTES', 0, 1, 'C');
-
-// Draw prescription box
-$pdf->SetLineWidth(0.3);
-$pdf->Rect(10, $pdf->GetY(), 190, 100);
-
-// Add prescription fields
-$pdf->SetFont('helvetica', '', 10);
-$y_start = $pdf->GetY();
-
-$prescription_fields = [
-    'Chief Complaints:' => 5,
-    'History of Present Illness:' => 10,
-    'Examination Findings:' => 10,
-    'Diagnosis:' => 10,
-    'Treatment Advised:' => 10,
-    'Advice:' => 10,
-];
-
-foreach ($prescription_fields as $field => $height) {
-    $pdf->SetXY(15, $y_start + 5);
-    $pdf->Cell(0, 5, $field, 0, 1);
-    $pdf->SetXY(15, $pdf->GetY());
-    $pdf->Cell(180, $height, '', 'B', 1);
-    $y_start += $height + 5;
-}
-
-$pdf->SetY($y_start + 10);
-
-// Tests/Investigations Section
-$pdf->SetFont('helvetica', 'B', 12);
-$pdf->Cell(0, 8, 'TESTS / INVESTIGATIONS RECOMMENDED', 0, 1, 'L');
-
-// Tests list in 4 columns
-$tests = [
-    'CBC', 'RBS', 'BT, CT', 'L.F.T',
-    'Sr. Bilirubin', 'SGPT', 'SGOT', 'Alk. Phosphatase',
-    'K.F.T', 'Widal', 'MP', 'Blood Urea',
-    'S. Creatinine', 'S. Albumin', 'Blood Group', 'HIV',
-    'HB sag', 'HCV', 'Urine R/M', 'USG',
-    'Chest X-ray', 'Abdomen X-ray', 'ECG', 'Echo'
-];
-
-$pdf->SetFont('helvetica', '', 9);
-$col_width = 47.5;
-$row_height = 6;
-$x = 10;
-$y = $pdf->GetY();
-
-foreach ($tests as $index => $test) {
-    if ($index > 0 && $index % 4 == 0) {
-        $x = 10;
-        $y += $row_height;
+/* ── Rx table ── */
+if ($meds) {
+    $h('Rx  -  Medications');
+    $pdf->SetFont('helvetica', 'B', 8);
+    $pdf->SetFillColor(238, 245, 255);
+    $w = [46, 22, 30, 24, 20, 34];
+    foreach (['Drug','Dose','Frequency','Duration','Route','Instructions'] as $i => $c) {
+        $pdf->Cell($w[$i], 6, $c, 1, 0, 'L', true);
     }
-    
-    $pdf->SetXY($x, $y);
-    $pdf->Cell($col_width, $row_height, '☐ ' . $test, 0, 0);
-    $x += $col_width;
+    $pdf->Ln();
+    $pdf->SetFont('helvetica', '', 8);
+    foreach ($meds as $m) {
+        $cells = [$m['name'] ?? '', $m['dose'] ?? '', $m['frequency'] ?? '', $m['duration'] ?? '', $m['route'] ?? '', $m['instructions'] ?? ''];
+        $lh = 5.5;
+        foreach ($cells as $i => $c) $pdf->Cell($w[$i], $lh, $c, 1, ($i === 5 ? 1 : 0), 'L');
+    }
+    $pdf->Ln(1);
 }
 
-$pdf->SetY($y + $row_height + 8);
+if (trim($rx['lab_tests'] ?? '') !== '')       { $h('Lab Investigations Advised'); $para($rx['lab_tests']); }
+if (trim($rx['radiology'] ?? '') !== '')       { $h('Radiology / Imaging Advised'); $para($rx['radiology']); }
+if (trim($rx['report_findings'] ?? '') !== '') { $h('Report Findings / Results'); $para($rx['report_findings']); }
+if (trim($rx['advice'] ?? '') !== '')          { $h('Advice'); $para($rx['advice']); }
 
-// Ayushman Bharat Section
-$pdf->SetFont('dejavusans', 'B', 12);
-$pdf->Cell(0, 8, 'आयुष्मान स्वास्थ्य कार्ड से इलाज की सुविधा', 0, 1, 'C');
+if (!empty($rx['follow_up_date']) || trim($rx['follow_up_notes'] ?? '') !== '') {
+    $h('Follow-up');
+    $para(trim((!empty($rx['follow_up_date']) ? date('d M Y', strtotime($rx['follow_up_date'])) : '')
+        . (!empty($rx['follow_up_notes']) ? '  -  ' . $rx['follow_up_notes'] : '')));
+}
 
-$pdf->SetFont('helvetica', '', 10);
-$pdf->Cell(0, 6, 'Ayushman Bharat Health Card treatment facility available', 0, 1, 'C');
+if ($attachments) {
+    $h('Reports Attached');
+    $names = array_map(fn($a) => '- ' . $a['document_name'], $attachments);
+    $para(implode("\n", $names));
+}
 
-// Draw box around Ayushman section
-$pdf->SetLineWidth(0.3);
-$pdf->Rect(10, $pdf->GetY() - 10, 190, 15);
-
-$pdf->Ln(12);
-
-// Doctor Signature Area
-$pdf->SetY(240);
-$pdf->SetLineWidth(0.5);
-$pdf->Line(130, $pdf->GetY(), 200, $pdf->GetY());
-
-$pdf->SetFont('helvetica', 'B', 10);
-$pdf->SetXY(130, $pdf->GetY() + 2);
-$pdf->Cell(70, 6, 'Dr. ' . $doctor['name'], 0, 1, 'C');
-
-$pdf->SetFont('helvetica', '', 9);
-$pdf->SetX(130);
-$pdf->Cell(70, 6, $doctor['specialization'], 0, 1, 'C');
-
+/* ── Signature ── */
+$pdf->Ln(10);
+$sigY = max($pdf->GetY(), 235);
+$pdf->SetY($sigY);
 $pdf->SetFont('helvetica', '', 8);
-$pdf->SetX(130);
-$pdf->Cell(70, 6, 'Date: ' . date('d/m/Y'), 0, 1, 'C');
+$pdf->SetDrawColor(120, 120, 120);
+$pdf->Line(135, $pdf->GetY() + 8, 198, $pdf->GetY() + 8);
+$pdf->SetXY(135, $pdf->GetY() + 9);
+$pdf->SetFont('helvetica', 'B', 9);
+$pdf->Cell(63, 4.5, 'Dr. ' . $row['doctor_name'], 0, 1, 'C');
+$pdf->SetX(135);
+$pdf->SetFont('helvetica', '', 7.5);
+$pdf->Cell(63, 4, trim(($row['specialization'] ?? '') . ($row['hpr_id'] ? '  |  HPR ' . $row['hpr_id'] : '')), 0, 1, 'C');
 
-// Generate unique OPD number
-$opd_number = 'OPD' . str_pad($patient['id'], 6, '0', STR_PAD_LEFT) . date('YmdHis');
-
-// Add OPD number at bottom
-$pdf->SetFont('helvetica', 'I', 8);
-$pdf->SetY(-15);
-$pdf->Cell(0, 6, 'OPD No: ' . $opd_number . ' | Generated by REJUVENATE Digital Health', 0, 0, 'C');
-
-// Output PDF
-$filename = 'OPD_Slip_' . str_replace(' ', '_', $patient['name']) . '_' . date('Ymd_His') . '.pdf';
-$pdf->Output($filename, 'I');
-
-// Save OPD record to database
-$save_opd_sql = "
-    INSERT INTO opd_slips (
-        opd_number,
-        doctor_id,
-        patient_id,
-        appointment_id,
-        doctor_name,
-        patient_name,
-        generated_at,
-        ip_address
-    ) VALUES (?, ?, ?, ?, ?, ?, NOW(), ?)
-";
-
-// Create OPD slips table if not exists
-$create_table_sql = "
-    CREATE TABLE IF NOT EXISTS opd_slips (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        opd_number VARCHAR(50) UNIQUE,
-        doctor_id INT NOT NULL,
-        patient_id INT NOT NULL,
-        appointment_id INT NULL,
-        doctor_name VARCHAR(255),
-        patient_name VARCHAR(255),
-        chief_complaints TEXT,
-        diagnosis TEXT,
-        treatment TEXT,
-        tests_recommended TEXT,
-        generated_at DATETIME,
-        printed_at DATETIME NULL,
-        ip_address VARCHAR(45),
-        FOREIGN KEY (doctor_id) REFERENCES doctors(id),
-        FOREIGN KEY (patient_id) REFERENCES users(id)
-    )
-";
-
-// Execute create table
-$conn->query($create_table_sql);
-
-// Save OPD record
+/* ── persist to opd_records (best effort) ── */
 try {
-    $ip_address = $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
-    $save_stmt = $conn->prepare($save_opd_sql);
-    $save_stmt->bind_param(
-        'siiisss',
-        $opd_number,
-        $doctor_id,
-        $patient['id'],
-        $appointment_id,
-        $doctor['name'],
-        $patient['name'],
-        $ip_address
-    );
-    $save_stmt->execute();
-} catch (Exception $e) {
-    // Log error but continue
-    error_log("Failed to save OPD record: " . $e->getMessage());
+    $diag = $rx['diagnosis'] ?? '';
+    $treat = '';
+    foreach ($meds as $m) $treat .= trim(($m['name'] ?? '') . ' ' . ($m['dose'] ?? '') . ' ' . ($m['frequency'] ?? '')) . "\n";
+    $tests = trim(($rx['lab_tests'] ?? '') . ' ' . ($rx['radiology'] ?? ''));
+    $adv = $rx['advice'] ?? '';
+    $pid = (int)$row['user_id'];
+    $did = (int)$row['doctor_id'];
+    $up = $conn->prepare("
+        INSERT INTO opd_records (doctor_id, patient_id, appointment_id, slip_number, diagnosis, treatment, advice, tests_recommended, generated_at)
+        VALUES (?,?,?,?,?,?,?,?,NOW())
+        ON DUPLICATE KEY UPDATE diagnosis=VALUES(diagnosis), treatment=VALUES(treatment),
+            advice=VALUES(advice), tests_recommended=VALUES(tests_recommended), generated_at=NOW()
+    ");
+    $up->bind_param('iiissssss', $did, $pid, $appointment_id, $slip_number, $diag, $treat, $adv, $tests);
+    $up->execute();
+} catch (Throwable $e) {
+    error_log('opd-slip persist failed: ' . $e->getMessage());
 }
+
+$pdf->Output('Prescription_' . preg_replace('/[^A-Za-z0-9]+/', '_', $patient_full) . '_' . date('Ymd_His') . '.pdf', 'I');

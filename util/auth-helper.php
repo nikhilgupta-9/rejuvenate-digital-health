@@ -4,6 +4,7 @@
  * Included by process-login.php, ajax/login-*.php
  */
 require_once __DIR__ . '/mail_config.php';
+require_once __DIR__ . '/../lib/WhatsAppOtp.php';   // wa_send_otp()
 
 /* ─── Role session setup ────────────────────────────────────────────── */
 
@@ -243,6 +244,9 @@ function storeAndSendOtp(mysqli $conn, string $entityType, int $entityId, string
 
     if ($email) {
         send_otp_email($email, $otp, $name, 'login');
+    }
+    if ($mobile && function_exists('wa_send_otp')) {
+        wa_send_otp($mobile, $otp);
     }
 
     return $stored;

@@ -44,18 +44,18 @@ $_SESSION['otp_mobile']      = $mobile;
 $_SESSION['otp_entity_type'] = $table;
 $_SESSION['otp_entity_id']   = $user['id'];
 
-/* Send OTP — email fallback (replace with SMS gateway when available) */
-$sent_via = 'email';
-if ($email && function_exists('send_otp_email')) {
-    @send_otp_email($email, $otp);
-}
+/* storeAndSendOtp() above already delivers the OTP over WhatsApp (to $mobile)
+   and email (to $email). Nothing extra to send here. */
 
 /* Dev/sandbox mode: include OTP in response for testing */
 $debug = ($_ENV['APP_ENV'] ?? 'production') !== 'production';
 
+$maskedEmail = $email ? preg_replace('/^(.).*(@.*)$/', '$1***$2', $email) : '';
 $resp = [
     'success'    => true,
-    'message'    => "OTP sent to your registered email ($email).",
+    'message'    => $maskedEmail
+        ? "OTP sent to your WhatsApp and email ($maskedEmail)."
+        : "OTP sent to your WhatsApp number.",
     'role_label' => roleLabel($role),
 ];
 if ($debug) $resp['__debug_otp'] = $otp; // remove in production

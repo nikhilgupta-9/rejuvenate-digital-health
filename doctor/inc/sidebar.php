@@ -20,7 +20,6 @@ $_d_spec    = htmlspecialchars($_d['specialization'] ?? 'Doctor');
 $_d_hpr_id  = htmlspecialchars($_d['hpr_id'] ?? '');
 $_d_hpr_ver = (bool)($_d['hpr_verified'] ?? false);
 $_d_pic     = !empty($_d['profile_image']) ? BASE_URL . htmlspecialchars($_d['profile_image']) : null;
-$_d_initial = strtoupper(substr($_d_name, 0, 1));
 
 $_page_titles = [
     'dashboard'        => 'Dashboard',
@@ -64,9 +63,11 @@ $_menu = [
     <div class="sidebar-brand">
         <?php if ($_d_pic): ?>
             <img src="<?= $_d_pic ?>" alt=""
-                style="width:38px;height:38px;border-radius:8px;object-fit:cover;margin-bottom:8px;border:2px solid rgba(255,255,255,.3);">
+                style="width:38px;height:38px;border-radius:8px;object-fit:cover;margin-bottom:8px;border:2px solid rgba(255,255,255,.3);"
+                onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="sidebar-logo" style="display:none;"><i class="fa fa-user"></i></div>
         <?php else: ?>
-            <div class="sidebar-logo"><?= $_d_initial ?></div>
+            <div class="sidebar-logo"><i class="fa fa-user"></i></div>
         <?php endif; ?>
         <div class="s-name">Dr. <?= $_d_name ?></div>
         <div class="s-sub"><?= $_d_spec ?></div>
@@ -136,9 +137,11 @@ $_menu = [
         </div>
         <div class="avatar-circle" style="width:34px;height:34px;font-size:.85rem;flex-shrink:0;overflow:hidden;">
             <?php if ($_d_pic): ?>
-                <img src="<?= $_d_pic ?>" alt="" style="width:100%;height:100%;object-fit:cover;">
+                <img src="<?= $_d_pic ?>" alt="" style="width:100%;height:100%;object-fit:cover;"
+                    onerror="this.style.display='none';this.nextElementSibling.style.display='inline-block';">
+                <i class="fa fa-user" style="display:none;"></i>
             <?php else: ?>
-                <?= $_d_initial ?>
+                <i class="fa fa-user"></i>
             <?php endif; ?>
         </div>
         <?php if ($_d_hpr_ver): ?>

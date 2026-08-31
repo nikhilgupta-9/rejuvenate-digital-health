@@ -1,6 +1,8 @@
 <?php
 include_once "config/connect.php";
 include_once "util/function.php";
+include_once "util/otp-service.php";
+require_once "util/otp-widget.php";
 
 $logo = get_header_logo();
 $error = '';
@@ -36,6 +38,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($password !== $confirm)
       throw new Exception("Passwords do not match.");
 
+    $phone = preg_replace('/\D/', '', $phone);
+    if (!otp_consume_token('school_admin', $phone, $_POST['mobile_verify_token'] ?? ''))
+      throw new Exception("Please verify your mobile number with the OTP before submitting.");
+
     /* ── Duplicate check ── */
     $chk = $conn->prepare("SELECT id FROM schools WHERE email=?");
     $chk->bind_param('s', $email);
@@ -61,8 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     /* ── Insert admin account ── */
     $hash = password_hash($password, PASSWORD_DEFAULT);
     $ins2 = $conn->prepare("INSERT INTO school_users
-            (school_id, name, email, phone, password, role)
-            VALUES (?, ?, ?, ?, ?, 'school_admin')");
+            (school_id, name, email, phone, password, role, mobile_verified, mobile_verified_at)
+            VALUES (?, ?, ?, ?, ?, 'school_admin', 1, NOW())");
     $ins2->bind_param('issss', $school_id, $admin_name, $email, $phone, $hash);
     if (!$ins2->execute())
       throw new Exception("Admin account creation failed.");
@@ -179,7 +185,7 @@ $states = [
                 added from your school dashboard after approval.
               </div>
 
-              <form method="POST" autocomplete="off">
+              <form method="POST" autocomplete="off" id="schoolRegForm">
 
                 <!-- School name -->
                 <div class="field-group">
@@ -230,6 +236,13 @@ $states = [
                       value="<?= htmlspecialchars($_POST['phone'] ?? '') ?>" placeholder="10-digit mobile" required
                       style="border-radius:0 10px 10px 0;">
                   </div>
+                  <?php render_otp_widget([
+                    'role'            => 'school_admin',
+                    'mobile_field'    => 'phone',
+                    'email_field'     => 'email',
+                    'name_field'      => 'admin_name',
+                    'submit_selector' => '#schoolRegForm button[type="submit"]',
+                  ]); ?>
                 </div>
 
                 <div class="reg-divider">─── Admin Account ───</div>

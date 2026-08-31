@@ -2,15 +2,17 @@
 session_start();
 include_once "config/connect.php";
 include_once "util/function.php";
+include_once "util/otp-service.php";
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $errors = [];
-    
+
     // Sanitize and validate input data
     $name = trim($_POST['name'] ?? '');
     $last_name = trim($_POST['last_name'] ?? '');
     $email = trim($_POST['email'] ?? '');
-    $mobile = trim($_POST['mobile'] ?? '');
+    $mobile = preg_replace('/\D/', '', $_POST['mobile'] ?? '');
+    $mobile_verify_token = $_POST['mobile_verify_token'] ?? '';
     $password = $_POST['password'] ?? '';
     $confirmPassword = $_POST['confirmPassword'] ?? '';
     $gender = $_POST['gender'] ?? '';
@@ -46,8 +48,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->close();
     }
     
-    if (empty($mobile)) {
-        $errors['mobile'] = "Mobile number is required";
+    if (empty($mobile) || !preg_match('/^[6-9]\d{9}$/', $mobile)) {
+        $errors['mobile'] = "Valid 10-digit mobile number is required";
     } else {
         // Check if mobile already exists
         $stmt = $conn->prepare("SELECT id FROM users WHERE mobile = ?");
@@ -58,6 +60,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors['mobile'] = "Mobile number already registered";
         }
         $stmt->close();
+
+        // Mobile must have been verified via WhatsApp/email OTP on the form
+        if (!isset($errors['mobile']) && !otp_consume_token('patient', $mobile, $mobile_verify_token)) {
+            $errors['mobile'] = "Please verify your mobile number with the OTP before creating your account";
+        }
     }
     
     if (empty($password)) {
@@ -73,33 +80,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // If no errors, proceed with registration
     if (empty($errors)) {
         $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-        $otp_code = rand(100000, 999999);
-        $otp_expiry = date('Y-m-d H:i:s', strtotime('+10 minutes'));
-        
-        $stmt = $conn->prepare("INSERT INTO users (name, last_name, email, mobile, password, gender, dob, address, city, state, zip_code, otp_code, otp_expiry, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')");
-        
-        $stmt->bind_param("sssssssssssss", $name, $last_name, $email, $mobile, $hashed_password, $gender, $dob, $address, $city, $state, $zip_code, $otp_code, $otp_expiry);
-        
+
+        // Mobile is already OTP-verified (WhatsApp + email) at this point, so the
+        // account goes straight to Active with mobile + email marked verified —
+        // no separate verify-otp.php step.
+        $stmt = $conn->prepare("INSERT INTO users
+            (name, last_name, email, mobile, password, gender, dob, address, city, state, zip_code,
+             status, email_verified, mobile_verified, mobile_verified_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', 1, 1, NOW())");
+
+        $stmt->bind_param("sssssssssss", $name, $last_name, $email, $mobile, $hashed_password, $gender, $dob, $address, $city, $state, $zip_code);
+
         if ($stmt->execute()) {
-            // Send OTP via Email
-            $email_sent = send_otp_email($email, $otp_code);
-            
-            // Send OTP via SMS (Uncomment when you have SMS service setup)
-            // $sms_sent = send_otp_sms($mobile, $otp_code);
-            // OR for Indian numbers:
-            // $sms_sent = send_otp_sms_textlocal($mobile, $otp_code);
-            
-            $_SESSION['signup_success'] = true;
-            $_SESSION['user_email'] = $email;
-            $_SESSION['user_mobile'] = $mobile;
-            $_SESSION['user_id'] = $stmt->insert_id;
-            $_SESSION['otp_sent_time'] = time();
-            
-            // Store OTP info in session for verification
-            $_SESSION['otp_code'] = $otp_code;
-            $_SESSION['otp_expiry'] = $otp_expiry;
-            
-            header("Location: verify-otp.php");
+            if (function_exists('send_welcome_email') && $email) {
+                @send_welcome_email($email, trim($name . ' ' . $last_name), 'patient');
+            }
+
+            $_SESSION['success_message'] = "Account created and mobile number verified! You can now log in.";
+
+            header("Location: login.php");
             exit();
         } else {
             $errors['general'] = "Registration failed. Please try again.";

@@ -60,9 +60,15 @@
                 <div class="text-muted">Care Context</div>
                 <strong class="text-break" style="color:var(--rdh-blue);font-size:.78rem;"><?= htmlspecialchars($existing_rx['care_context_ref']) ?></strong>
             </div>
-            <div>
+            <div class="mb-1">
                 <div class="text-muted">Status</div>
                 <span class="badge-<?= $existing_rx['status'] ?>"><?= ucfirst($existing_rx['status']) ?></span>
+            </div>
+        <?php endif; ?>
+        <?php if (!empty($rx_attachments)): ?>
+            <div>
+                <div class="text-muted">Report Attachments</div>
+                <strong style="color:var(--rdh-blue);"><i class="fa fa-paperclip me-1"></i><?= count($rx_attachments) ?> file<?= count($rx_attachments) === 1 ? '' : 's' ?></strong>
             </div>
         <?php endif; ?>
     </div>

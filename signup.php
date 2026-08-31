@@ -2,6 +2,7 @@
 session_start();
 include_once "config/connect.php";
 include_once "util/function.php";
+require_once "util/otp-widget.php";
 
 $contact = contact_us();
 $logo = get_header_logo();
@@ -112,10 +113,18 @@ unset($_SESSION['old_data']);
                   <div class="col-md-6 mb-3">
                     <label class="form-label">Mobile <span class="text-danger">*</span></label>
                     <input type="text" class="form-control <?= isset($errors['mobile']) ? 'is-invalid' : '' ?>"
-                      name="mobile" value="<?= htmlspecialchars($old_data['mobile'] ?? '') ?>" required>
+                      name="mobile" maxlength="10" inputmode="numeric"
+                      value="<?= htmlspecialchars($old_data['mobile'] ?? '') ?>" required>
                     <?php if (isset($errors['mobile'])): ?>
                       <div class="error"><?= $errors['mobile'] ?></div>
                     <?php endif; ?>
+                    <?php render_otp_widget([
+                      'role'            => 'patient',
+                      'mobile_field'    => 'mobile',
+                      'email_field'     => 'email',
+                      'name_field'      => 'name',
+                      'submit_selector' => '#signupForm button[type="submit"]',
+                    ]); ?>
                   </div>
 
                   <!-- Password Field with Show/Hide Button -->

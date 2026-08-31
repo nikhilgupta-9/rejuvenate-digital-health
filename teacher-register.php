@@ -1,6 +1,8 @@
 <?php
 include_once "config/connect.php";
 include_once "util/function.php";
+include_once "util/otp-service.php";
+require_once "util/otp-widget.php";
 
 $logo = get_header_logo();
 $error_message   = '';
@@ -33,6 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($name))          throw new Exception("Full name is required.");
         if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) throw new Exception("Valid email is required.");
         if (empty($designation))   throw new Exception("Designation / subject is required.");
+        $phone = preg_replace('/\D/', '', $phone);
+        if (!preg_match('/^[6-9]\d{9}$/', $phone)) throw new Exception("Enter a valid 10-digit mobile number.");
         if (strlen($password) < 6) throw new Exception("Password must be at least 6 characters.");
         if ($password !== $confirm) throw new Exception("Passwords do not match.");
 
@@ -57,15 +61,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($dup_emp->get_result()->num_rows > 0) throw new Exception("This Employee ID is already registered.");
         }
 
+        if (!otp_consume_token('teacher', $phone, $_POST['mobile_verify_token'] ?? '')) {
+            throw new Exception("Please verify your mobile number with the OTP before registering.");
+        }
+
         $hashed      = password_hash($password, PASSWORD_DEFAULT);
         $dob_val     = $dob ?: null;
-        $phone_val   = $phone ?: null;
+        $phone_val   = $phone;
         $gender_val  = $gender ?: null;
         $emp_val     = $employee_id ?: null;
 
         $ins = $conn->prepare("INSERT INTO school_members
-            (school_id, type, name, email, phone, dob, gender, designation, employee_id, password, status, added_by)
-            VALUES (?, 'Teacher', ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', NULL)");
+            (school_id, type, name, email, phone, dob, gender, designation, employee_id, password, mobile_verified, mobile_verified_at, status, added_by)
+            VALUES (?, 'Teacher', ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), 'Pending', NULL)");
         $ins->bind_param('isssssssss', $school_id, $name, $email, $phone_val, $dob_val, $gender_val, $designation, $emp_val, $hashed);
         if (!$ins->execute()) throw new Exception("Registration failed. Please try again.");
 
@@ -151,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
               <?php endif; ?>
 
-              <form method="POST" novalidate>
+              <form method="POST" novalidate id="teacherRegForm">
 
                 <!-- School Selection -->
                 <div class="mb-3">
@@ -189,9 +197,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                            value="<?= htmlspecialchars($_POST['employee_id'] ?? '') ?>">
                   </div>
                   <div class="col-md-4">
-                    <label class="form-label">Phone Number</label>
-                    <input type="tel" class="form-control" name="phone" placeholder="10-digit mobile"
+                    <label class="form-label">Phone Number <span class="text-danger">*</span></label>
+                    <input type="tel" class="form-control" name="phone" placeholder="10-digit mobile" required
+                           maxlength="10" inputmode="numeric"
                            value="<?= htmlspecialchars($_POST['phone'] ?? '') ?>">
+                  </div>
+                  <div class="col-12">
+                    <?php render_otp_widget([
+                      'role'            => 'teacher',
+                      'mobile_field'    => 'phone',
+                      'email_field'     => 'email',
+                      'name_field'      => 'name',
+                      'submit_selector' => '#teacherRegForm button[type="submit"]',
+                    ]); ?>
                   </div>
                   <div class="col-md-4">
                     <label class="form-label">Date of Birth</label>

@@ -57,6 +57,15 @@ $description = trim($_POST['description'] ?? '');
 $origName    = trim($file['name']) ?: 'document';
 $documentName = $docType . ' — ' . $origName;
 
+// Optional: tie this report to a specific visit (from doctor/patient-form.php).
+$appointmentId = (int)($_POST['appointment_id'] ?? 0) ?: null;
+if ($appointmentId) {
+    $av = $conn->prepare("SELECT 1 FROM appointments WHERE id=? AND doctor_id=? AND user_id=? LIMIT 1");
+    $av->bind_param('iii', $appointmentId, $doctor_id, $patient_id);
+    $av->execute();
+    if (!$av->get_result()->fetch_row()) $appointmentId = null;
+}
+
 $uploadDir = dirname(dirname(__DIR__)) . '/uploads/patient_documents/';
 if (!is_dir($uploadDir)) {
     mkdir($uploadDir, 0755, true);
@@ -73,10 +82,10 @@ if (!move_uploaded_file($file['tmp_name'], $destPath)) {
 $fileTypeMime = $file['type'] ?: $ext;
 
 $ins = $conn->prepare("
-    INSERT INTO patient_documents (patient_id, doctor_id, document_name, description, file_path, file_type, uploaded_at)
-    VALUES (?, ?, ?, ?, ?, ?, NOW())
+    INSERT INTO patient_documents (patient_id, doctor_id, appointment_id, document_name, document_type, description, file_path, file_type, uploaded_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
 ");
-$ins->bind_param('iissss', $patient_id, $doctor_id, $documentName, $description, $dbPath, $fileTypeMime);
+$ins->bind_param('iiisssss', $patient_id, $doctor_id, $appointmentId, $documentName, $docType, $description, $dbPath, $fileTypeMime);
 
 if (!$ins->execute()) {
     @unlink($destPath);
@@ -86,11 +95,13 @@ if (!$ins->execute()) {
 echo json_encode([
     'success' => true,
     'doc' => [
-        'id'            => (int)$conn->insert_id,
-        'document_name' => $documentName,
-        'description'   => $description,
-        'file_path'     => $dbPath,
-        'file_type'     => $fileTypeMime,
-        'uploaded_at'   => date('Y-m-d H:i:s'),
+        'id'             => (int)$conn->insert_id,
+        'document_name'  => $documentName,
+        'document_type'  => $docType,
+        'description'    => $description,
+        'file_path'      => $dbPath,
+        'file_type'      => $fileTypeMime,
+        'appointment_id' => $appointmentId,
+        'uploaded_at'    => date('Y-m-d H:i:s'),
     ],
 ]);

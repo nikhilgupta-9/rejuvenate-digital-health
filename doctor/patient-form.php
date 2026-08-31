@@ -151,6 +151,21 @@ if ($mode === 'patient' && $appointment_id > 0) {
     $rx_s->close();
 }
 
+/* ── Report attachments for this visit ── */
+$rx_attachments = [];
+if ($mode === 'patient' && $appointment_id > 0 && $patient) {
+    $att_s = $conn->prepare("
+        SELECT id, document_name, document_type, description, file_path, file_type, uploaded_at
+        FROM patient_documents
+        WHERE patient_id = ? AND appointment_id = ?
+        ORDER BY uploaded_at DESC
+    ");
+    $att_s->bind_param('ii', $patient['patient_id'], $appointment_id);
+    $att_s->execute();
+    $rx_attachments = $att_s->get_result()->fetch_all(MYSQLI_ASSOC);
+    $att_s->close();
+}
+
 /* ════════════════════════════════════════════
    STUDENT MODE — load member data
 ════════════════════════════════════════════ */
@@ -228,6 +243,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
     $icd      = trim($_POST['icd_codes']        ?? '');
     $lab      = trim($_POST['lab_tests']        ?? '');
     $radio    = trim($_POST['radiology']        ?? '');
+    $findings = trim($_POST['report_findings']  ?? '');
     $advice   = trim($_POST['advice']           ?? '');
     $fu_date  = trim($_POST['follow_up_date']   ?? '') ?: null;
     $fu_notes = trim($_POST['follow_up_notes']  ?? '');
@@ -237,13 +253,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
         $upd = $conn->prepare("
             UPDATE prescriptions SET
               chief_complaints=?, vitals=?, examination=?, diagnosis=?, icd_codes=?,
-              medications=?, lab_tests=?, radiology=?, advice=?,
+              medications=?, lab_tests=?, radiology=?, report_findings=?, advice=?,
               follow_up_date=?, follow_up_notes=?, abha_number=?, hpr_id=?, status=?
             WHERE appointment_id=? AND doctor_id=?
         ");
-        $upd->bind_param('ssssssssssssssii',
+        $upd->bind_param('sssssssssssssssii',
             $chief, $vitals, $exam, $diag, $icd,
-            $medications_json, $lab, $radio, $advice,
+            $medications_json, $lab, $radio, $findings, $advice,
             $fu_date, $fu_notes, $abha_num, $hpr_id, $rx_status,
             $appt_id, $doctor_id
         );
@@ -259,14 +275,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
             INSERT INTO prescriptions
               (appointment_id, doctor_id, patient_id, care_context_ref, visit_date,
                chief_complaints, vitals, examination, diagnosis, icd_codes,
-               medications, lab_tests, radiology, advice,
+               medications, lab_tests, radiology, report_findings, advice,
                follow_up_date, follow_up_notes, abha_number, hpr_id, status)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ");
-        $ins->bind_param('iiissssssssssssssss',
+        $ins->bind_param('iiisssssssssssssssss',
             $appt_id, $doctor_id, $pid, $care_ref, $vdate,
             $chief, $vitals, $exam, $diag, $icd,
-            $medications_json, $lab, $radio, $advice,
+            $medications_json, $lab, $radio, $findings, $advice,
             $fu_date, $fu_notes, $abha_num, $hpr_id, $rx_status
         );
         if ($ins->execute()) {
@@ -889,6 +905,61 @@ $svt = fn($k) => htmlspecialchars($s_vt_data[$k] ?? '');
                     </div>
                 </div>
 
+                <!-- Reports & Attachments -->
+                <div class="rx-card">
+                    <div class="rx-card-header"><i class="fa fa-folder-open"></i> Reports &amp; Attachments</div>
+                    <div class="rx-card-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Report Findings / Results</label>
+                            <textarea name="report_findings" class="form-control" rows="3"
+                                placeholder="e.g. Hb 11.2 g/dL (low), TLC 8,400, RBS 142 mg/dL; USG abdomen — mild fatty liver..."><?= $v('report_findings') ?></textarea>
+                            <div class="text-muted small mt-1"><i class="fa fa-info-circle me-1"></i>Type the values / impressions here. Attach the actual report files below.</div>
+                        </div>
+
+                        <label class="form-label fw-semibold d-block">Attached Report Files</label>
+                        <div id="rx-attach-list" class="mb-2">
+                            <?php if (empty($rx_attachments)): ?>
+                                <div class="text-muted small" id="rx-attach-empty">No files attached to this visit yet.</div>
+                            <?php endif; ?>
+                            <?php foreach ($rx_attachments as $att): ?>
+                                <div class="d-flex align-items-center justify-content-between border rounded px-2 py-1 mb-1" data-doc-id="<?= (int)$att['id'] ?>">
+                                    <a href="<?= BASE_URL . ltrim($att['file_path'], '/') ?>" target="_blank" class="text-truncate" style="max-width:75%;">
+                                        <i class="fa fa-paperclip me-1"></i><?= htmlspecialchars($att['document_name']) ?>
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-link text-danger p-0 rx-attach-del" title="Remove">
+                                        <i class="fa fa-times-circle"></i>
+                                    </button>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+
+                        <?php if ($appointment): ?>
+                        <div class="row g-2 align-items-end no-print">
+                            <div class="col-sm-4">
+                                <label class="form-label small text-muted mb-1">Type</label>
+                                <select id="rx-att-type" class="form-select form-select-sm">
+                                    <option>Lab Report</option>
+                                    <option>Radiology / Scan</option>
+                                    <option>Discharge Summary</option>
+                                    <option>Referral</option>
+                                    <option>Other</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-5">
+                                <label class="form-label small text-muted mb-1">File (PDF / image, max 10 MB)</label>
+                                <input type="file" id="rx-att-file" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+                            </div>
+                            <div class="col-sm-3">
+                                <button type="button" id="rx-att-upload" class="btn btn-sm btn-outline-primary w-100">
+                                    <i class="fa fa-upload me-1"></i> Upload
+                                </button>
+                            </div>
+                            <div class="col-12"><div id="rx-att-msg" class="small mt-1"></div></div>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
                 <!-- Advice & Follow-up -->
                 <div class="rx-card">
                     <div class="rx-card-header"><i class="fa fa-lightbulb"></i> Advice &amp; Follow-up</div>
@@ -1215,6 +1286,61 @@ function toggleSidebar() {
     const s = document.getElementById('rx-sidebar');
     if (s) s.classList.toggle('collapsed');
 }
+
+/* ── Report attachments (patient mode) ── */
+(function () {
+    const upBtn = document.getElementById('rx-att-upload');
+    if (!upBtn) return;
+    const BASE_URL = '<?= BASE_URL ?>';
+    const PATIENT_ID = <?= (int)($patient['patient_id'] ?? 0) ?>;
+    const APPT_ID = <?= (int)$appointment_id ?>;
+    const listEl = document.getElementById('rx-attach-list');
+    const msgEl  = document.getElementById('rx-att-msg');
+
+    function msg(t, ok) { msgEl.textContent = t || ''; msgEl.className = 'small mt-1 ' + (ok ? 'text-success' : 'text-danger'); }
+
+    function addRow(doc) {
+        const empty = document.getElementById('rx-attach-empty');
+        if (empty) empty.remove();
+        const row = document.createElement('div');
+        row.className = 'd-flex align-items-center justify-content-between border rounded px-2 py-1 mb-1';
+        row.dataset.docId = doc.id;
+        row.innerHTML = '<a href="' + BASE_URL + doc.file_path.replace(/^\//, '') + '" target="_blank" class="text-truncate" style="max-width:75%;">'
+            + '<i class="fa fa-paperclip me-1"></i>' + (doc.document_name || 'Document') + '</a>'
+            + '<button type="button" class="btn btn-sm btn-link text-danger p-0 rx-attach-del" title="Remove"><i class="fa fa-times-circle"></i></button>';
+        listEl.appendChild(row);
+    }
+
+    upBtn.addEventListener('click', function () {
+        const fileEl = document.getElementById('rx-att-file');
+        if (!fileEl.files.length) { msg('Choose a file first.', false); return; }
+        const fd = new FormData();
+        fd.append('patient_id', PATIENT_ID);
+        fd.append('appointment_id', APPT_ID);
+        fd.append('document_type', document.getElementById('rx-att-type').value);
+        fd.append('document_file', fileEl.files[0]);
+        upBtn.disabled = true; msg('Uploading…', true);
+        fetch(BASE_URL + 'doctor/api/patient-document-upload.php', { method: 'POST', body: fd })
+            .then(r => r.json()).then(d => {
+                upBtn.disabled = false;
+                if (!d.success) { msg(d.error || 'Upload failed', false); return; }
+                addRow(d.doc); fileEl.value = ''; msg('Uploaded.', true);
+            }).catch(() => { upBtn.disabled = false; msg('Network error', false); });
+    });
+
+    listEl.addEventListener('click', function (e) {
+        const btn = e.target.closest('.rx-attach-del');
+        if (!btn) return;
+        const row = btn.closest('[data-doc-id]');
+        if (!confirm('Remove this file?')) return;
+        fetch(BASE_URL + 'doctor/api/patient-document-delete.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ doc_id: row.dataset.docId })
+        }).then(r => r.json()).then(d => {
+            if (d.success) row.remove(); else alert(d.error || 'Delete failed');
+        });
+    });
+})();
 
 /* ── Auto-dismiss alerts ── */
 setTimeout(() => {

@@ -1,13 +1,26 @@
 <?php
 include_once "config/connect.php";
 include_once "util/function.php";
+include_once "util/otp-service.php";
+require_once "util/otp-widget.php";
 
 // session_start();
 
 $contact = contact_us();
 $logo = get_header_logo();
+$departments = get_sub_category();
 $error_message = '';
 $success_message = '';
+
+// Referral link support: doctor-signup.php?ref=<referring doctor's doctor_uid>
+$ref_uid = trim($_GET['ref'] ?? $_POST['ref'] ?? '');
+$referring_doctor = null;
+if ($ref_uid !== '') {
+    $ref_stmt = $conn->prepare("SELECT id, name FROM doctors WHERE doctor_uid = ? AND status = 'Active' LIMIT 1");
+    $ref_stmt->bind_param('s', $ref_uid);
+    $ref_stmt->execute();
+    $referring_doctor = $ref_stmt->get_result()->fetch_assoc();
+}
 
 // Handle signup form submission
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
@@ -16,33 +29,50 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $phone = trim($_POST['phone']);
     $degrees = trim($_POST['designation']);
     $experience_years = intval($_POST['experience']);
-    $specialization = trim($_POST['specialization']);
+    $doctor_departments = $_POST['department'] ?? [];
+    $doctor_departments = array_values(array_unique(array_map('intval', $doctor_departments)));
+    $doctor_departments = array_filter($doctor_departments, function ($id) { return $id > 0; });
     $password = $_POST['password'];
     $confirm_password = $_POST['confirmPassword'];
+    $mobile_verify_token = $_POST['mobile_verify_token'] ?? '';
     $role = "doctor";
-    
+
     try {
         // Validate passwords match
         if ($password !== $confirm_password) {
             throw new Exception("Passwords do not match.");
         }
-        
+
         // Validate password strength
         if (strlen($password) < 8) {
             throw new Exception("Password must be at least 8 characters long.");
         }
-        
+
+        // Normalise + require an OTP-verified mobile number
+        $phone = preg_replace('/\D/', '', $phone);
+        if (!preg_match('/^[6-9]\d{9}$/', $phone)) {
+            throw new Exception("Enter a valid 10-digit mobile number.");
+        }
+
+        if (empty($doctor_departments)) {
+            throw new Exception("Please select at least one department.");
+        }
+
         // Check if email already exists
         $check_sql = "SELECT id FROM doctors WHERE email = ? limit 1";
         $check_stmt = $conn->prepare($check_sql);
         $check_stmt->bind_param('s', $email);
         $check_stmt->execute();
         $check_result = $check_stmt->get_result();
-        
+
         if ($check_result->num_rows > 0) {
             throw new Exception("Email already registered. Please use a different email or login.");
         }
-        
+
+        if (!otp_consume_token('doctor', $phone, $mobile_verify_token)) {
+            throw new Exception("Please verify your mobile number with the OTP before creating your account.");
+        }
+
         // Generate doctor UID
         $doctor_uid = 'DOC' . date('YmdHis') . rand(100, 999);
         
@@ -77,15 +107,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $documents_json = json_encode($documents);
         
         // Insert doctor
+        $referred_by = $referring_doctor['id'] ?? null;
+
         $sql = "INSERT INTO doctors (
-            doctor_uid, name, email, phone, degrees, specialization, 
-            experience_years, password, documents, status, added_on
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', NOW())";
-        
+            doctor_uid, referred_by, name, email, phone, degrees, specialization,
+            experience_years, password, documents, mobile_verified, mobile_verified_at, status, added_on
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), 'Active', NOW())";
+
         $stmt = $conn->prepare($sql);
         $stmt->bind_param(
-            'ssssssiss',
-            $doctor_uid, $name, $email, $phone, $degrees, $specialization,
+            'sisssssiss',
+            $doctor_uid, $referred_by, $name, $email, $phone, $degrees, $specialization,
             $experience_years, $hashed_password, $documents_json
         );
         
@@ -194,8 +226,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
               <?php endif; ?>
-              
-              <form method="POST" action="" enctype="multipart/form-data">
+
+              <?php if ($ref_uid !== '' && $referring_doctor): ?>
+                <div class="alert alert-info" role="alert">
+                  <i class="fa fa-user-md me-2"></i> You were referred by <strong>Dr. <?= htmlspecialchars($referring_doctor['name']) ?></strong>.
+                </div>
+              <?php elseif ($ref_uid !== ''): ?>
+                <div class="alert alert-warning" role="alert">
+                  <i class="fa fa-exclamation-triangle me-2"></i> Referral link not recognized — you can still sign up normally.
+                </div>
+              <?php endif; ?>
+
+              <form method="POST" action="" enctype="multipart/form-data" id="doctorSignupForm">
+                <input type="hidden" name="ref" value="<?= htmlspecialchars($ref_uid) ?>">
                 <div class="row">
                   <div class="col-md-6">
                     <div class="mb-3">
@@ -212,7 +255,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                   <div class="col-md-6">
                     <div class="mb-3">
                       <label for="phone" class="form-label">Mobile Number <span class="text-danger">*</span></label>
-                      <input type="text" class="form-control" id="phone" name="phone" placeholder="Enter your Mobile number" required value="<?= $_POST['phone'] ?? '' ?>">
+                      <input type="text" class="form-control" id="phone" name="phone" placeholder="Enter your Mobile number"
+                             maxlength="10" inputmode="numeric" required value="<?= $_POST['phone'] ?? '' ?>">
+                      <?php render_otp_widget([
+                        'role'            => 'doctor',
+                        'mobile_field'    => 'phone',
+                        'email_field'     => 'email',
+                        'name_field'      => 'fullname',
+                        'submit_selector' => '#doctorSignupForm button[type="submit"]',
+                      ]); ?>
                     </div>
                   </div>
                   <div class="col-md-6">
