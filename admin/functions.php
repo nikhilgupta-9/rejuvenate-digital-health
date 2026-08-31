@@ -910,152 +910,19 @@ if (isset($_POST['add-testimonial']) || isset($_POST['update-testimonial'])) {
 }
 
 function send_doctor_verification_email($doctor_email, $doctor_name, $verified_by = 'Administrator') {
-    $mail = new PHPMailer(true);
-    
-    try {
-        // Server settings
-        $mail->isSMTP();
-        $mail->Host = 'smtp.gmail.com';
-        $mail->SMTPAuth = true;
-        $mail->Username = 'nik007guptadu@gmail.com'; // Your email
-        $mail->Password = 'ltmnhrwacmwmcrni'; // Your app password
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port = 587;
-        
-        // For debugging (remove in production)
-        // $mail->SMTPDebug = 2;
-        // $mail->Debugoutput = function($str, $level) {
-        //     error_log("SMTP Debug: $str");
-        // };
-        
-        // Recipients
-        $mail->setFrom('no-reply@rejuvenatehealth.com', 'REJUVENATE Digital Health');
-        $mail->addAddress($doctor_email, 'Dr. ' . $doctor_name); // Add doctor as recipient
-        $mail->addReplyTo('support@rejuvenatehealth.com', 'Support Team');
-        
-        // Content
-        $mail->isHTML(true);
-        $mail->Subject = 'Account Verified - Welcome to REJUVENATE Digital Health';
-        
-        // Get site URL (you may need to define this globally)
-        $site = BASE_URL; // Replace with your actual site URL
-        $login_url = $site . 'doctor-login/';
-        
-        $mail->Body = "
-        <!DOCTYPE html>
-        <html lang='en'>
-        <head>
-            <meta charset='UTF-8'>
-            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-            <title>Account Verified</title>
-            <style>
-                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background: #2c5aa0; color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-                .content { background: #f9f9f9; padding: 40px; border-radius: 0 0 10px 10px; }
-                .success-badge { background: #28a745; color: white; padding: 10px 20px; border-radius: 20px; display: inline-block; margin: 10px 0; font-weight: bold; }
-                .cta-button { background: #2c5aa0; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; font-size: 16px; }
-                .features { margin: 30px 0; }
-                .feature-item { display: flex; align-items: center; margin: 15px 0; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-                .feature-icon { background: #2c5aa0; color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 15px; }
-                .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 12px; }
-                .verification-details { background: #e8f4fd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2c5aa0; }
-            </style>
-        </head>
-        <body>
-            <div class='container'>
-                <div class='header'>
-                    <h1>REJUVENATE Digital Health</h1>
-                    <p>Doctor Account Verification</p>
-                </div>
-                <div class='content'>
-                    <h2>Congratulations, Dr. $doctor_name! </h2>
-                    
-                    <div class='success-badge'>
-                        <i class='fas fa-check-circle'></i> ACCOUNT VERIFIED
-                    </div>
-                    
-                    <p>We're pleased to inform you that your doctor account has been <strong>successfully verified</strong> and is now active on our platform.</p>
-                    
-                    <div class='verification-details'>
-                        <h3>Verification Details:</h3>
-                        <p><strong>Verified By:</strong> $verified_by</p>
-                        <p><strong>Verification Date:</strong> " . date('F j, Y') . "</p>
-                        <p><strong>Account Status:</strong> <span style='color: #28a745; font-weight: bold;'>Active & Verified</span></p>
-                    </div>
-                    
-                    <div class='features'>
-                        <h3>You can now access these features:</h3>
-                        <div class='feature-item'>
-                            <div class='feature-icon'></div>
-                            <div><strong>Complete Your Profile:</strong> Add your specialization, experience, and consultation details</div>
-                        </div>
-                        <div class='feature-item'>
-                            <div class='feature-icon'></div>
-                            <div><strong>Set Availability:</strong> Define your consultation hours and appointment slots</div>
-                        </div>
-                        <div class='feature-item'>
-                            <div class='feature-icon'></div>
-                            <div><strong>Manage Appointments:</strong> View and accept patient consultation requests</div>
-                        </div>
-                        <div class='feature-item'>
-                            <div class='feature-icon'></div>
-                            <div><strong>Track Analytics:</strong> Monitor your consultations and patient feedback</div>
-                        </div>
-                    </div>
-                    
-                    <div style='text-align: center;'>
-                        <a href='$login_url' class='cta-button'>
-                             Access Your Doctor Dashboard
-                        </a>
-                        <p><small>Use your registered email and password to login</small></p>
-                    </div>
-                    
-                    <div style='background: #fff3cd; padding: 15px; border-radius: 5px; margin: 25px 0;'>
-                        <h4> Next Steps:</h4>
-                        <ol>
-                            <li>Login to your dashboard</li>
-                            <li>Complete your professional profile (add photo, degrees, specialization)</li>
-                            <li>Set your consultation fees and availability</li>
-                            <li>Upload any required documents for credential verification</li>
-                            <li>Start accepting patient appointments</li>
-                        </ol>
-                    </div>
-                    
-                    <p>If you need assistance setting up your profile or have any questions, our support team is here to help.</p>
-                    
-                    <p>Best regards,<br>
-                    <strong>The REJUVENATE Digital Health Team</strong></p>
-                </div>
-                <div class='footer'>
-                    <p>This is an automated verification notification. Please do not reply to this email.</p>
-                    <p>For support, contact: support@rejuvenatehealth.com</p>
-                    <p>&copy; " . date('Y') . " REJUVENATE Digital Health. All rights reserved.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        ";
-        
-        // Alternative plain text version
-        $mail->AltBody = "REJUVENATE Digital Health - Account Verified\n\n" .
-                        "Dear Dr. $doctor_name,\n\n" .
-                        "Your doctor account has been successfully verified by $verified_by.\n\n" .
-                        "You can now login to your dashboard at: $login_url\n\n" .
-                        "Features available:\n" .
-                        "- Complete your professional profile\n" .
-                        "- Set consultation availability\n" .
-                        "- Manage patient appointments\n" .
-                        "- Track your consultations\n\n" .
-                        "Best regards,\nREJUVENATE Digital Health Team";
-        
-        $mail->send();
-        return true;
-        
-    } catch (Exception $e) {
-        error_log("Doctor verification email failed for $doctor_email: " . $mail->ErrorInfo);
+    // Was hardcoded to a personal Gmail SMTP account (dead app password —
+    // this is why verification emails were failing). Delegates to the
+    // site's real, .env-backed mail system instead, which every other
+    // transactional email already uses successfully.
+    if (empty($doctor_email)) {
+        // Some doctors (added via the admin panel) have no email on file —
+        // nothing to send to. send_doctor_verified_email() requires a
+        // non-null string, so this must be caught here rather than letting
+        // it throw.
         return false;
     }
+    require_once __DIR__ . '/../util/mail_config.php';
+    return send_doctor_verified_email($doctor_email, $doctor_name, $verified_by);
 }
 
 
