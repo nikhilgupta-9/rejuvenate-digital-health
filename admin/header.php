@@ -21,6 +21,8 @@ if ($is_admin && isset($conn)) {
                + (SELECT COUNT(*) FROM abha_link_requests WHERE status='Pending') as c"))['c'] ?? 0);
     $pending_schools = (int)(mysqli_fetch_assoc(mysqli_query($conn,
         "SELECT COUNT(*) as c FROM schools WHERE status='Pending'"))['c'] ?? 0);
+    $hpr_pending_count = (int)(mysqli_fetch_assoc(mysqli_query($conn,
+        "SELECT COUNT(*) as c FROM hpr_verification_requests WHERE status='pending'"))['c'] ?? 0);
 }
 ?>
 
@@ -122,6 +124,11 @@ if ($is_admin && isset($conn)) {
                 <li><a href="add-doctor.php">Add New Doctor</a></li>
                 <li><a href="doctor-schedule.php">Manage Schedules</a></li>
                 <li><a href="doctor-specializations.php">Specializations</a></li>
+                <li><a href="doctor-plans.php">Subscription Plans</a></li>
+                <li><a href="hpr-verification.php">HPR Verification
+                    <?php if (!empty($hpr_pending_count)): ?><span class="badge bg-danger ms-1" style="font-size:9px;"><?= $hpr_pending_count ?></span><?php endif; ?>
+                </a></li>
+                <li><a href="settlements.php">Payment Settlements</a></li>
             </ul>
         </li>
         <?php endif; ?>

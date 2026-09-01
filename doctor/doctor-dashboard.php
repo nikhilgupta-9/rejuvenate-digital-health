@@ -9,7 +9,7 @@ $doctor_id   = (int)$jwt_doctor['sub'];
 $doctor_name = $jwt_doctor['name'] ?? 'Doctor';
 
 // Get doctor's profile details
-$doctor_sql = "SELECT doctor_uid, name, email, profile_image, phone, specialization, experience_years, rating, hpr_id, hpr_verified FROM doctors WHERE id = ?";
+$doctor_sql = "SELECT doctor_uid, name, email, profile_image, phone, specialization, experience_years, rating, hpr_id, hpr_verified, is_verified, grace_period_until FROM doctors WHERE id = ?";
 $doctor_stmt = $conn->prepare($doctor_sql);
 $doctor_stmt->bind_param('i', $doctor_id);
 $doctor_stmt->execute();
@@ -35,7 +35,11 @@ $sub_row = $sub_stmt->get_result()->fetch_assoc();
 $membership_expires_at = $sub_row['expires_at'] ?? null;
 $membership_active = $membership_expires_at && strtotime($membership_expires_at) > time();
 
-$plan_row = $conn->query("SELECT id, name, price FROM doctor_plans WHERE is_active = 1 ORDER BY id ASC LIMIT 1")->fetch_assoc();
+// All active plans (chooser) + the default first one for legacy single-plan copy.
+$all_plans = [];
+$_pl = $conn->query("SELECT id, name, price, billing_cycle_days, tagline, is_highlighted FROM doctor_plans WHERE is_active = 1 ORDER BY sort_order ASC, price ASC, id ASC");
+if ($_pl) { while ($r = $_pl->fetch_assoc()) $all_plans[] = $r; }
+$plan_row = $all_plans[0] ?? null;
 
 // Referral stats — doctors this doctor referred, and running commission balance
 $referral_stats_stmt = $conn->prepare("
@@ -47,6 +51,176 @@ $referral_stats_stmt->bind_param('ii', $doctor_id, $doctor_id);
 $referral_stats_stmt->execute();
 $referral_stats = $referral_stats_stmt->get_result()->fetch_assoc();
 $referral_link = BASE_URL . 'doctor-signup.php?ref=' . urlencode($doctor_uid);
+
+// Activation gate — verify -> subscribe -> full dashboard access.
+// doctor_jwt_guard() already redirects every OTHER doctor page back here
+// when not active; this page itself renders the gate screen instead of
+// the real dashboard, rather than bouncing further.
+if (empty($jwt_doctor['_active_ok'])) {
+    $gate_is_verified = (bool) ($doctor_data['is_verified'] ?? false);
+    $gate_plan = $plan_row; // already fetched above
+    ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Activate Your Account | REJUVENATE Doctor Portal</title>
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+  <style>
+    body { background: #f4f7fb; font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; }
+    .gate-topbar { background: #0C74C5; color: #fff; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .gate-topbar a { color: rgba(255,255,255,.85); text-decoration: none; font-size: .85rem; }
+    .gate-wrap { max-width: 560px; margin: 60px auto; padding: 0 16px; }
+    .gate-card { background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 40px 34px; text-align: center; }
+    .gate-icon { width: 68px; height: 68px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-size: 1.7rem; }
+    .gate-icon.pending { background: #fef3c7; color: #92400e; }
+    .gate-icon.subscribe { background: #dcfce7; color: #166534; }
+    .gate-price { font-size: 2rem; font-weight: 800; color: #0C74C5; margin: 18px 0 4px; }
+    .gate-plan-opt { display:flex; align-items:flex-start; gap:10px; text-align:left; border:1.5px solid #e5e7eb; border-radius:10px; padding:12px 14px; margin-bottom:10px; cursor:pointer; transition:.15s; }
+    .gate-plan-opt:hover { border-color:#0C74C5; }
+    .gate-plan-opt.sel { border-color:#0C74C5; background:#eff6ff; }
+    .gate-plan-opt input { margin-top:3px; }
+    .gate-plan-opt .gp-name { font-weight:700; color:#1f2937; font-size:.92rem; }
+    .gate-plan-opt .gp-tag { font-size:.78rem; color:#6b7280; }
+    .gate-plan-opt .gp-price { margin-left:auto; font-weight:800; color:#0C74C5; white-space:nowrap; }
+  </style>
+</head>
+<body>
+  <div class="gate-topbar">
+    <strong>REJUVENATE Doctor Portal</strong>
+    <a href="<?= BASE_URL ?>doctor/doctor-logout.php"><i class="fa fa-sign-out me-1"></i> Logout</a>
+  </div>
+  <div class="gate-wrap">
+    <div class="gate-card">
+      <?php if (!$gate_is_verified): ?>
+        <div class="gate-icon pending"><i class="fa fa-clock-o"></i></div>
+        <h4 class="fw-bold mb-2">Verification Pending</h4>
+        <p class="text-muted">
+          Thanks for registering, Dr. <?= htmlspecialchars($doctor_name) ?>! Our admin team is reviewing your
+          profile and documents (NMC / HPR check). You'll be able to activate your account as soon as you're verified.
+        </p>
+        <p class="text-muted" style="font-size:.85rem;">We'll notify you by email once verification is complete.</p>
+      <?php else: ?>
+        <div class="gate-icon subscribe"><i class="fa fa-check-circle"></i></div>
+        <h4 class="fw-bold mb-2">You're Verified! Activate Your Account</h4>
+        <p class="text-muted">
+          Your profile has been verified by our admin team. Subscribe to activate your account and get full access
+          to your dashboard — patients, appointments, and more.
+        </p>
+        <?php if (!empty($all_plans)): ?>
+          <div class="mt-3" id="gatePlanChooser">
+            <?php foreach ($all_plans as $i => $pl):
+                $cyc = (int) $pl['billing_cycle_days'];
+                $cycLbl = [30 => ' / 1 month', 90 => ' / 3 months', 180 => ' / 6 months', 365 => ' / 12 months'][$cyc] ?? ('/' . $cyc . 'd'); ?>
+              <label class="gate-plan-opt<?= $i === 0 ? ' sel' : '' ?>">
+                <input type="radio" name="gate_plan" value="<?= (int) $pl['id'] ?>" <?= $i === 0 ? 'checked' : '' ?>>
+                <span>
+                  <span class="gp-name"><?= htmlspecialchars($pl['name']) ?><?= !empty($pl['is_highlighted']) ? ' ★' : '' ?></span><br>
+                  <span class="gp-tag"><?= htmlspecialchars($pl['tagline'] ?? '') ?></span>
+                </span>
+                <span class="gp-price">₹<?= number_format($pl['price']) ?><span style="font-weight:600;color:#6b7280;font-size:.8rem;"><?= $cycLbl ?></span></span>
+              </label>
+            <?php endforeach; ?>
+          </div>
+          <button type="button" class="btn btn-primary btn-lg fw-bold mt-2" id="btnGateSubscribe">
+            <i class="fa fa-lock me-1"></i> Subscribe &amp; Activate
+          </button>
+          <div id="gateSubscribeMsg" class="mt-3" style="font-size:.85rem;"></div>
+          <p class="mt-2 mb-0"><a href="<?= BASE_URL ?>doctor-plans/" style="font-size:.82rem;color:#6b7280;">Compare plans in detail →</a></p>
+          <div class="mt-3 text-start" style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;font-size:.78rem;color:#166534;">
+            <i class="fa fa-university me-1"></i> Once active, add your bank details under <strong>Earnings &amp; Bank</strong> —
+            every completed, paid consultation settles to your account within <strong>2 days (T+2)</strong>, minus a 10% platform fee.
+          </div>
+        <?php else: ?>
+          <p class="text-danger">No membership plan is currently configured. Please contact support.</p>
+        <?php endif; ?>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <?php if ($gate_is_verified && !empty($all_plans)): ?>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script>
+      document.querySelectorAll('.gate-plan-opt input').forEach(function(r){
+        r.addEventListener('change', function(){
+          document.querySelectorAll('.gate-plan-opt').forEach(function(o){ o.classList.remove('sel'); });
+          this.closest('.gate-plan-opt').classList.add('sel');
+        });
+      });
+      document.getElementById('btnGateSubscribe').addEventListener('click', function() {
+        var btn = this;
+        var msg = document.getElementById('gateSubscribeMsg');
+        var picked = document.querySelector('.gate-plan-opt input:checked');
+        var planId = picked ? picked.value : '';
+        msg.textContent = '';
+        btn.disabled = true;
+        var originalLabel = btn.innerHTML;
+        btn.innerHTML = 'Preparing payment…';
+
+        fetch('<?= BASE_URL ?>doctor/create-subscription-order.php', { method: 'POST' })
+          .then(function(r) { return r.json(); })
+          .then(function(order) {
+            btn.disabled = false;
+            btn.innerHTML = originalLabel;
+            if (!order.success) {
+              msg.className = 'mt-3 text-danger';
+              msg.textContent = order.message || 'Could not start the payment.';
+              return;
+            }
+
+            var rzp = new Razorpay({
+              key: order.key_id,
+              order_id: order.order_id,
+              amount: order.amount,
+              currency: order.currency,
+              name: 'Rejuvenate Digital Health',
+              description: order.plan_name + ' — Doctor Membership',
+              theme: { color: '#0C74C5' },
+              handler: function(response) {
+                var fd = new FormData();
+                fd.append('razorpay_order_id', response.razorpay_order_id);
+                fd.append('razorpay_payment_id', response.razorpay_payment_id);
+                fd.append('razorpay_signature', response.razorpay_signature);
+                fetch('<?= BASE_URL ?>doctor/verify-subscription-payment.php', { method: 'POST', body: fd })
+                  .then(function(r) { return r.json(); })
+                  .then(function(res) {
+                    if (res.success) {
+                      window.location.reload();
+                    } else {
+                      msg.className = 'mt-3 text-danger';
+                      msg.textContent = res.message || 'Payment verification failed.';
+                    }
+                  });
+              },
+              modal: {
+                ondismiss: function() {
+                  msg.className = 'mt-3 text-muted';
+                  msg.textContent = 'Payment was cancelled.';
+                },
+              },
+            });
+            rzp.on('payment.failed', function() {
+              msg.className = 'mt-3 text-danger';
+              msg.textContent = 'Payment failed. Please try again.';
+            });
+            rzp.open();
+          })
+          .catch(function() {
+            btn.disabled = false;
+            btn.innerHTML = originalLabel;
+            msg.className = 'mt-3 text-danger';
+            msg.textContent = 'Network error. Please try again.';
+          });
+      });
+    </script>
+  <?php endif; ?>
+</body>
+</html>
+    <?php
+    exit;
+}
 
 /*
  * appointments.status is an ENUM('pending','approved','rejected','completed','no_show').
@@ -462,10 +636,24 @@ $earnings = $earnings_result->fetch_assoc();
                 <?php if ($plan_row): ?>Subscribe to <strong><?= htmlspecialchars($plan_row['name']) ?></strong> — ₹<?= number_format($plan_row['price']) ?>/<?= (int)($plan_row['billing_cycle_days'] ?? 30) === 30 ? 'month' : ((int)$plan_row['billing_cycle_days']) . ' days' ?>.<?php endif; ?>
               </p>
             <?php endif; ?>
-            <?php if ($plan_row): ?>
+            <?php if (!empty($all_plans)): ?>
+              <?php if (count($all_plans) > 1): ?>
+                <select id="subPlanSelect" class="form-select form-select-sm mb-2" style="max-width:280px;">
+                  <?php foreach ($all_plans as $pl):
+                      $c = (int) $pl['billing_cycle_days'];
+                      $cl = [30 => ' / 1 month', 90 => ' / 3 months', 180 => ' / 6 months', 365 => ' / 12 months'][$c] ?? ('/' . $c . 'd'); ?>
+                    <option value="<?= (int) $pl['id'] ?>" <?= !empty($pl['is_highlighted']) ? 'selected' : '' ?>>
+                      <?= htmlspecialchars($pl['name']) ?> — ₹<?= number_format($pl['price']) ?><?= $cl ?>
+                    </option>
+                  <?php endforeach; ?>
+                </select>
+              <?php else: ?>
+                <input type="hidden" id="subPlanSelect" value="<?= (int) $all_plans[0]['id'] ?>">
+              <?php endif; ?>
               <button type="button" class="btn btn-sm bg-primary-theme text-white" id="btnSubscribe">
-                <?= $membership_active ? 'Renew Early' : 'Subscribe Now' ?> — ₹<?= number_format($plan_row['price']) ?>
+                <?= $membership_active ? 'Renew' : 'Subscribe' ?> Now
               </button>
+              <a href="<?= BASE_URL ?>doctor-plans/" class="btn btn-sm btn-link" style="font-size:.8rem;">Compare plans</a>
               <div id="subscribeMsg" class="mt-2" style="font-size:.8rem;"></div>
             <?php endif; ?>
           </div>
@@ -720,18 +908,22 @@ $earnings = $earnings_result->fetch_assoc();
       });
     });
   </script>
-  <?php if ($plan_row): ?>
+  <?php if (!empty($all_plans)): ?>
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <script>
       document.getElementById('btnSubscribe').addEventListener('click', function() {
         var btn = this;
         var msg = document.getElementById('subscribeMsg');
+        var sel = document.getElementById('subPlanSelect');
+        var planId = sel ? sel.value : '';
         msg.textContent = '';
         btn.disabled = true;
         var originalLabel = btn.innerHTML;
         btn.innerHTML = 'Preparing payment…';
 
-        fetch('<?= BASE_URL ?>doctor/create-subscription-order.php', { method: 'POST' })
+        var _fd = new FormData();
+        if (planId) _fd.append('plan_id', planId);
+        fetch('<?= BASE_URL ?>doctor/create-subscription-order.php', { method: 'POST', body: _fd })
           .then(function(r) { return r.json(); })
           .then(function(order) {
             btn.disabled = false;

@@ -6,6 +6,7 @@ error_reporting(E_ALL);
 session_start();
 include "db-conn.php";
 include_once "functions.php";
+require_once __DIR__ . '/../lib/DoctorAccess.php';
 
 $doctor = null;
 $success_message = $error_message = '';
@@ -83,6 +84,28 @@ if (isset($_GET['unverify'])) {
     exit();
 }
 
+// HPR verification — approve / reject the doctor's HPR verification request
+// (or toggle hpr_verified directly). Mirrors the doctor verify flow above.
+if (isset($_GET['hpr_approve'])) {
+    $conn->query("UPDATE doctors SET hpr_verified = 1, hpr_verified_at = NOW() WHERE id = " . $doctor_id);
+    $conn->query("UPDATE hpr_verification_requests SET status = 'approved', reviewed_at = NOW(), reviewed_by = "
+        . (int)($_SESSION['admin_id'] ?? 0) . " WHERE doctor_id = " . $doctor_id . " AND status = 'pending'");
+    $_SESSION['success_message'] = "HPR verification approved.";
+    header("Location: doctor-edit.php?id=" . $doctor_id);
+    exit();
+}
+if (isset($_GET['hpr_reject'])) {
+    $note = trim($_POST['hpr_review_note'] ?? $_GET['note'] ?? '');
+    $conn->query("UPDATE doctors SET hpr_verified = 0, hpr_verified_at = NULL WHERE id = " . $doctor_id);
+    $rej = $conn->prepare("UPDATE hpr_verification_requests SET status = 'rejected', reviewed_at = NOW(), reviewed_by = ?, review_note = ? WHERE doctor_id = ? AND status = 'pending'");
+    $adm = (int)($_SESSION['admin_id'] ?? 0);
+    $rej->bind_param('isi', $adm, $note, $doctor_id);
+    $rej->execute();
+    $_SESSION['success_message'] = "HPR verification request rejected.";
+    header("Location: doctor-edit.php?id=" . $doctor_id);
+    exit();
+}
+
 // Per-document verification toggle (doctor_documents.is_verified)
 if (isset($_GET['verify_doc'])) {
     $doc_id = intval($_GET['verify_doc']);
@@ -102,12 +125,60 @@ if (isset($_GET['unverify_doc'])) {
     exit();
 }
 
+// Bank account verification toggle
+if (isset($_GET['verify_bank'])) {
+    $admin_id = $_SESSION['admin_id'] ?? null;
+    $stmt = $conn->prepare("UPDATE doctor_bank_accounts SET is_verified = 1, verified_at = NOW(), verified_by = ? WHERE doctor_id = ?");
+    $stmt->bind_param('ii', $admin_id, $doctor_id);
+    $stmt->execute();
+    header("Location: doctor-edit.php?id=" . $doctor_id);
+    exit();
+}
+if (isset($_GET['unverify_bank'])) {
+    $stmt = $conn->prepare("UPDATE doctor_bank_accounts SET is_verified = 0, verified_at = NULL, verified_by = NULL WHERE doctor_id = ?");
+    $stmt->bind_param('i', $doctor_id);
+    $stmt->execute();
+    header("Location: doctor-edit.php?id=" . $doctor_id);
+    exit();
+}
+
 // Uploaded documents for verification review
 $docs_stmt = $conn->prepare("SELECT * FROM doctor_documents WHERE doctor_id = ? ORDER BY uploaded_at DESC");
 $docs_stmt->bind_param('i', $doctor_id);
 $docs_stmt->execute();
 $doctor_documents = $docs_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $docs_stmt->close();
+
+// Payment / subscription history
+$pay_stmt = $conn->prepare("
+    SELECT ds.*, dp.name AS plan_name
+    FROM doctor_subscriptions ds
+    LEFT JOIN doctor_plans dp ON dp.id = ds.plan_id
+    WHERE ds.doctor_id = ?
+    ORDER BY ds.created_at DESC
+");
+$pay_stmt->bind_param('i', $doctor_id);
+$pay_stmt->execute();
+$doctor_payments = $pay_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$pay_stmt->close();
+
+// Bank account details (filled by the doctor themselves)
+$bank_stmt = $conn->prepare("SELECT * FROM doctor_bank_accounts WHERE doctor_id = ? LIMIT 1");
+$bank_stmt->bind_param('i', $doctor_id);
+$bank_stmt->execute();
+$doctor_bank = $bank_stmt->get_result()->fetch_assoc();
+$bank_stmt->close();
+
+// Settlement (T+2 payout) summary
+$settle_sum_stmt = $conn->prepare("
+    SELECT
+        COALESCE(SUM(CASE WHEN status = 'pending' THEN settlement_amount ELSE 0 END), 0) AS pending_total,
+        COALESCE(SUM(CASE WHEN status = 'settled' THEN settlement_amount ELSE 0 END), 0) AS settled_total
+    FROM appointment_settlements WHERE doctor_id = ?
+");
+$settle_sum_stmt->bind_param('i', $doctor_id);
+$settle_sum_stmt->execute();
+$settlement_summary = $settle_sum_stmt->get_result()->fetch_assoc();
 
 // Referring doctor's name, if this doctor signed up via a referral link
 $referring_doctor_name = null;
@@ -118,6 +189,25 @@ if (!empty($doctor['referred_by'])) {
     $rd_row = $rd_stmt->get_result()->fetch_assoc();
     $referring_doctor_name = $rd_row['name'] ?? null;
 }
+
+// Activation gate state — is this doctor actually publicly bookable right
+// now? `status` alone doesn't tell you this anymore: it's never
+// auto-flipped (see database/migration_doctor_activation_gate.sql), so a
+// doctor can show status='Active' here while still being hidden from
+// booking listings because they're unverified/unsubscribed.
+$doc_in_grace = !empty($doctor['grace_period_until']) && strtotime($doctor['grace_period_until']) > time();
+$doc_has_sub  = doctor_has_active_subscription($conn, $doctor_id);
+$doc_bookable = doctor_qualifies_active($conn, $doctor);
+$doc_sub_expiry_stmt = $conn->prepare("SELECT expires_at FROM doctor_subscriptions WHERE doctor_id = ? AND status = 'paid' ORDER BY expires_at DESC LIMIT 1");
+$doc_sub_expiry_stmt->bind_param('i', $doctor_id);
+$doc_sub_expiry_stmt->execute();
+$doc_sub_expiry = $doc_sub_expiry_stmt->get_result()->fetch_assoc()['expires_at'] ?? null;
+
+// Latest HPR verification request from the doctor (doctor/my-contact.php)
+$hpr_req_stmt = $conn->prepare("SELECT * FROM hpr_verification_requests WHERE doctor_id = ? ORDER BY id DESC LIMIT 1");
+$hpr_req_stmt->bind_param('i', $doctor_id);
+$hpr_req_stmt->execute();
+$hpr_request = $hpr_req_stmt->get_result()->fetch_assoc();
 
 // Get current doctor departments
 $current_departments = [];
@@ -540,11 +630,47 @@ if (!empty($doctor['gallery_images'])) {
                                             <span class="badge bg-success ms-1"><i class="fas fa-check"></i> HPR Verified</span>
                                         <?php endif; ?>
                                     </div>
+                                    <?php if (!empty($doctor['hfr_id'])): ?>
+                                        <div class="mb-2"><strong>HFR ID:</strong> <?= htmlspecialchars($doctor['hfr_id']) ?></div>
+                                    <?php endif; ?>
                                     <?php if (!empty($doctor['nmc_reg_number'])): ?>
                                         <div class="mb-2"><strong>NMC Reg. No.:</strong> <?= htmlspecialchars($doctor['nmc_reg_number']) ?></div>
                                     <?php endif; ?>
                                     <?php if (!empty($doctor['council_name'])): ?>
                                         <div class="mb-2"><strong>State Medical Council:</strong> <?= htmlspecialchars($doctor['council_name']) ?></div>
+                                    <?php endif; ?>
+
+                                    <?php if ($hpr_request && $hpr_request['status'] === 'pending'): ?>
+                                        <div class="alert alert-warning py-2 px-3 mt-2" style="font-size:.86rem;">
+                                            <strong><i class="fas fa-clock me-1"></i>HPR verification requested</strong>
+                                            on <?= date('d M Y', strtotime($hpr_request['requested_at'])) ?>.
+                                            <div class="mt-1">
+                                                HPR: <?= htmlspecialchars($hpr_request['hpr_id'] ?: '—') ?> ·
+                                                NMC: <?= htmlspecialchars($hpr_request['nmc_reg_number'] ?: '—') ?> ·
+                                                Council: <?= htmlspecialchars($hpr_request['council_name'] ?: '—') ?> ·
+                                                Year: <?= htmlspecialchars($hpr_request['year_of_registration'] ?: '—') ?>
+                                            </div>
+                                            <?php if (!empty($hpr_request['doctor_note'])): ?>
+                                                <div class="mt-1 fst-italic">"<?= htmlspecialchars($hpr_request['doctor_note']) ?>"</div>
+                                            <?php endif; ?>
+                                            <form method="POST" action="doctor-edit.php?id=<?= $doctor_id ?>&hpr_reject=1" class="d-flex gap-2 mt-2">
+                                                <a href="doctor-edit.php?id=<?= $doctor_id ?>&hpr_approve=1" class="btn btn-sm btn-success"
+                                                   onclick="return confirm('Confirm you have checked this HPR ID against the registry?')">
+                                                    <i class="fas fa-check me-1"></i>Approve HPR
+                                                </a>
+                                                <input type="text" name="hpr_review_note" class="form-control form-control-sm" placeholder="Reason (if rejecting)">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
+                                            </form>
+                                        </div>
+                                    <?php elseif ($hpr_request && $hpr_request['status'] === 'rejected'): ?>
+                                        <div class="text-muted mt-2" style="font-size:.82rem;">
+                                            Last HPR request rejected <?= $hpr_request['reviewed_at'] ? 'on ' . date('d M Y', strtotime($hpr_request['reviewed_at'])) : '' ?>
+                                            <?= $hpr_request['review_note'] ? '— ' . htmlspecialchars($hpr_request['review_note']) : '' ?>.
+                                        </div>
+                                    <?php endif; ?>
+                                    <?php if ($doctor['hpr_verified']): ?>
+                                        <div class="mt-2"><a href="doctor-edit.php?id=<?= $doctor_id ?>&hpr_reject=1&note=Revoked+by+admin" class="btn btn-sm btn-outline-warning"
+                                           onclick="return confirm('Remove HPR verified status?')"><i class="fas fa-times me-1"></i>Revoke HPR</a></div>
                                     <?php endif; ?>
                                 </div>
                                 <div class="col-md-6 mb-3">
@@ -570,6 +696,59 @@ if (!empty($doctor['gallery_images'])) {
                                             <i class="fas fa-check-circle me-1"></i> Verify Doctor
                                         </a>
                                     <?php endif; ?>
+
+                                    <div class="mb-2 mt-3">
+                                        <strong>Publicly Bookable:</strong><br>
+                                        <?php if ($doc_bookable): ?>
+                                            <span class="badge bg-success"><i class="fas fa-globe"></i> Yes — shows up in booking</span>
+                                            <small class="text-muted d-block">
+                                                <?php if ($doc_in_grace): ?>
+                                                    Grace period until <?= date('d M Y', strtotime($doctor['grace_period_until'])) ?>
+                                                <?php elseif ($doc_has_sub): ?>
+                                                    Subscribed until <?= date('d M Y', strtotime($doc_sub_expiry)) ?>
+                                                <?php endif; ?>
+                                            </small>
+                                        <?php else: ?>
+                                            <span class="badge bg-secondary"><i class="fas fa-eye-slash"></i> No — hidden from booking</span>
+                                            <small class="text-muted d-block">
+                                                <?= !$doctor['is_verified'] ? 'Awaiting admin verification.' : 'Verified, but no active subscription.' ?>
+                                            </small>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <h6 class="fw-bold mb-2">Bank Account Details</h6>
+                                    <?php if (!$doctor_bank): ?>
+                                        <p class="text-muted mb-0">Doctor hasn't added bank details yet.</p>
+                                    <?php else: ?>
+                                        <div class="mb-1"><strong>Holder:</strong> <?= htmlspecialchars($doctor_bank['account_holder_name']) ?></div>
+                                        <div class="mb-1"><strong>A/C No.:</strong> <?= htmlspecialchars($doctor_bank['account_number']) ?></div>
+                                        <div class="mb-1"><strong>IFSC:</strong> <?= htmlspecialchars($doctor_bank['ifsc_code']) ?> &middot; <?= htmlspecialchars($doctor_bank['bank_name']) ?></div>
+                                        <?php if (!empty($doctor_bank['upi_id'])): ?>
+                                            <div class="mb-1"><strong>UPI:</strong> <?= htmlspecialchars($doctor_bank['upi_id']) ?></div>
+                                        <?php endif; ?>
+                                        <div class="mt-2">
+                                            <?php if ($doctor_bank['is_verified']): ?>
+                                                <span class="badge bg-success mb-1"><i class="fas fa-check-circle"></i> Verified</span><br>
+                                                <a href="doctor-edit.php?id=<?= $doctor_id ?>&unverify_bank=1" class="btn btn-sm btn-outline-warning mt-1">Unverify Bank</a>
+                                            <?php else: ?>
+                                                <span class="badge bg-secondary mb-1">Unverified</span><br>
+                                                <a href="doctor-edit.php?id=<?= $doctor_id ?>&verify_bank=1" class="btn btn-sm btn-success mt-1">Verify Bank</a>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <h6 class="fw-bold mb-2">Settlement Summary (T+2)</h6>
+                                    <div class="mb-1"><strong>Pending:</strong> ₹<?= number_format($settlement_summary['pending_total'], 2) ?></div>
+                                    <div class="mb-1"><strong>Total Settled:</strong> ₹<?= number_format($settlement_summary['settled_total'], 2) ?></div>
+                                    <a href="settlements.php?status=pending" class="btn btn-sm btn-outline-primary mt-2">
+                                        <i class="fas fa-list me-1"></i> View All Settlements
+                                    </a>
                                 </div>
                             </div>
 
@@ -601,6 +780,42 @@ if (!empty($doctor['gallery_images'])) {
                                                         <a href="doctor-edit.php?id=<?= $doctor_id ?>&verify_doc=<?= $doc['id'] ?>" class="btn btn-sm btn-outline-success">Mark Verified</a>
                                                     <?php endif; ?>
                                                 </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php endif; ?>
+
+                            <hr>
+                            <h6 class="fw-bold mb-3">Payment History (<?= count($doctor_payments) ?>)</h6>
+                            <?php if (empty($doctor_payments)): ?>
+                                <p class="text-muted mb-0">No payments yet.</p>
+                            <?php else: ?>
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle">
+                                        <thead><tr><th>Plan</th><th>Amount</th><th>Status</th><th>Period</th><th>Payment ID</th><th>Purchased On</th></tr></thead>
+                                        <tbody>
+                                        <?php foreach ($doctor_payments as $pay):
+                                            $payBadge = [
+                                                'paid'    => 'bg-success',
+                                                'pending' => 'bg-warning text-dark',
+                                                'failed'  => 'bg-danger',
+                                            ][$pay['status']] ?? 'bg-secondary';
+                                        ?>
+                                            <tr>
+                                                <td><?= htmlspecialchars($pay['plan_name'] ?? ('Plan #' . $pay['plan_id'])) ?></td>
+                                                <td>₹<?= number_format($pay['amount'], 2) ?></td>
+                                                <td><span class="badge <?= $payBadge ?>"><?= ucfirst($pay['status']) ?></span></td>
+                                                <td>
+                                                    <?php if ($pay['starts_at'] && $pay['expires_at']): ?>
+                                                        <?= date('d M Y', strtotime($pay['starts_at'])) ?> – <?= date('d M Y', strtotime($pay['expires_at'])) ?>
+                                                    <?php else: ?>
+                                                        —
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td><small class="text-muted"><?= htmlspecialchars($pay['razorpay_payment_id'] ?: '—') ?></small></td>
+                                                <td><?= date('d M Y, h:i A', strtotime($pay['created_at'])) ?></td>
                                             </tr>
                                         <?php endforeach; ?>
                                         </tbody>

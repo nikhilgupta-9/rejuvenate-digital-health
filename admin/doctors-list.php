@@ -224,9 +224,7 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
                                             <table class="table table-hover">
                                                 <thead>
                                                     <tr>
-                                                        <th>ID</th>
-                                                        <th>Profile</th>
-                                                        <th>Name</th>
+                                                        <th>Doctor</th>
                                                         <th>Specialization</th>
                                                         <th>Experience</th>
                                                         <th>Fee</th>
@@ -239,24 +237,33 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
                                                 <tbody>
                                                     <?php if (empty($doctors_list)): ?>
                                                         <tr>
-                                                            <td colspan="10" class="text-center text-muted py-4">
+                                                            <td colspan="8" class="text-center text-muted py-4">
                                                                 No doctors found.
                                                             </td>
                                                         </tr>
                                                     <?php else: ?>
                                                         <?php foreach ($doctors_list as $doctor): ?>
                                                             <tr>
-                                                                <td><?= $doctor['doctor_uid'] ?></td>
                                                                 <td>
-                                                                    <?php if (!empty($doctor['profile_image']) && file_exists(BASE_URL ."admin/". $doctor['profile_image'])): ?>
-                                                                        <img src="<?=BASE_URL ."admin/". $doctor['profile_image'] ?>" alt="Profile" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
-                                                                    <?php else: ?>
-                                                                        <div style="width: 40px; height: 40px; border-radius: 50%; background: #f0f0f0; display: flex; align-items: center; justify-content: center;">
-                                                                            <i class="fas fa-user-md text-muted"></i>
+                                                                    <a href="doctor-edit.php?id=<?= $doctor['id'] ?>" class="text-decoration-none d-flex align-items-center" style="gap:10px;color:inherit;">
+                                                                        <?php if (!empty($doctor['profile_image'])): ?>
+                                                                            <img src="<?= BASE_URL ."admin/". htmlspecialchars($doctor['profile_image']) ?>" alt="Profile"
+                                                                                style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink:0;"
+                                                                                onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                                                                            <div style="display:none;width: 40px; height: 40px; border-radius: 50%; background: #f0f0f0; align-items: center; justify-content: center; flex-shrink:0;">
+                                                                                <i class="fas fa-user-md text-muted"></i>
+                                                                            </div>
+                                                                        <?php else: ?>
+                                                                            <div style="width: 40px; height: 40px; border-radius: 50%; background: #f0f0f0; display: flex; align-items: center; justify-content: center; flex-shrink:0;">
+                                                                                <i class="fas fa-user-md text-muted"></i>
+                                                                            </div>
+                                                                        <?php endif; ?>
+                                                                        <div>
+                                                                            <div class="fw-semibold"><?= htmlspecialchars($doctor['name']) ?></div>
+                                                                            <small class="text-muted"><?= htmlspecialchars($doctor['doctor_uid']) ?></small>
                                                                         </div>
-                                                                    <?php endif; ?>
+                                                                    </a>
                                                                 </td>
-                                                                <td><?= htmlspecialchars($doctor['name']) ?></td>
                                                                 <td><?= htmlspecialchars($doctor['specialization']) ?></td>
                                                                 <td><?= $doctor['experience_years'] ?> years</td>
                                                                 <td>₹<?= $doctor['consultation_fee'] !== null

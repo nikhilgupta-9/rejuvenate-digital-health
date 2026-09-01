@@ -1,5 +1,6 @@
 <?php
 include "functions.php";
+require_once __DIR__ . '/../lib/Settlement.php';
 
 // send_appointment_confirmation_email() reads $GLOBALS['site'] for the login link —
 // defined here so approving an appointment from this page doesn't emit an
@@ -123,6 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_id'])) {
         $stmt = $conn->prepare("UPDATE appointments SET status = 'completed' WHERE id = ?");
         $stmt->bind_param('i', $appointment_id);
         $stmt->execute();
+        create_settlement_if_needed($conn, $appointment_id);
         $page_message = 'Appointment marked as completed.';
         $page_message_type = 'success';
     }

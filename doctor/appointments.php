@@ -1,6 +1,7 @@
 <?php
 include_once(__DIR__ . "/../config/connect.php");
 include_once(__DIR__ . "/../util/function.php");
+require_once(__DIR__ . "/../lib/Settlement.php");
 
 require_once(__DIR__ . "/auth/guard.php");
 $jwt_doctor  = doctor_jwt_guard();
@@ -51,6 +52,9 @@ if (isset($_POST['update_status'])) {
 
             if ($update_stmt->execute()) {
                 $success_message = "Appointment status updated successfully!";
+                if ($new_status === 'completed') {
+                    create_settlement_if_needed($conn, $appointment_id);
+                }
             } else {
                 $error_message = "Failed to update appointment status.";
             }

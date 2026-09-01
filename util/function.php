@@ -2,6 +2,7 @@
 include_once __DIR__ . '/../config/connect.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/mail_config.php';
+require_once __DIR__ . '/../lib/DoctorAccess.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -334,6 +335,7 @@ function get_doctor_byDepartment()
                 ON dd.category_id = sc.cate_id
             WHERE sc.slug_url = ?
             AND d.status = 'Active'
+            AND " . doctor_active_sql_condition('d') . "
             ORDER BY d.id");
     $stmt->bind_param('s', $alias);
     $stmt->execute();
@@ -1211,6 +1213,7 @@ function get_doctors_by_department_slug($slug) {
         JOIN doctor_departments dd ON dd.doctor_id = d.id
         JOIN sub_categories sc ON sc.cate_id = dd.category_id
         WHERE sc.slug_url = ? AND sc.parent_id = 20873 AND d.status = 'Active'
+          AND " . doctor_active_sql_condition('d') . "
         ORDER BY d.name ASC
     ");
     if (!$stmt) {

@@ -1,9 +1,14 @@
 <?php
 include_once "config/connect.php";
 include_once "util/function.php";
+require_once __DIR__ . '/util/doctor-plans-render.php';
 
 $contact = contact_us();
 $logo    = get_header_logo();
+
+$dn_plans = [];
+$dn_res = $conn->query("SELECT * FROM doctor_plans WHERE is_active = 1 ORDER BY sort_order ASC, price ASC, id ASC");
+if ($dn_res) { while ($r = $dn_res->fetch_assoc()) $dn_plans[] = $r; }
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -66,6 +71,7 @@ $logo    = get_header_logo();
         <div class="cta-row mt-4">
             <a href="<?= BASE_URL ?>doctor-signup.php" class="btn-teal">Join the Doctor Network</a>
             <a href="<?= BASE_URL ?>doctor-login.php" class="btn-outline-white">Doctor Login</a>
+            <a href="<?= BASE_URL ?>doctor-network/#membership" class="btn-outline-white">Membership</a>
         </div>
     </div>
 </section>
@@ -450,6 +456,26 @@ $logo    = get_header_logo();
         </div>
     </div>
 </section>
+
+<!-- ══════════════════════════════════════════════
+     MEMBERSHIP PLANS
+══════════════════════════════════════════════ -->
+<?php if (!empty($dn_plans)): ?>
+<section class="card-section alt" id="membership">
+    <div class="container">
+        <div class="section-label">
+            <span class="eyebrow">Membership</span>
+            <h2>Simple Plans, Built for Growing Practices</h2>
+            <p>Pick the membership length that suits you — Monthly, Quarterly, 6-Month or Yearly. Longer plans
+               cost less per month and keep your verified profile discoverable to patients across India for longer.</p>
+        </div>
+        <?php render_doctor_plan_cards($dn_plans, ['cta_mode' => 'link', 'signup_url' => BASE_URL . 'doctor-signup.php', 'compact' => true]); ?>
+        <div class="text-center mt-4">
+            <a href="<?= BASE_URL ?>doctor-plans/" class="btn-teal">See full plan details &amp; FAQ →</a>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
 
 <!-- ══════════════════════════════════════════════
      FINAL CTA

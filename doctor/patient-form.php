@@ -24,6 +24,7 @@ function routeSelect($selected, $name) {
 
 include_once(__DIR__ . "/../config/connect.php");
 include_once(__DIR__ . "/../util/function.php");
+require_once(__DIR__ . "/../lib/Settlement.php");
 require_once(__DIR__ . "/auth/guard.php");
 
 $jwt_doctor = doctor_jwt_guard();
@@ -300,6 +301,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
 
     if ($rx_status === 'final') {
         $conn->query("UPDATE appointments SET status='completed' WHERE id={$appt_id} AND doctor_id={$doctor_id}");
+        create_settlement_if_needed($conn, (int) $appt_id);
     }
 }
 

@@ -31,6 +31,7 @@ RewriteRule ^blogs/([^/]+)/?$ blog-details.php?alias=$1 [L,QSA]
 RewriteRule ^doctor-login/?$ doctor-login.php? [L,QSA]
 RewriteRule ^doctor-signup/?$ doctor-signup.php? [L,QSA]
 RewriteRule ^doctor-network/?$ doctor-network.php? [L,QSA]
+RewriteRule ^doctor-plans/?$ doctor-plans.php? [L,QSA]
 RewriteRule ^forgot-password/?$ forgot-password.php? [L,QSA]
 
 #for user login and singup

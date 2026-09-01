@@ -23,9 +23,19 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$plan = $conn->query("SELECT id, name, price, billing_cycle_days FROM doctor_plans WHERE is_active = 1 ORDER BY id ASC LIMIT 1")->fetch_assoc();
+// A specific plan can be chosen (doctor-plans.php / dashboard chooser); otherwise
+// fall back to the first active plan so the legacy single-button flow still works.
+$requestedPlanId = (int) ($_POST['plan_id'] ?? 0);
+if ($requestedPlanId > 0) {
+    $ps = $conn->prepare("SELECT id, name, price, billing_cycle_days FROM doctor_plans WHERE id = ? AND is_active = 1 LIMIT 1");
+    $ps->bind_param('i', $requestedPlanId);
+    $ps->execute();
+    $plan = $ps->get_result()->fetch_assoc();
+} else {
+    $plan = $conn->query("SELECT id, name, price, billing_cycle_days FROM doctor_plans WHERE is_active = 1 ORDER BY sort_order ASC, id ASC LIMIT 1")->fetch_assoc();
+}
 if (!$plan) {
-    echo json_encode(['success' => false, 'message' => 'No membership plan is currently available.']);
+    echo json_encode(['success' => false, 'message' => 'That membership plan is not available.']);
     exit;
 }
 

@@ -10,6 +10,24 @@ if (!defined('BASE_URL')) {
     require_once __DIR__ . '/../../config/connect.php';
 }
 require_once __DIR__ . '/../../lib/JWT.php';
+require_once __DIR__ . '/../../lib/DoctorAccess.php';
+
+// Pages reachable even when a doctor hasn't cleared verification +
+// subscription yet — the dashboard (to show the gate screen itself),
+// the subscribe/payment flow, and account-level actions that don't
+// depend on being active.
+const DOCTOR_GATE_ALLOWLIST = [
+    'doctor-dashboard.php',
+    'doctor-logout.php',
+    'create-subscription-order.php',
+    'verify-subscription-payment.php',
+    'payment-history.php',
+    'earnings.php',
+    'change-password.php',
+    'account-settings.php',
+    'my-contact.php',
+    'delete-account.php',
+];
 
 /**
  * @param bool $return_null  If true, return null on auth failure instead of redirecting (for API endpoints).
@@ -56,7 +74,43 @@ function doctor_jwt_guard(bool $return_null = false): ?array
 
     // Populate session so session-based helpers (abdm_*.php) can read doctor_id
     if (session_status() === PHP_SESSION_NONE) session_start();
-    $_SESSION['doctor_id'] = $payload['sub'] ?? ($payload['doctor_id'] ?? null);
+    $doctorId = (int) ($payload['sub'] ?? ($payload['doctor_id'] ?? 0));
+    $_SESSION['doctor_id'] = $doctorId;
+
+    // Activation gate — verify -> subscribe -> full access. Doesn't touch
+    // login itself (above), only what a signed-in-but-not-yet-active
+    // doctor can reach. doctor-dashboard.php renders the gate screen
+    // itself when $payload['_active_ok'] is false.
+    $payload['_active_ok'] = true;
+    if ($doctorId) {
+        global $conn;
+        $gateStmt = $conn->prepare("SELECT id, is_verified, grace_period_until FROM doctors WHERE id = ? LIMIT 1");
+        $gateStmt->bind_param('i', $doctorId);
+        $gateStmt->execute();
+        $gateDoctor = $gateStmt->get_result()->fetch_assoc();
+
+        if ($gateDoctor) {
+            $activeOk = doctor_qualifies_active($conn, $gateDoctor);
+            $payload['_active_ok'] = $activeOk;
+
+            if (!$activeOk) {
+                $currentScript = basename($_SERVER['SCRIPT_NAME'] ?? '');
+                if (!in_array($currentScript, DOCTOR_GATE_ALLOWLIST, true)) {
+                    // API endpoints (patient management, document upload, etc.)
+                    // are exactly the "sab kuch" a gated doctor shouldn't get —
+                    // block them the same way an invalid token would: a graceful
+                    // null for $return_null callers (so they emit their own JSON
+                    // error instead of receiving a raw redirect), a hard redirect
+                    // to the gate screen for full-page loads.
+                    if ($return_null) {
+                        return null;
+                    }
+                    header('Location: ' . BASE_URL . 'doctor/doctor-dashboard.php');
+                    exit();
+                }
+            }
+        }
+    }
 
     return $payload;
 }
