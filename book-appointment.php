@@ -499,14 +499,95 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
       color: var(--bk-muted);
     }
 
-    @media (max-width: 576px) {
-      .bk-card {
-        padding: 20px 16px;
-      }
+    /* ── Schedule sync: summary + date strip ── */
+    .bk-sched-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #eaf4fd;
+      border: 1px solid #cfe6fb;
+      border-radius: 10px;
+      padding: 9px 13px;
+      font-size: .8rem;
+      color: var(--bk-ink);
+      margin-bottom: 14px;
+    }
+    .bk-sched-info i { color: var(--bk-primary); }
 
-      .bk-step .lbl {
-        display: none;
+    .bk-date-strip {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 4px 2px 10px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+    }
+    .bk-date-strip::-webkit-scrollbar { height: 5px; }
+    .bk-date-strip::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+    .bk-date-chip {
+      flex: 0 0 auto;
+      width: 62px;
+      border: 1.5px solid var(--bk-border);
+      border-radius: 12px;
+      padding: 8px 4px;
+      text-align: center;
+      cursor: pointer;
+      background: #fff;
+      transition: .15s;
+      user-select: none;
+    }
+    .bk-date-chip .d-dow { font-size: .66rem; font-weight: 700; text-transform: uppercase; color: var(--bk-muted); letter-spacing: .3px; }
+    .bk-date-chip .d-day { font-size: 1.15rem; font-weight: 700; color: var(--bk-ink); line-height: 1.15; }
+    .bk-date-chip .d-mon { font-size: .64rem; color: var(--bk-muted); text-transform: uppercase; }
+    .bk-date-chip:hover { border-color: var(--bk-primary); }
+    .bk-date-chip.selected { background: var(--bk-primary); border-color: var(--bk-primary); }
+    .bk-date-chip.selected .d-dow,
+    .bk-date-chip.selected .d-day,
+    .bk-date-chip.selected .d-mon { color: #fff; }
+    .bk-date-chip.disabled { opacity: .38; cursor: not-allowed; background: #f8fafc; }
+    .bk-date-chip.disabled:hover { border-color: var(--bk-border); }
+
+    .bk-more-date { margin-top: 12px; }
+    .bk-more-date summary { font-size: .82rem; color: var(--bk-primary); cursor: pointer; font-weight: 600; }
+    .bk-more-date[open] summary { margin-bottom: 8px; }
+
+    /* ── Collapsible consent ── */
+    .bk-consent details > summary { cursor: pointer; font-weight: 700; list-style: none; }
+    .bk-consent details > summary::-webkit-details-marker { display: none; }
+    .bk-consent details[open] { margin-top: 8px; }
+
+    @media (max-width: 576px) {
+      .bk-shell { padding: 22px 0 90px; }
+      .bk-card { padding: 18px 14px; }
+      .bk-step .lbl { display: none; }
+      .bk-stepper { margin-bottom: 22px; }
+
+      .bk-dept-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+      .bk-dept-card { padding: 14px 8px; }
+      .bk-slot-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+      .bk-slot { padding: 12px 4px; font-size: .84rem; }
+      .bk-doctor-card { padding: 14px; gap: 11px; }
+      .bk-doctor-card .avatar { width: 48px; height: 48px; font-size: 1.05rem; }
+
+      .bk-pane h4 { font-size: 1.12rem; }
+      .bk-pane .sub { font-size: .82rem; margin-bottom: 16px; }
+
+      /* Sticky action bar so Back / Continue is always reachable */
+      .bk-nav {
+        position: fixed;
+        left: 0; right: 0; bottom: 0;
+        margin: 0;
+        padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+        background: #fff;
+        border-top: 1px solid var(--bk-border);
+        box-shadow: 0 -4px 18px rgba(20, 40, 70, .08);
+        z-index: 40;
+        gap: 10px;
       }
+      .bk-nav .bk-btn { flex: 1; padding: 13px 10px; }
+      .bk-nav span:empty { display: none; }
+      .bk-success .bk-nav { position: static; box-shadow: none; border: 0; }
     }
   </style>
 </head>
@@ -585,20 +666,30 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
         <!-- STEP 3: Date & Time -->
         <div class="bk-pane" id="bkPane3">
           <h4>Pick a date &amp; time</h4>
-          <p class="sub">Slots update in real time based on the doctor's current bookings.</p>
-          <div class="row g-3 mb-3">
-            <div class="col-md-5 bk-field">
-              <label>Appointment Date</label>
-              <input type="date" class="form-control" id="bkDate" min="<?= date('Y-m-d') ?>" value="<?= date('Y-m-d') ?>">
-            </div>
-            <div class="col-md-4 bk-field">
-              <label>Consultation Mode</label>
-              <select class="form-select" id="bkMode">
-                <option value="online">Online Consultation</option>
-                <option value="clinic">In-Clinic Visit</option>
-              </select>
-            </div>
+          <p class="sub">Only the doctor's consulting days &amp; hours are shown. Booked slots are greyed out.</p>
+
+          <div class="bk-sched-info" id="bkSchedInfo" style="display:none;">
+            <i class="fas fa-calendar-alt"></i> <span id="bkSchedText"></span>
           </div>
+
+          <div class="bk-field mb-2">
+            <label>Choose a day</label>
+            <div class="bk-date-strip" id="bkDateStrip"></div>
+            <details class="bk-more-date">
+              <summary><i class="fas fa-calendar-day me-1"></i>Pick another date</summary>
+              <input type="date" class="form-control" id="bkDate" min="<?= date('Y-m-d') ?>" value="<?= date('Y-m-d') ?>" style="max-width:220px;">
+            </details>
+          </div>
+
+          <div class="bk-field mb-3">
+            <label>Consultation Mode</label>
+            <select class="form-select" id="bkMode" style="max-width:260px;">
+              <option value="online">Online Consultation</option>
+              <option value="clinic">In-Clinic Visit</option>
+            </select>
+          </div>
+
+          <label class="bk-field" style="display:block;"><span style="font-size:.82rem;font-weight:600;color:var(--bk-ink);">Available time slots</span></label>
           <div id="bkSlotArea">
             <div class="bk-slot-grid" id="bkSlotGrid"></div>
           </div>
@@ -662,11 +753,18 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
               <label class="d-flex gap-2 mb-0" style="cursor:pointer;">
                 <input type="checkbox" name="consent_given" id="bkConsent" required style="margin-top:3px;">
                 <span>
-                   I voluntarily consent to receive medical consultation through Telemedicine (Video Call, Audio Call, Chat or Digital Platform), understand that the doctor's advice will be based on the information and documents provided by me, agree to the secure storage and management of my digital health records, consent to the creation, linking, updating and sharing of my health records through ABHA/ABDM as per applicable guidelines, and confirm that the information provided by me is true and correct.
+                  I agree to the telemedicine consultation terms and to my health records being created / linked / shared
+                  through ABHA/ABDM as per applicable guidelines, and confirm my details are correct.
                   <a href="<?= BASE_URL ?>terms-and-condition/" class="text-danger">Terms &amp; Privacy Policy</a>. *
-                </span>
-                <span>
-                   मैं स्वेच्छा से टेलीमेडिसिन (वीडियो कॉल, ऑडियो कॉल, चैट या डिजिटल प्लेटफॉर्म) के माध्यम से चिकित्सा परामर्श प्राप्त करने, यह समझने कि चिकित्सक की सलाह मेरे द्वारा प्रदान की गई जानकारी एवं दस्तावेजों के आधार पर होगी, अपने डिजिटल स्वास्थ्य रिकॉर्ड के सुरक्षित संग्रहण एवं प्रबंधन, लागू दिशानिर्देशों के अनुसार ABHA/ABDM के माध्यम से स्वास्थ्य रिकॉर्ड के निर्माण, लिंकिंग, अद्यतन एवं साझा किए जाने तथा मेरे द्वारा प्रदान की गई जानकारी के सही एवं सत्य होने की पुष्टि हेतु अपनी सहमति प्रदान करता/करती हूँ।
+                  <details class="mt-1">
+                    <summary style="cursor:pointer;color:#92400e;font-size:.78rem;">Read full consent (English / हिन्दी)</summary>
+                    <div style="margin-top:6px;">
+                      I voluntarily consent to receive medical consultation through Telemedicine (Video Call, Audio Call, Chat or Digital Platform), understand that the doctor's advice will be based on the information and documents provided by me, agree to the secure storage and management of my digital health records, consent to the creation, linking, updating and sharing of my health records through ABHA/ABDM as per applicable guidelines, and confirm that the information provided by me is true and correct.
+                    </div>
+                    <div style="margin-top:8px;">
+                      मैं स्वेच्छा से टेलीमेडिसिन (वीडियो कॉल, ऑडियो कॉल, चैट या डिजिटल प्लेटफॉर्म) के माध्यम से चिकित्सा परामर्श प्राप्त करने, यह समझने कि चिकित्सक की सलाह मेरे द्वारा प्रदान की गई जानकारी एवं दस्तावेजों के आधार पर होगी, अपने डिजिटल स्वास्थ्य रिकॉर्ड के सुरक्षित संग्रहण एवं प्रबंधन, लागू दिशानिर्देशों के अनुसार ABHA/ABDM के माध्यम से स्वास्थ्य रिकॉर्ड के निर्माण, लिंकिंग, अद्यतन एवं साझा किए जाने तथा मेरे द्वारा प्रदान की गई जानकारी के सही एवं सत्य होने की पुष्टि हेतु अपनी सहमति प्रदान करता/करती हूँ।
+                    </div>
+                  </details>
                 </span>
               </label>
             </div>
@@ -814,15 +912,82 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
       document.getElementById('bkNext2').addEventListener('click', () => {
         document.getElementById('bkFieldDoctorId').value = state.doctor.id;
         document.getElementById('bkFieldDoctorName').value = state.doctor.name;
-        loadSlots();
+        loadSchedule();
         goToStep(3);
       });
 
       // ── STEP 3: date & time ──
       const dateInput = document.getElementById('bkDate');
       const modeSelect = document.getElementById('bkMode');
-      dateInput.addEventListener('change', loadSlots);
+      const dateStrip = document.getElementById('bkDateStrip');
+      const schedInfo = document.getElementById('bkSchedInfo');
+      const schedText = document.getElementById('bkSchedText');
+      let scheduleData = null;
+
+      dateInput.addEventListener('change', () => {
+        // Keep the strip selection in sync (or clear it for an off-strip date)
+        dateStrip.querySelectorAll('.bk-date-chip').forEach(c => {
+          c.classList.toggle('selected', c.dataset.date === dateInput.value && !c.classList.contains('disabled'));
+        });
+        loadSlots();
+      });
       modeSelect.addEventListener('change', () => { state.mode = modeSelect.value; });
+
+      function loadSchedule() {
+        dateStrip.innerHTML = '<div class="text-muted small py-2">Loading the doctor\'s schedule…</div>';
+        schedInfo.style.display = 'none';
+        document.getElementById('bkSlotGrid').innerHTML = '';
+        document.getElementById('bkNext3').disabled = true;
+
+        fetch(BASE_URL + 'util/get-doctor-schedule.php?doctor_id=' + state.doctor.id)
+          .then(r => r.json())
+          .then(data => {
+            scheduleData = data;
+            if (!data.success) { dateStrip.innerHTML = ''; loadSlots(); return; }
+
+            if (data.summary) {
+              schedText.textContent = data.summary;
+              schedInfo.style.display = 'flex';
+            }
+
+            dateStrip.innerHTML = data.dates.map(d => `
+              <div class="bk-date-chip ${d.available ? '' : 'disabled'}" data-date="${d.date}">
+                <div class="d-dow">${d.is_today ? 'Today' : d.dow}</div>
+                <div class="d-day">${d.day}</div>
+                <div class="d-mon">${d.month}</div>
+              </div>`).join('');
+
+            dateStrip.querySelectorAll('.bk-date-chip:not(.disabled)').forEach(chip => {
+              chip.addEventListener('click', () => {
+                dateStrip.querySelectorAll('.bk-date-chip').forEach(c => c.classList.remove('selected'));
+                chip.classList.add('selected');
+                dateInput.value = chip.dataset.date;
+                loadSlots();
+              });
+            });
+
+            // Auto-pick the first available day
+            const start = data.first_available || (data.dates[0] && data.dates[0].date);
+            if (start) {
+              const chip = dateStrip.querySelector(`.bk-date-chip[data-date="${start}"]:not(.disabled)`);
+              if (chip) {
+                chip.click();
+                chip.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+                // If the first open day isn't today, make that obvious
+                const first = data.dates.find(d => d.date === start);
+                if (first && !first.is_today) {
+                  const nice = new Date(start + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' });
+                  schedText.innerHTML = data.summary + ' &nbsp;·&nbsp; <b>Next open day: ' + nice + '</b>';
+                  schedInfo.style.display = 'flex';
+                }
+              } else { dateInput.value = start; loadSlots(); }
+            } else {
+              document.getElementById('bkSlotGrid').innerHTML =
+                '<div class="bk-empty w-100"><i class="fas fa-calendar-times fa-2x mb-2 d-block" style="opacity:.3;"></i>This doctor isn\'t accepting bookings right now. Please choose another doctor.</div>';
+            }
+          })
+          .catch(() => { dateStrip.innerHTML = ''; loadSlots(); });
+      }
 
       function loadSlots() {
         const grid = document.getElementById('bkSlotGrid');
@@ -838,7 +1003,14 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
           .then(r => r.json())
           .then(data => {
             if (!data.success || !data.slots.length) {
-              grid.innerHTML = '<div class="bk-empty w-100"><i class="fas fa-calendar-times fa-2x mb-2 d-block" style="opacity:.3;"></i>No slots available for this date. Try another date.</div>';
+              let why = 'No slots available for this date. Try another day.';
+              if (scheduleData && scheduleData.success) {
+                const dow = new Date(state.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+                const wd = scheduleData.week && scheduleData.week[dow];
+                if (wd && !wd.available) why = `Dr. ${state.doctor.name} doesn't consult on ${dow}s. Pick a highlighted day above.`;
+                else why = 'No slots left for this day — they are booked or the consulting hours are over. Try another day.';
+              }
+              grid.innerHTML = `<div class="bk-empty w-100"><i class="fas fa-calendar-times fa-2x mb-2 d-block" style="opacity:.3;"></i>${why}</div>`;
               return;
             }
             grid.innerHTML = data.slots.map(s => `

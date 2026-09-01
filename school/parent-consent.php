@@ -129,6 +129,9 @@ $success = false;
 $error = '';
 $token = '';
 
+// Pre-select a school when the link is shared from the admin panel (?school_id=)
+$prefill_school = (int) ($_GET['school_id'] ?? $_POST['school_id'] ?? 0);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
     $school_id = (int) ($_POST['school_id'] ?? 0) ?: null;
     $school_manual = trim($_POST['school_name_manual'] ?? '');
@@ -771,7 +774,7 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                                 <select name="school_id" class="form-select" id="schoolSel">
                                     <option value="">— Select your child's school —</option>
                                     <?php foreach ($schools as $sc): ?>
-                                        <option value="<?= $sc['id'] ?>" <?= (($_POST['school_id'] ?? '') == $sc['id']) ? 'selected' : '' ?>>
+                                        <option value="<?= $sc['id'] ?>" <?= ($prefill_school == $sc['id']) ? 'selected' : '' ?>>
                                             <?= htmlspecialchars($sc['school_name']) ?></option>
                                     <?php endforeach; ?>
                                     <option value="0">Other (type below)</option>

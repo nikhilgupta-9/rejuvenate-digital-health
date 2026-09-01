@@ -447,27 +447,13 @@ $sidebar_active = 'school-students';
                 <?php endif; ?>
 
                 <?php if ($has_consent): ?>
-                    <div class="consent-ok">
-                        <span class="consent-chip ok"><i class="fa fa-check-circle"></i> Consent recorded</span>
-                        <div class="row mt-3">
-                            <div class="col-md-4 mb-2"><span class="info-label">Given By</span><div><?= htmlspecialchars($consent['parent_name']) ?> (<?= htmlspecialchars($consent['relation']) ?>)</div></div>
-                            <div class="col-md-4 mb-2"><span class="info-label">Contact</span><div><?= htmlspecialchars($consent['parent_mobile']) ?><?= $consent['parent_email'] ? ' &bull; ' . htmlspecialchars($consent['parent_email']) : '' ?></div></div>
-                            <div class="col-md-4 mb-2"><span class="info-label">Recorded</span><div><?= date('d M Y, h:i A', strtotime($consent['submitted_at'])) ?> &bull; <?= $consent['source'] === 'doctor' ? 'At point of care' : 'By parent (online)' ?></div></div>
-                        </div>
-                        <?php $granted = array_filter($consent_labels, fn($l, $k) => !empty($consent_items_arr[$k]), ARRAY_FILTER_USE_BOTH); ?>
-                        <span class="info-label">Consented Services (<?= count($granted) ?>/<?= count($consent_labels) ?>)</span>
-                        <div class="consent-items-grid">
-                            <?php foreach ($consent_labels as $k => $lbl): ?>
-                                <div style="color:<?= !empty($consent_items_arr[$k]) ? '#15803d' : '#9ca3af' ?>;">
-                                    <i class="fa fa-<?= !empty($consent_items_arr[$k]) ? 'check' : 'times' ?> me-1"></i><?= htmlspecialchars($lbl) ?>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                        <?php if (!empty($consent['declaration_text'])): ?>
-                            <div style="font-size:.78rem;color:#6b7280;margin-top:12px;border-top:1px solid #f3f4f6;padding-top:10px;">
-                                <i class="fa fa-quote-left me-1"></i><?= htmlspecialchars($consent['declaration_text']) ?>
-                            </div>
-                        <?php endif; ?>
+                    <div class="consent-ok text-center" style="padding:22px 16px;">
+                        <div style="font-size:2rem;color:#16a34a;line-height:1;"><i class="fa fa-check-circle"></i></div>
+                        <div style="font-size:1rem;font-weight:700;color:#166534;margin-top:8px;">Parent consent received</div>
+                        <p style="font-size:.82rem;color:#4b5563;margin:6px 0 0;">
+                            Consent is on file for <strong><?= htmlspecialchars($m['name']) ?></strong>. You can proceed
+                            with the health profile, prescriptions and certificates.
+                        </p>
                     </div>
 
                 <?php else: ?>

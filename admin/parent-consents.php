@@ -49,7 +49,12 @@ $rows = mysqli_query($conn, "SELECT c.*, s.school_name, s.school_uid, m.member_u
     LEFT JOIN doctors d ON d.id = c.recorded_by_doctor_id
     $where ORDER BY c.submitted_at DESC LIMIT 400");
 
-$schools_dd = mysqli_query($conn, "SELECT id, school_name FROM schools ORDER BY school_name ASC");
+$schools_all = [];
+$sa = mysqli_query($conn, "SELECT id, school_name FROM schools WHERE status = 'Active' ORDER BY school_name ASC");
+if ($sa) $schools_all = mysqli_fetch_all($sa, MYSQLI_ASSOC);
+$schools_dd = $schools_all; // filter dropdown reuses the same list
+
+$consent_form_url = rtrim(BASE_URL, '/') . '/school/parent-consent.php';
 $qs = http_build_query(array_filter(['school_id' => $school_filter ?: null, 'status' => $status_filter !== 'all' ? $status_filter : null, 'source' => $source_filter !== 'all' ? $source_filter : null, 'q' => $search ?: null]));
 ?>
 <!DOCTYPE html>
@@ -76,9 +81,14 @@ $qs = http_build_query(array_filter(['school_id' => $school_filter ?: null, 'sta
                         <h4 class="mb-0 fw-bold">Parent Consent Forms</h4>
                         <small class="text-muted">Health-checkup consents submitted by parents and recorded by doctors</small>
                     </div>
-                    <a href="<?= htmlspecialchars(BASE_URL) ?>school/parent-consent.php" target="_blank" class="btn btn-outline-primary btn-sm">
-                        <i class="fas fa-external-link-alt me-1"></i> Public Form
-                    </a>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#shareFormModal">
+                            <i class="fas fa-share-nodes me-1"></i> Share Consent Form
+                        </button>
+                        <a href="<?= htmlspecialchars($consent_form_url) ?>" target="_blank" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-external-link-alt me-1"></i> Open Form
+                        </a>
+                    </div>
                 </div>
 
                 <?php if (isset($_SESSION['success_message'])): ?>
@@ -105,9 +115,9 @@ $qs = http_build_query(array_filter(['school_id' => $school_filter ?: null, 'sta
                             <label class="form-label mb-1">School</label>
                             <select class="form-select form-select-sm" name="school_id">
                                 <option value="0">All Schools</option>
-                                <?php while ($sc = mysqli_fetch_assoc($schools_dd)): ?>
+                                <?php foreach ($schools_all as $sc): ?>
                                     <option value="<?= $sc['id'] ?>" <?= $school_filter === (int) $sc['id'] ? 'selected' : '' ?>><?= htmlspecialchars($sc['school_name']) ?></option>
-                                <?php endwhile; ?>
+                                <?php endforeach; ?>
                             </select>
                         </div>
                         <div class="col-6 col-lg-2">
@@ -210,5 +220,97 @@ $qs = http_build_query(array_filter(['school_id' => $school_filter ?: null, 'sta
             </div>
         </div>
         <?php include "footer.php"; ?>
+
+<!-- ── Share Consent Form ── -->
+<div class="modal fade" id="shareFormModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-share-nodes me-2"></i>Share the parent consent form</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label mb-1">Pre-fill a school <span class="text-muted">(optional)</span></label>
+                <select class="form-select form-select-sm mb-3" id="shareSchool">
+                    <option value="">— parents pick the school themselves —</option>
+                    <?php foreach ($schools_all as $sc): ?>
+                        <option value="<?= $sc['id'] ?>"><?= htmlspecialchars($sc['school_name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+
+                <label class="form-label mb-1">Shareable link</label>
+                <div class="input-group input-group-sm mb-3">
+                    <input type="text" class="form-control" id="shareLink" readonly value="<?= htmlspecialchars($consent_form_url) ?>">
+                    <button class="btn btn-outline-secondary" type="button" id="shareCopyBtn"><i class="fas fa-copy"></i> Copy</button>
+                </div>
+
+                <div class="text-center">
+                    <div id="shareQr" class="d-inline-block p-2 bg-white border rounded"></div>
+                    <div class="small text-muted mt-1">Scan to open the form on a phone</div>
+                </div>
+
+                <div class="d-flex flex-wrap gap-2 justify-content-center mt-3">
+                    <a href="#" id="shareWhatsApp" target="_blank" class="btn btn-sm btn-success"><i class="fab fa-whatsapp me-1"></i> WhatsApp</a>
+                    <a href="#" id="shareEmail" class="btn btn-sm btn-outline-primary"><i class="fas fa-envelope me-1"></i> Email</a>
+                    <button type="button" id="shareQrDownload" class="btn btn-sm btn-outline-secondary"><i class="fas fa-download me-1"></i> Download QR</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+(function () {
+    const baseUrl = <?= json_encode($consent_form_url) ?>;
+    const modal   = document.getElementById('shareFormModal');
+    if (!modal) return;
+
+    const schoolSel = document.getElementById('shareSchool');
+    const linkInput = document.getElementById('shareLink');
+    const qrBox     = document.getElementById('shareQr');
+    const waLink    = document.getElementById('shareWhatsApp');
+    const mailLink  = document.getElementById('shareEmail');
+    let qr = null;
+
+    function currentUrl() {
+        const sid = schoolSel.value;
+        return sid ? baseUrl + '?school_id=' + encodeURIComponent(sid) : baseUrl;
+    }
+
+    function refresh() {
+        const url = currentUrl();
+        linkInput.value = url;
+
+        qrBox.innerHTML = '';
+        qr = new QRCode(qrBox, { text: url, width: 190, height: 190, correctLevel: QRCode.CorrectLevel.M });
+
+        const msg = 'Please fill the student health checkup consent form: ' + url;
+        waLink.href = 'https://wa.me/?text=' + encodeURIComponent(msg);
+        mailLink.href = 'mailto:?subject=' + encodeURIComponent('Student Health Checkup — Consent Form')
+            + '&body=' + encodeURIComponent(msg);
+    }
+
+    modal.addEventListener('shown.bs.modal', refresh);
+    schoolSel.addEventListener('change', refresh);
+
+    document.getElementById('shareCopyBtn').addEventListener('click', function () {
+        navigator.clipboard.writeText(linkInput.value).then(() => {
+            this.innerHTML = '<i class="fas fa-check"></i> Copied';
+            setTimeout(() => { this.innerHTML = '<i class="fas fa-copy"></i> Copy'; }, 1800);
+        }).catch(() => { linkInput.select(); document.execCommand('copy'); });
+    });
+
+    document.getElementById('shareQrDownload').addEventListener('click', function () {
+        const img = qrBox.querySelector('img') || qrBox.querySelector('canvas');
+        if (!img) return;
+        const src = img.tagName === 'IMG' ? img.src : img.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = src;
+        a.download = 'consent-form-qr.png';
+        document.body.appendChild(a); a.click(); a.remove();
+    });
+})();
+</script>
 </body>
 </html>
