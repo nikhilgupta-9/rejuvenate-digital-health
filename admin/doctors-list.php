@@ -134,6 +134,12 @@ $stmt->execute();
 $result = $stmt->get_result();
 $doctors_list = $result->fetch_all(MYSQLI_ASSOC);
 
+// Summary counts (unfiltered)
+$dc_total    = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) c FROM doctors"))['c'];
+$dc_verified = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) c FROM doctors WHERE is_verified = 1"))['c'];
+$dc_pending  = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) c FROM doctors WHERE is_verified = 0"))['c'];
+$dc_active   = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) c FROM doctors WHERE status = 'Active'"))['c'];
+
 // Get message from session
 $success_message = $_SESSION['success_message'] ?? '';
 $error_message = $_SESSION['error_message'] ?? '';
@@ -150,11 +156,12 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
     <?php include "links.php"; ?>
     <style>
         /* page-specific only */
-        .action-buttons  { display:flex; gap:5px; flex-wrap:wrap; }
-        .filter-buttons  { display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap; }
-        .verification-badge { display:inline-flex; align-items:center; gap:4px; font-size:.75rem; }
-        .badge-verified   { background-color:#e6f7ee; color:#16a34a; }
-        .badge-unverified { background-color:#fff3cd; color:#856404; }
+        .filter-buttons { display:flex; gap:8px; flex-wrap:wrap; }
+        .doc-avatar {
+            width:38px; height:38px; border-radius:9px; object-fit:cover; flex-shrink:0;
+            background:#eef1f6; display:flex; align-items:center; justify-content:center;
+        }
+        .doc-avatar i { color:#9aa0b4; }
     </style>
 </head>
 
@@ -172,169 +179,132 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
 
         <div class="main_content_iner">
             <div class="container-fluid p-0 sm_padding_15px">
-                <div class="row justify-content-center">
-                    <div class="col-12">
-                        <div class="white_card card_height_100 mb_30 p-4">
-                            <div class="white_card_header">
-                                <div class="page-header mb-4">
-                                    <div class="d-flex align-items-center justify-content-between">
-                                        <h2 class="mb-0">Doctors List</h2>
-                                        <a href="add-doctor.php" class="btn btn-primary">
-                                            <i class="fas fa-plus me-2"></i> Add New Doctor
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
 
-                            <!-- Messages -->
-                            <?php if (!empty($success_message)): ?>
-                                <div class="col-12">
-                                    <div class="alert alert-success alert-dismissible fade show" role="alert">
-                                        <?= $success_message ?>
-                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                                    </div>
-                                </div>
-                            <?php endif; ?>
+                <div class="list-page-head">
+                    <div class="page-heading">
+                        <h4 class="mb-0 fw-bold">Doctors List</h4>
+                        <small class="text-muted">Manage doctor profiles, verification and availability</small>
+                    </div>
+                    <a href="add-doctor.php" class="btn btn-primary btn-sm">
+                        <i class="fas fa-plus me-1"></i> Add New Doctor
+                    </a>
+                </div>
 
-                            <?php if (!empty($error_message)): ?>
-                                <div class="col-12">
-                                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                                        <?= $error_message ?>
-                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                                    </div>
-                                </div>
-                            <?php endif; ?>
+                <?php if (!empty($success_message)): ?>
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="fas fa-check-circle me-2"></i><?= $success_message ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                <?php endif; ?>
+                <?php if (!empty($error_message)): ?>
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="fas fa-exclamation-circle me-2"></i><?= $error_message ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                <?php endif; ?>
 
-                            <!-- Filter Buttons -->
-                            <div class="col-12 mb-4">
-                                <div class="filter-buttons">
-                                    <a href="doctors-list.php?type=all" class="filter-btn <?= $type_filter === 'all' ? 'active' : '' ?>">All Doctors</a>
-                                    <a href="doctors-list.php?type=verified" class="filter-btn <?= $type_filter === 'verified' ? 'active' : '' ?>">Verified</a>
-                                    <a href="doctors-list.php?type=unverified" class="filter-btn <?= $type_filter === 'unverified' ? 'active' : '' ?>">Unverified</a>
-                                    <a href="doctors-list.php?type=active" class="filter-btn <?= $type_filter === 'active' ? 'active' : '' ?>">Active</a>
-                                    <a href="doctors-list.php?type=inactive" class="filter-btn <?= $type_filter === 'inactive' ? 'active' : '' ?>">Inactive</a>
-                                </div>
-                            </div>
+                <div class="row g-3 mb-4">
+                    <div class="col-6 col-lg-3"><div class="stat-box bg-stat-blue"><i class="fas fa-user-md big-icon"></i><div class="num"><?= $dc_total ?></div><div class="lbl">Total Doctors</div></div></div>
+                    <div class="col-6 col-lg-3"><div class="stat-box bg-stat-green"><i class="fas fa-check-double big-icon"></i><div class="num"><?= $dc_verified ?></div><div class="lbl">Verified</div></div></div>
+                    <div class="col-6 col-lg-3"><div class="stat-box bg-stat-warn"><i class="fas fa-clock big-icon"></i><div class="num"><?= $dc_pending ?></div><div class="lbl">Pending Verification</div></div></div>
+                    <div class="col-6 col-lg-3"><div class="stat-box bg-stat-teal"><i class="fas fa-user-check big-icon"></i><div class="num"><?= $dc_active ?></div><div class="lbl">Active</div></div></div>
+                </div>
 
-                            <!-- Doctors List -->
-                            <div class="col-lg-12">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <div class="table-responsive">
-                                            <table class="table table-hover">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Doctor</th>
-                                                        <th>Specialization</th>
-                                                        <th>Experience</th>
-                                                        <th>Fee</th>
-                                                        <th>Rating</th>
-                                                        <th>Status</th>
-                                                        <th>Verification</th>
-                                                        <th>Actions</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php if (empty($doctors_list)): ?>
-                                                        <tr>
-                                                            <td colspan="8" class="text-center text-muted py-4">
-                                                                No doctors found.
-                                                            </td>
-                                                        </tr>
+                <div class="filter-card">
+                    <div class="filter-buttons">
+                        <a href="doctors-list.php?type=all" class="filter-btn <?= $type_filter === 'all' ? 'active' : '' ?>">All Doctors</a>
+                        <a href="doctors-list.php?type=verified" class="filter-btn <?= $type_filter === 'verified' ? 'active' : '' ?>">Verified</a>
+                        <a href="doctors-list.php?type=unverified" class="filter-btn <?= $type_filter === 'unverified' ? 'active' : '' ?>">Unverified</a>
+                        <a href="doctors-list.php?type=active" class="filter-btn <?= $type_filter === 'active' ? 'active' : '' ?>">Active</a>
+                        <a href="doctors-list.php?type=inactive" class="filter-btn <?= $type_filter === 'inactive' ? 'active' : '' ?>">Inactive</a>
+                    </div>
+                </div>
+
+                <div class="white_card card_height_100 mb_30">
+                    <div class="white_card_header">
+                        <div class="box_header d-flex justify-content-between align-items-center">
+                            <div class="main-title"><h3 class="m-0">Doctors <span class="badge bg-secondary ms-2"><?= count($doctors_list) ?></span></h3></div>
+                        </div>
+                    </div>
+                    <div class="white_card_body">
+                        <div class="table-responsive">
+                            <table class="table table-hover tbl-admin tbl-cards">
+                                <thead>
+                                    <tr>
+                                        <th>Doctor</th>
+                                        <th>Specialization</th>
+                                        <th>Experience</th>
+                                        <th>Fee</th>
+                                        <th>Rating</th>
+                                        <th>Status</th>
+                                        <th>Verification</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (empty($doctors_list)): ?>
+                                        <tr class="empty-row"><td colspan="8">
+                                            <i class="fas fa-user-md fa-3x mb-3 d-block opacity-25"></i>No doctors found.
+                                        </td></tr>
+                                    <?php else: ?>
+                                        <?php foreach ($doctors_list as $doctor): ?>
+                                            <tr>
+                                                <td data-label="Doctor">
+                                                    <a href="doctor-edit.php?id=<?= $doctor['id'] ?>" class="text-decoration-none d-flex align-items-center" style="gap:10px;color:inherit;">
+                                                        <?php if (!empty($doctor['profile_image'])): ?>
+                                                            <img src="<?= BASE_URL . "admin/" . htmlspecialchars($doctor['profile_image']) ?>" alt="" class="doc-avatar"
+                                                                onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                                                            <div class="doc-avatar" style="display:none;"><i class="fas fa-user-md"></i></div>
+                                                        <?php else: ?>
+                                                            <div class="doc-avatar"><i class="fas fa-user-md"></i></div>
+                                                        <?php endif; ?>
+                                                        <div>
+                                                            <div class="cell-title"><?= htmlspecialchars($doctor['name']) ?></div>
+                                                            <div class="cell-sub"><?= htmlspecialchars($doctor['doctor_uid']) ?></div>
+                                                        </div>
+                                                    </a>
+                                                </td>
+                                                <td data-label="Specialization"><?= htmlspecialchars($doctor['specialization'] ?: '—') ?></td>
+                                                <td data-label="Experience"><?= (int) $doctor['experience_years'] ?> yrs</td>
+                                                <td data-label="Fee">₹<?= $doctor['consultation_fee'] !== null ? number_format($doctor['consultation_fee'], 2) : '0.00' ?></td>
+                                                <td data-label="Rating">
+                                                    <span class="pill pill-warn"><i class="fas fa-star"></i><?= $doctor['rating'] ?: '0' ?></span>
+                                                </td>
+                                                <td data-label="Status">
+                                                    <span class="pill <?= $doctor['status'] == 'Active' ? 'pill-success' : 'pill-muted' ?>"><?= htmlspecialchars($doctor['status']) ?></span>
+                                                </td>
+                                                <td data-label="Verification">
+                                                    <?php if ($doctor['is_verified']): ?>
+                                                        <span class="pill pill-success"><i class="fas fa-check-circle"></i>Verified</span>
+                                                        <?php if ($doctor['verified_at']): ?><div class="cell-sub mt-1"><?= date('M j, Y', strtotime($doctor['verified_at'])) ?></div><?php endif; ?>
                                                     <?php else: ?>
-                                                        <?php foreach ($doctors_list as $doctor): ?>
-                                                            <tr>
-                                                                <td>
-                                                                    <a href="doctor-edit.php?id=<?= $doctor['id'] ?>" class="text-decoration-none d-flex align-items-center" style="gap:10px;color:inherit;">
-                                                                        <?php if (!empty($doctor['profile_image'])): ?>
-                                                                            <img src="<?= BASE_URL ."admin/". htmlspecialchars($doctor['profile_image']) ?>" alt="Profile"
-                                                                                style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink:0;"
-                                                                                onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-                                                                            <div style="display:none;width: 40px; height: 40px; border-radius: 50%; background: #f0f0f0; align-items: center; justify-content: center; flex-shrink:0;">
-                                                                                <i class="fas fa-user-md text-muted"></i>
-                                                                            </div>
-                                                                        <?php else: ?>
-                                                                            <div style="width: 40px; height: 40px; border-radius: 50%; background: #f0f0f0; display: flex; align-items: center; justify-content: center; flex-shrink:0;">
-                                                                                <i class="fas fa-user-md text-muted"></i>
-                                                                            </div>
-                                                                        <?php endif; ?>
-                                                                        <div>
-                                                                            <div class="fw-semibold"><?= htmlspecialchars($doctor['name']) ?></div>
-                                                                            <small class="text-muted"><?= htmlspecialchars($doctor['doctor_uid']) ?></small>
-                                                                        </div>
-                                                                    </a>
-                                                                </td>
-                                                                <td><?= htmlspecialchars($doctor['specialization']) ?></td>
-                                                                <td><?= $doctor['experience_years'] ?> years</td>
-                                                                <td>₹<?= $doctor['consultation_fee'] !== null
-                                                                            ? number_format($doctor['consultation_fee'], 2)
-                                                                            : '00.00' ?>
-                                                                </td>
-                                                                <td>
-                                                                    <span class="badge bg-warning text-dark">
-                                                                        <i class="fas fa-star me-1"></i><?= $doctor['rating'] ?>
-                                                                    </span>
-                                                                </td>
-                                                                <td>
-                                                                    <span class="badge <?= $doctor['status'] == 'Active' ? 'badge-active' : 'badge-inactive' ?>">
-                                                                        <?= $doctor['status'] ?>
-                                                                    </span>
-                                                                </td>
-                                                                <td>
-                                                                    <?php if ($doctor['is_verified']): ?>
-                                                                        <span class="badge badge-verified verification-badge">
-                                                                            <i class="fas fa-check-circle"></i> Verified
-                                                                        </span>
-                                                                        <?php if ($doctor['verified_at']): ?>
-                                                                            <small class="d-block text-muted">
-                                                                                <?= date('M j, Y', strtotime($doctor['verified_at'])) ?>
-                                                                            </small>
-                                                                        <?php endif; ?>
-                                                                    <?php else: ?>
-                                                                        <span class="badge badge-unverified verification-badge">
-                                                                            <i class="fas fa-clock"></i> Pending
-                                                                        </span>
-                                                                    <?php endif; ?>
-                                                                </td>
-                                                                <td>
-                                                                    <div class="action-buttons">
-                                                                        <a href="doctor-edit.php?id=<?= $doctor['id'] ?>" class="btn btn-sm btn-outline-primary" title="Edit">
-                                                                            <i class="fas fa-edit"></i>
-                                                                        </a>
-                                                                        <?php if ($doctor['is_verified']): ?>
-                                                                            <a href="doctors-list.php?unverify_id=<?= $doctor['id'] ?>" class="btn btn-sm btn-outline-warning"
-                                                                                onclick="return confirm('Remove verification for this doctor?')" title="Unverify">
-                                                                                <i class="fas fa-times-circle"></i>
-                                                                            </a>
-                                                                        <?php else: ?>
-                                                                            <a href="doctors-list.php?verify_id=<?= $doctor['id'] ?>" class="btn btn-sm btn-outline-success"
-                                                                                onclick="return confirm('Verify this doctor?')" title="Verify">
-                                                                                <i class="fas fa-check-circle"></i>
-                                                                            </a>
-                                                                        <?php endif; ?>
-                                                                        <a href="doctors-list.php?delete_id=<?= $doctor['id'] ?>" class="btn btn-sm btn-outline-danger"
-                                                                            onclick="return confirm('Are you sure you want to delete this doctor?')" title="Delete">
-                                                                            <i class="fas fa-trash"></i>
-                                                                        </a>
-                                                                    </div>
-                                                                </td>
-                                                            </tr>
-                                                        <?php endforeach; ?>
+                                                        <span class="pill pill-warn"><i class="fas fa-clock"></i>Pending</span>
                                                     <?php endif; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                                                </td>
+                                                <td data-label="Actions">
+                                                    <div class="d-inline-flex flex-wrap gap-1 justify-content-end">
+                                                        <a href="doctor-edit.php?id=<?= $doctor['id'] ?>" class="tbl-action-btn bg-primary text-white" title="Edit"><i class="fas fa-edit"></i></a>
+                                                        <?php if ($doctor['is_verified']): ?>
+                                                            <a href="doctors-list.php?unverify_id=<?= $doctor['id'] ?>" class="tbl-action-btn bg-warning text-dark" onclick="return confirm('Remove verification for this doctor?')" title="Unverify"><i class="fas fa-times-circle"></i></a>
+                                                        <?php else: ?>
+                                                            <a href="doctors-list.php?verify_id=<?= $doctor['id'] ?>" class="tbl-action-btn bg-success text-white" onclick="return confirm('Verify this doctor?')" title="Verify"><i class="fas fa-check-circle"></i></a>
+                                                        <?php endif; ?>
+                                                        <a href="doctors-list.php?delete_id=<?= $doctor['id'] ?>" class="tbl-action-btn bg-danger text-white" onclick="return confirm('Are you sure you want to delete this doctor?')" title="Delete"><i class="fas fa-trash"></i></a>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
+
             </div>
         </div>
 
         <?php include "footer.php"; ?>
-    </section>
 </body>
 
 </html>

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/auth/guard.php';
 require_once dirname(__DIR__) . '/config/connect.php';
+require_once __DIR__ . '/inc/consent-helper.php';
 $payload = doctor_jwt_guard();
 $doctor_id = (int) ($payload['doctor_id'] ?? $payload['sub'] ?? 0);
 
@@ -46,6 +47,14 @@ if (!empty($hp['height_cm']) && !empty($hp['weight_kg'])) {
 }
 
 $doc_types = ['Lab Report', 'Diagnostic Report', 'X-Ray / Imaging', 'Vaccination Certificate', 'Medical Certificate', 'Discharge Summary', 'Other'];
+
+// ── Parent consent (compulsory before any checkup is recorded) ──
+$consent          = get_student_consent($conn, $member_id);
+$has_consent      = $consent && (int) $consent['consent_given'] === 1;
+$unlinked_consent = $has_consent ? null : find_unlinked_consent($conn, (int) $m['school_id'], $m['name']);
+$consent_labels   = consent_item_labels();
+$consent_items_arr = ($consent && !empty($consent['consent_items'])) ? (json_decode($consent['consent_items'], true) ?: []) : [];
+$relations        = ['Father', 'Mother', 'Guardian', 'Other'];
 
 // Prescriptions written for this member
 $rx_stmt = $conn->prepare("SELECT p.*, d.name as doctor_name FROM school_member_prescriptions p
@@ -264,6 +273,78 @@ $sidebar_active = 'school-students';
             border-color: #025a94;
             color: #fff;
         }
+
+        /* ── Consent ── */
+        .consent-lock {
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
+            border-radius: 10px;
+            padding: 18px 20px;
+            font-size: .86rem;
+            color: #9a3412;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .consent-lock i {
+            font-size: 1.1rem;
+            margin-top: 1px;
+        }
+
+        .consent-ok {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 10px;
+            padding: 16px 18px;
+        }
+
+        .consent-missing {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 10px;
+            padding: 16px 18px;
+        }
+
+        .consent-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: .72rem;
+            font-weight: 700;
+            border-radius: 20px;
+            padding: 3px 11px;
+        }
+
+        .consent-chip.ok {
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        .consent-chip.no {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .consent-items-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+            gap: 6px 16px;
+            margin-top: 10px;
+        }
+
+        .consent-items-grid div {
+            font-size: .8rem;
+        }
+
+        .p-tab .tab-badge {
+            font-size: .62rem;
+            font-weight: 700;
+            border-radius: 10px;
+            padding: 1px 6px;
+            margin-left: 5px;
+            vertical-align: middle;
+        }
     </style>
 </head>
 
@@ -284,6 +365,13 @@ $sidebar_active = 'school-students';
                         <?php if ($age): ?> &bull; <?= $age ?> yrs<?php endif; ?>
                         <?php if ($m['gender']): ?> &bull; <?= htmlspecialchars($m['gender']) ?><?php endif; ?>
                     </div>
+                    <div class="mt-1">
+                        <?php if ($has_consent): ?>
+                            <span class="consent-chip ok"><i class="fa fa-shield-alt"></i> Parent consent on file</span>
+                        <?php else: ?>
+                            <span class="consent-chip no"><i class="fa fa-exclamation-triangle"></i> Parent consent required</span>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
             <a href="school-students.php" class="btn btn-sm btn-outline-secondary">
@@ -294,6 +382,11 @@ $sidebar_active = 'school-students';
         <!-- Tabs -->
         <div class="profile-tabs">
             <div class="p-tab active" onclick="showTab('info',this)"><i class="fa fa-user me-1"></i> Information</div>
+            <div class="p-tab" onclick="showTab('consent',this)"><i class="fa fa-file-signature me-1"></i> Consent
+                <span class="tab-badge" style="background:<?= $has_consent ? '#dcfce7' : '#fee2e2' ?>;color:<?= $has_consent ? '#15803d' : '#b91c1c' ?>;">
+                    <?= $has_consent ? 'On file' : 'Required' ?>
+                </span>
+            </div>
             <div class="p-tab" onclick="showTab('health',this)"><i class="fa fa-heartbeat me-1"></i> Health Profile</div>
             <div class="p-tab" onclick="showTab('rx',this)"><i class="fa fa-file-medical me-1"></i> Prescriptions</div>
             <div class="p-tab" onclick="showTab('cert',this)"><i class="fa fa-certificate me-1"></i> Certificates</div>
@@ -338,6 +431,136 @@ $sidebar_active = 'school-students';
             </div>
         </div>
 
+        <!-- ── TAB: Consent ── -->
+        <div class="tab-pane" id="tab-consent">
+            <div class="info-section">
+                <div class="section-title"><i class="fa fa-file-signature me-2" style="color:#0277bd;"></i>Parent / Guardian Consent</div>
+
+                <?php if (isset($_SESSION['consent_success'])): ?>
+                    <div class="alert alert-success" style="font-size:.82rem;"><?= htmlspecialchars($_SESSION['consent_success']); unset($_SESSION['consent_success']); ?></div>
+                <?php endif; ?>
+                <?php if (isset($_SESSION['consent_error'])): ?>
+                    <div class="alert alert-danger" style="font-size:.82rem;"><?= htmlspecialchars($_SESSION['consent_error']); unset($_SESSION['consent_error']); ?></div>
+                <?php endif; ?>
+                <?php if (isset($_SESSION['consent_required'])): ?>
+                    <div class="alert alert-warning" style="font-size:.82rem;"><?= htmlspecialchars($_SESSION['consent_required']); unset($_SESSION['consent_required']); ?></div>
+                <?php endif; ?>
+
+                <?php if ($has_consent): ?>
+                    <div class="consent-ok">
+                        <span class="consent-chip ok"><i class="fa fa-check-circle"></i> Consent recorded</span>
+                        <div class="row mt-3">
+                            <div class="col-md-4 mb-2"><span class="info-label">Given By</span><div><?= htmlspecialchars($consent['parent_name']) ?> (<?= htmlspecialchars($consent['relation']) ?>)</div></div>
+                            <div class="col-md-4 mb-2"><span class="info-label">Contact</span><div><?= htmlspecialchars($consent['parent_mobile']) ?><?= $consent['parent_email'] ? ' &bull; ' . htmlspecialchars($consent['parent_email']) : '' ?></div></div>
+                            <div class="col-md-4 mb-2"><span class="info-label">Recorded</span><div><?= date('d M Y, h:i A', strtotime($consent['submitted_at'])) ?> &bull; <?= $consent['source'] === 'doctor' ? 'At point of care' : 'By parent (online)' ?></div></div>
+                        </div>
+                        <?php $granted = array_filter($consent_labels, fn($l, $k) => !empty($consent_items_arr[$k]), ARRAY_FILTER_USE_BOTH); ?>
+                        <span class="info-label">Consented Services (<?= count($granted) ?>/<?= count($consent_labels) ?>)</span>
+                        <div class="consent-items-grid">
+                            <?php foreach ($consent_labels as $k => $lbl): ?>
+                                <div style="color:<?= !empty($consent_items_arr[$k]) ? '#15803d' : '#9ca3af' ?>;">
+                                    <i class="fa fa-<?= !empty($consent_items_arr[$k]) ? 'check' : 'times' ?> me-1"></i><?= htmlspecialchars($lbl) ?>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <?php if (!empty($consent['declaration_text'])): ?>
+                            <div style="font-size:.78rem;color:#6b7280;margin-top:12px;border-top:1px solid #f3f4f6;padding-top:10px;">
+                                <i class="fa fa-quote-left me-1"></i><?= htmlspecialchars($consent['declaration_text']) ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+
+                <?php else: ?>
+                    <div class="consent-missing mb-3">
+                        <span class="consent-chip no"><i class="fa fa-exclamation-triangle"></i> No consent on file</span>
+                        <p style="font-size:.84rem;color:#7f1d1d;margin:10px 0 0;">
+                            You cannot record a health profile, write a prescription or issue a certificate for this
+                            student until a parent/guardian consent is on file.
+                        </p>
+                    </div>
+
+                    <?php if ($unlinked_consent): ?>
+                        <div class="info-section" style="border:1px solid #bfdbfe;background:#eff6ff;">
+                            <div style="font-size:.86rem;font-weight:600;color:#1e3a8a;">
+                                <i class="fa fa-link me-1"></i>A matching parent consent was found
+                            </div>
+                            <div style="font-size:.8rem;color:#374151;margin:6px 0 10px;">
+                                Submitted online on <?= date('d M Y', strtotime($unlinked_consent['submitted_at'])) ?>
+                                by <?= htmlspecialchars($unlinked_consent['parent_name']) ?>
+                                (<?= htmlspecialchars($unlinked_consent['relation']) ?>,
+                                <?= htmlspecialchars($unlinked_consent['parent_mobile']) ?>)
+                                for student &ldquo;<?= htmlspecialchars($unlinked_consent['student_name']) ?>&rdquo;.
+                                Confirm this belongs to <strong><?= htmlspecialchars($m['name']) ?></strong> to link it.
+                            </div>
+                            <form method="POST" action="save-student-consent.php" onsubmit="return confirm('Link this parent consent to this student?');">
+                                <input type="hidden" name="action" value="link">
+                                <input type="hidden" name="member_id" value="<?= $member_id ?>">
+                                <input type="hidden" name="consent_id" value="<?= (int) $unlinked_consent['id'] ?>">
+                                <button type="submit" class="btn btn-sm btn-primary-custom"><i class="fa fa-link me-1"></i> Link this consent</button>
+                            </form>
+                        </div>
+                        <div style="text-align:center;font-size:.78rem;color:#9ca3af;margin:12px 0;">— or record a fresh consent below —</div>
+                    <?php endif; ?>
+
+                    <div class="info-section" style="border:1px solid #e5e7eb;">
+                        <div style="font-size:.86rem;font-weight:600;color:#1f2937;margin-bottom:4px;">
+                            <i class="fa fa-pen-to-square me-1" style="color:#0277bd;"></i>Record Parent Consent (parent present)
+                        </div>
+                        <div style="font-size:.78rem;color:#6b7280;margin-bottom:12px;">
+                            Fill this with the parent/guardian in person. It is stored as the consent record for this checkup.
+                        </div>
+                        <form method="POST" action="save-student-consent.php" id="consentForm">
+                            <input type="hidden" name="member_id" value="<?= $member_id ?>">
+                            <div class="form-row">
+                                <div class="col-md-4 mb-2">
+                                    <label class="info-label d-block mb-1">Parent / Guardian Name <span class="text-danger">*</span></label>
+                                    <input type="text" name="parent_name" class="form-control form-control-sm" required
+                                        value="<?= htmlspecialchars($hp['emergency_contact'] ?? '') ?>">
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <label class="info-label d-block mb-1">Relation</label>
+                                    <select name="relation" class="form-control form-control-sm">
+                                        <?php foreach ($relations as $r): ?><option value="<?= $r ?>"><?= $r ?></option><?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <label class="info-label d-block mb-1">Mobile Number <span class="text-danger">*</span></label>
+                                    <input type="tel" name="parent_mobile" class="form-control form-control-sm" required maxlength="10"
+                                        value="<?= htmlspecialchars(preg_replace('/\D/', '', $hp['emergency_phone'] ?? '')) ?>">
+                                </div>
+                                <div class="col-md-6 mb-2">
+                                    <label class="info-label d-block mb-1">Email (optional)</label>
+                                    <input type="email" name="parent_email" class="form-control form-control-sm">
+                                </div>
+                                <div class="col-md-6 mb-2">
+                                    <label class="info-label d-block mb-1">Aadhaar Last 4 (optional)</label>
+                                    <input type="text" name="parent_aadhar" class="form-control form-control-sm" maxlength="4" placeholder="XXXX">
+                                </div>
+                            </div>
+
+                            <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#9ca3af;margin:12px 0 8px;">Consent is given for</div>
+                            <div class="consent-items-grid" style="margin-bottom:12px;">
+                                <?php foreach ($consent_labels as $k => $lbl): ?>
+                                    <label style="font-size:.8rem;display:flex;gap:7px;align-items:flex-start;cursor:pointer;">
+                                        <input type="checkbox" name="consent[<?= $k ?>]" value="1" checked style="margin-top:2px;">
+                                        <span><?= htmlspecialchars($lbl) ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+
+                            <label style="font-size:.83rem;display:flex;gap:8px;align-items:flex-start;cursor:pointer;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;">
+                                <input type="checkbox" name="i_agree" value="1" required style="margin-top:3px;">
+                                <span>The parent/guardian has read and understood the declaration and gives informed consent
+                                    for this health checkup, in compliance with ABDM / ABHA data privacy guidelines.</span>
+                            </label>
+
+                            <button type="submit" class="btn btn-sm btn-primary-custom mt-3"><i class="fa fa-save me-1"></i> Save Consent</button>
+                        </form>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
         <!-- ── TAB: Health Profile ── -->
         <div class="tab-pane" id="tab-health">
             <div class="info-section">
@@ -372,6 +595,12 @@ $sidebar_active = 'school-students';
                 </div>
                 <?php endif; ?>
 
+                <?php if (!$has_consent): ?>
+                    <div class="consent-lock"><i class="fa fa-lock"></i>
+                        <div>Parent consent is required before you can record a health profile.
+                            <a href="#consent" onclick="document.querySelector('[onclick*=&quot;consent&quot;]').click();return false;">Go to the Consent tab</a>.</div>
+                    </div>
+                <?php else: ?>
                 <form method="POST" action="save-student-health.php" id="healthForm">
                     <input type="hidden" name="member_id" value="<?= $member_id ?>">
 
@@ -456,6 +685,7 @@ $sidebar_active = 'school-students';
 
                     <button type="submit" class="btn btn-sm btn-primary-custom"><i class="fa fa-save me-1"></i> Save Health Profile</button>
                 </form>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -466,6 +696,12 @@ $sidebar_active = 'school-students';
                 <?php if (isset($_SESSION['rx_error'])): ?>
                     <div class="alert alert-danger" style="font-size:.82rem;"><?= htmlspecialchars($_SESSION['rx_error']); unset($_SESSION['rx_error']); ?></div>
                 <?php endif; ?>
+                <?php if (!$has_consent): ?>
+                    <div class="consent-lock"><i class="fa fa-lock"></i>
+                        <div>Parent consent is required before you can write a prescription.
+                            <a href="#consent" onclick="document.querySelector('[onclick*=&quot;consent&quot;]').click();return false;">Go to the Consent tab</a>.</div>
+                    </div>
+                <?php else: ?>
                 <form method="POST" action="save-student-prescription.php">
                     <input type="hidden" name="member_id" value="<?= $member_id ?>">
                     <div class="form-row">
@@ -495,6 +731,7 @@ $sidebar_active = 'school-students';
                         </div>
                     </div>
                 </form>
+                <?php endif; ?>
             </div>
 
             <div style="font-size:.84rem;color:#374151;font-weight:600;margin:16px 0 8px;">
@@ -543,6 +780,12 @@ $sidebar_active = 'school-students';
                 <?php if (isset($_SESSION['cert_error'])): ?>
                     <div class="alert alert-danger" style="font-size:.82rem;"><?= htmlspecialchars($_SESSION['cert_error']); unset($_SESSION['cert_error']); ?></div>
                 <?php endif; ?>
+                <?php if (!$has_consent): ?>
+                    <div class="consent-lock"><i class="fa fa-lock"></i>
+                        <div>Parent consent is required before you can issue a certificate.
+                            <a href="#consent" onclick="document.querySelector('[onclick*=&quot;consent&quot;]').click();return false;">Go to the Consent tab</a>.</div>
+                    </div>
+                <?php else: ?>
                 <form method="POST" action="save-student-certificate.php">
                     <input type="hidden" name="member_id" value="<?= $member_id ?>">
                     <div class="form-row">
@@ -578,6 +821,7 @@ $sidebar_active = 'school-students';
                         </div>
                     </div>
                 </form>
+                <?php endif; ?>
             </div>
 
             <div style="font-size:.84rem;color:#374151;font-weight:600;margin:16px 0 8px;">
@@ -627,6 +871,12 @@ $sidebar_active = 'school-students';
                 <?php if (isset($_SESSION['doc_error'])): ?>
                     <div class="alert alert-danger" style="font-size:.82rem;"><?= htmlspecialchars($_SESSION['doc_error']); unset($_SESSION['doc_error']); ?></div>
                 <?php endif; ?>
+                <?php if (!$has_consent): ?>
+                    <div class="consent-lock"><i class="fa fa-lock"></i>
+                        <div>Parent consent is required before you can upload medical reports.
+                            <a href="#consent" onclick="document.querySelector('[onclick*=&quot;consent&quot;]').click();return false;">Go to the Consent tab</a>.</div>
+                    </div>
+                <?php else: ?>
                 <form method="POST" action="save-student-document.php" enctype="multipart/form-data">
                     <input type="hidden" name="member_id" value="<?= $member_id ?>">
                     <div class="form-row">
@@ -654,6 +904,7 @@ $sidebar_active = 'school-students';
                         </div>
                     </div>
                 </form>
+                <?php endif; ?>
             </div>
 
             <div style="font-size:.84rem;color:#374151;font-weight:600;margin:16px 0 8px;">

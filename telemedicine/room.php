@@ -105,7 +105,7 @@ $my_display  = $role === 'doctor' ? ('Dr. ' . $appt['doctor_name']) : ($appt['pa
             pollUrl: <?= json_encode(BASE_URL . 'telemedicine/api/poll.php') ?>,
             sendUrl: <?= json_encode(BASE_URL . 'telemedicine/api/send.php') ?>,
             endSessionUrl: <?= json_encode(BASE_URL . 'telemedicine/api/end-session.php') ?>,
-            pollIntervalMs: 2000,
+            pollIntervalMs: <?= (int) (defined('TELEMED_POLL_INTERVAL_MS') ? TELEMED_POLL_INTERVAL_MS : 2000) ?>,
             ticket: <?= json_encode($ticket) ?>,
             role: <?= json_encode($role) ?>,
             appointmentId: <?= json_encode($appointment_id) ?>,

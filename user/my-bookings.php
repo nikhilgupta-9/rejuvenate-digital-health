@@ -208,56 +208,24 @@ if (isset($_GET['cancel_id'])) {
 }
 
 // Get time slots for selected doctor and date (for AJAX)
+// Driven by the doctor's weekly schedule (doctor_schedules) — same source as
+// the public booking page — so a reschedule can't land outside consulting hours.
 if (isset($_GET['get_time_slots']) && isset($_GET['doctor_id']) && isset($_GET['date'])) {
     $doctor_id = intval($_GET['doctor_id']);
-    $date = $conn->real_escape_string($_GET['date']);
-    
-    // Get doctor's working hours
-    $working_hours = [
-        'start' => '09:00:00',
-        'end' => '18:00:00',
-        'break_start' => '13:00:00',
-        'break_end' => '14:00:00'
-    ];
-    
-    // Get booked slots
-    $booked_slots = [];
-    $slot_stmt = $conn->prepare("
-        SELECT TIME_FORMAT(appointment_time, '%H:%i') as time_slot 
-        FROM appointments 
-        WHERE doctor_id = ? 
-        AND appointment_date = ? 
-        AND status NOT IN ('cancelled', 'rejected')
-    ");
-    $slot_stmt->bind_param("is", $doctor_id, $date);
-    $slot_stmt->execute();
-    $slot_result = $slot_stmt->get_result();
-    while ($row = $slot_result->fetch_assoc()) {
-        $booked_slots[] = $row['time_slot'];
-    }
-    $slot_stmt->close();
-    
-    // Generate available time slots (30 minute intervals)
+    $date      = trim($_GET['date']);
+
     $available_slots = [];
-    $start_time = strtotime($working_hours['start']);
-    $end_time = strtotime($working_hours['end']);
-    $break_start = strtotime($working_hours['break_start']);
-    $break_end = strtotime($working_hours['break_end']);
-    
-    for ($time = $start_time; $time < $end_time; $time += 1800) { // 1800 seconds = 30 minutes
-        if ($time >= $break_start && $time < $break_end) {
-            continue; // Skip break time
-        }
-        
-        $time_slot = date('H:i', $time);
-        if (!in_array($time_slot, $booked_slots)) {
+    if ($doctor_id && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+        foreach (generate_doctor_slots($conn, $doctor_id, $date) as $slot) {
+            if ($slot['booked']) continue;            // only offer open slots
             $available_slots[] = [
-                'time' => date('h:i A', $time),
-                'value' => date('H:i:s', $time)
+                'time'  => $slot['display'],
+                'value' => $slot['time'],
             ];
         }
     }
-    
+
+    header('Content-Type: application/json');
     echo json_encode($available_slots);
     exit();
 }

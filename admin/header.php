@@ -23,6 +23,9 @@ if ($is_admin && isset($conn)) {
         "SELECT COUNT(*) as c FROM schools WHERE status='Pending'"))['c'] ?? 0);
     $hpr_pending_count = (int)(mysqli_fetch_assoc(mysqli_query($conn,
         "SELECT COUNT(*) as c FROM hpr_verification_requests WHERE status='pending'"))['c'] ?? 0);
+    $consent_pending = 0;
+    $_cp = @mysqli_query($conn, "SELECT COUNT(*) as c FROM parent_consent_forms WHERE status='pending'");
+    if ($_cp) $consent_pending = (int)(mysqli_fetch_assoc($_cp)['c'] ?? 0);
 }
 ?>
 
@@ -138,9 +141,10 @@ if ($is_admin && isset($conn)) {
             <ul>
                 <li><a href="all-appointment.php">All Appointments</a></li>
                 <li><a href="today-appointments.php">Today's Appointments</a></li>
-                <li><a href="upcoming-appointments.php">Upcoming Appointments</a></li>
-                <li><a href="completed-appointments.php">Completed</a></li>
-                <li><a href="cancelled-appointments.php">Cancelled</a></li>
+                <li><a href="all-appointment.php?status=pending">Pending Approval</a></li>
+                <li><a href="all-appointment.php?status=approved">Approved</a></li>
+                <li><a href="all-appointment.php?status=completed">Completed</a></li>
+                <li><a href="all-appointment.php?status=rejected">Rejected</a></li>
             </ul>
         </li>
 
@@ -171,7 +175,6 @@ if ($is_admin && isset($conn)) {
                 <li><a href="live-consultations.php">Live Consultations</a></li>
                 <li><a href="video-call-history.php">Call History</a></li>
                 <li><a href="prescriptions.php">Prescriptions</a></li>
-                <li><a href="e-prescriptions.php">E-Prescriptions</a></li>
             </ul>
         </li>
 
@@ -206,8 +209,9 @@ if ($is_admin && isset($conn)) {
         <li class="menu-label">School Health</li>
         <li>
             <a class="has-arrow" href="#"><i class="fas fa-school"></i> <span>Schools</span>
-                <?php if ($pending_schools > 0): ?>
-                <span class="badge bg-danger ms-1" style="font-size:10px;"><?= $pending_schools ?></span>
+                <?php $school_nav_badge = $pending_schools + ($consent_pending ?? 0); ?>
+                <?php if ($school_nav_badge > 0): ?>
+                <span class="badge bg-danger ms-1" style="font-size:10px;"><?= $school_nav_badge ?></span>
                 <?php endif; ?>
             </a>
             <ul>
@@ -216,6 +220,7 @@ if ($is_admin && isset($conn)) {
                 <li><a href="schools-list.php?status=Active"><i class="fas fa-check-circle me-1 text-success"></i> Active Schools</a></li>
                 <li><a href="add-school.php"><i class="fas fa-plus me-1 text-primary"></i> Add School</a></li>
                 <li><a href="school-members.php">School Members</a></li>
+                <li><a href="parent-consents.php"><i class="fas fa-file-signature me-1 text-primary"></i> Parent Consents <?php if (($consent_pending ?? 0) > 0): ?><span class="badge bg-danger ms-1" style="font-size:9px;"><?= $consent_pending ?></span><?php endif; ?></a></li>
             </ul>
         </li>
 
@@ -246,7 +251,7 @@ if ($is_admin && isset($conn)) {
         <li>
             <a class="has-arrow" href="#"><i class="fas fa-chart-bar"></i> <span>Reports</span></a>
             <ul>
-                <li><a href="appointment-reports.php">Appointment Reports</a></li>
+                <li><a href="all-appointment.php?status=completed">Appointment Reports</a></li>
                 <li><a href="patient-reports.php">Patient Reports</a></li>
                 <li><a href="revenue-reports.php">Revenue Reports</a></li>
                 <?php if ($is_doctor): ?>

@@ -301,51 +301,85 @@ a:hover {
   border-left: 4px solid var(--adm-primary);
   padding-left: 12px;
 }
+.page-heading h4 { font-size: 1.15rem; }
+
+/* Reusable list-page header: title block left, actions right, wraps on mobile.
+   <div class="list-page-head"> <div class="page-heading">…</div> <a…>…</a> </div> */
+.list-page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+@media (max-width: 575.98px) {
+  .list-page-head { align-items: flex-start; }
+  .list-page-head .btn { width: 100%; }
+}
 
 /* ══════════════════════════════════════════════════
-   STAT BOXES (used on schools-list, etc.)
+   STAT BOXES  — clean white KPI tiles (Flipkart-seller style)
+   markup stays: <div class="stat-box bg-stat-blue">
+                   <i class="fas fa-x big-icon"></i>
+                   <div class="num">12</div><div class="lbl">Label</div></div>
+   .bg-stat-* now only supplies the accent colour (--accent)
    ══════════════════════════════════════════════════ */
 .stat-box {
-  border-radius: 10px;
-  padding: 20px;
-  color: #fff;
-  position: relative;
-  overflow: hidden;
+  --accent: #0c74c5;
+  background: #fff;
+  border: 1px solid #e7e8f0;
+  border-radius: 12px;
+  padding: 15px 16px;
+  color: #1f2233;
+  box-shadow: 0 1px 3px rgba(20, 23, 40, 0.04);
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  align-items: center;
 }
 .stat-box .big-icon {
-  position: absolute;
-  right: -10px;
-  top: -10px;
-  font-size: 60px;
-  opacity: 0.12;
+  grid-row: 1 / 3;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  color: var(--accent);
+  background-color: #eef1f6; /* overridden per-accent below */
+  opacity: 1;
+  position: static;
 }
 .stat-box .num {
-  font-size: 1.8rem;
+  align-self: end;
+  font-size: 1.55rem;
   font-weight: 700;
+  line-height: 1.1;
 }
 .stat-box .lbl {
-  font-size: 0.75rem;
+  align-self: start;
+  font-size: 0.72rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
-  opacity: 0.85;
+  letter-spacing: 0.4px;
+  color: #6b7089;
+  opacity: 1;
 }
 
-/* Solid (no gradient) stat-box backgrounds */
-.bg-stat-blue {
-  background: #0c74c5;
-}
-.bg-stat-warn {
-  background: #ea580c;
-}
-.bg-stat-green {
-  background: #16a34a;
-}
-.bg-stat-red {
-  background: #dc2626;
-}
-.bg-stat-teal {
-  background: #02c9b8;
-}
+/* Accent colour per modifier (fallback icon tint for browsers w/o color-mix) */
+.bg-stat-blue  { --accent: #0c74c5; }
+.bg-stat-warn  { --accent: #ea580c; }
+.bg-stat-green { --accent: #16a34a; }
+.bg-stat-red   { --accent: #dc2626; }
+.bg-stat-teal  { --accent: #0d9488; }
+.bg-stat-blue  .big-icon { background-color: #e7f1fb; }
+.bg-stat-warn  .big-icon { background-color: #fdece1; }
+.bg-stat-green .big-icon { background-color: #e4f6ea; }
+.bg-stat-red   .big-icon { background-color: #fce8e8; }
+.bg-stat-teal  .big-icon { background-color: #e0f2f0; }
 
 /* ══════════════════════════════════════════════════
    SCHOOL / MEMBER AVATAR INITIALS
@@ -381,11 +415,25 @@ a:hover {
    FILTER CARD & FILTER BUTTONS
    ══════════════════════════════════════════════════ */
 .filter-card {
-  background: #f8f9fc;
-  border-radius: 10px;
-  border: 1px solid #e3e6f0;
-  padding: 16px 20px;
-  margin-bottom: 20px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e7e8f0;
+  box-shadow: 0 1px 3px rgba(20, 23, 40, 0.04);
+  padding: 16px 18px;
+  margin-bottom: 18px;
+}
+.filter-card .form-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #6b7089;
+}
+.filter-card .form-control,
+.filter-card .form-select {
+  border-radius: 8px;
+  border-color: #e2e4ee;
+  font-size: 0.85rem;
 }
 .filter-btn {
   padding: 8px 16px;
@@ -411,9 +459,9 @@ a:hover {
   font-weight: 600;
 }
 .tbl-action-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   border: none;
   display: inline-flex;
   align-items: center;
@@ -421,9 +469,82 @@ a:hover {
   transition: 0.2s;
   cursor: pointer;
   font-size: 0.8rem;
+  margin: 2px;
 }
 .tbl-action-btn:hover {
-  filter: brightness(1.15);
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+/* Consistent list-table header — add class "tbl-admin" to the <table> */
+.table.tbl-admin thead th {
+  background: #f7f8fb;
+  border-top: none;
+  border-bottom: 1px solid #e7e8f0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #6b7089;
+  padding: 12px 14px;
+  white-space: nowrap;
+}
+.table.tbl-admin td {
+  vertical-align: middle;
+  padding: 12px 14px;
+  border-color: #eef0f5;
+}
+.table.tbl-admin tbody tr:hover td {
+  background: #f9fafc;
+}
+.table.tbl-admin .empty-row td {
+  padding: 52px 0;
+  text-align: center;
+  color: #94a3b8;
+}
+
+/* ── Responsive: collapse a .tbl-admin.tbl-cards table into stacked
+   cards on phones. Each <td> needs data-label="Column name". ── */
+@media (max-width: 767.98px) {
+  .tbl-admin.tbl-cards thead { display: none; }
+  .tbl-admin.tbl-cards,
+  .tbl-admin.tbl-cards tbody,
+  .tbl-admin.tbl-cards tr,
+  .tbl-admin.tbl-cards td { display: block; width: 100%; }
+  .tbl-admin.tbl-cards tr {
+    border: 1px solid #e7e8f0;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    padding: 4px 14px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(20, 23, 40, 0.04);
+  }
+  .tbl-admin.tbl-cards tbody tr:hover td,
+  .tbl-admin.tbl-cards tr:hover td { background: transparent; }
+  .tbl-admin.tbl-cards td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    text-align: right;
+    padding: 9px 0;
+    border: none;
+    border-bottom: 1px dashed #eef0f5;
+  }
+  .tbl-admin.tbl-cards tr td:last-child { border-bottom: none; }
+  .tbl-admin.tbl-cards td::before {
+    content: attr(data-label);
+    flex: 0 0 40%;
+    text-align: left;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: #9aa0b4;
+  }
+  .tbl-admin.tbl-cards td:not([data-label]) { display: none; }
+  .tbl-admin.tbl-cards .empty-row td { display: block; text-align: center; }
+  .tbl-admin.tbl-cards .empty-row td::before { display: none; }
 }
 
 /* Table header accent */
@@ -520,19 +641,28 @@ a:hover {
    rules of their own yet.
    ══════════════════════════════════════════════════ */
 @media (max-width: 767.98px) {
-  .dash-stat-card,
-  .stat-box {
+  .dash-stat-card {
     padding: 16px 14px;
+  }
+  .stat-box {
+    padding: 13px 13px;
+    grid-template-columns: 36px 1fr;
+    column-gap: 10px;
   }
   .dash-stat-card .stat-num,
   .stat-box .num {
-    font-size: 1.5rem;
+    font-size: 1.35rem;
   }
   .dash-stat-card .icon-bg {
     font-size: 52px;
   }
   .stat-box .big-icon {
-    font-size: 46px;
+    width: 36px;
+    height: 36px;
+    font-size: 15px;
+  }
+  .stat-box .lbl {
+    font-size: 0.66rem;
   }
 
   .quick-action-card {
@@ -594,4 +724,271 @@ a:hover {
   .quick-action-card h6 {
     font-size: 0.76rem;
   }
+}
+
+/* ══════════════════════════════════════════════════
+   STATUS PILLS  — reusable across every admin list / detail page
+   <span class="pill pill-warn">Pending</span>
+   add .pill-sq for a square inline tag inside table cells
+   ══════════════════════════════════════════════════ */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 4px 11px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.pill i {
+  font-size: 0.82em;
+}
+.pill-sq {
+  border-radius: 6px;
+  padding: 3px 9px;
+}
+.pill-success { background: #dcfce7; color: #15803d; }
+.pill-warn    { background: #fff4e5; color: #b45309; }
+.pill-danger  { background: #fee2e2; color: #b91c1c; }
+.pill-info    { background: #e0f2fe; color: #0369a1; }
+.pill-purple  { background: #ede9fe; color: #6d28d9; }
+.pill-muted   { background: #f1f5f9; color: #64748b; }
+
+/* ══════════════════════════════════════════════════
+   TABLE CELL TEXT — primary line + muted sub-line
+   ══════════════════════════════════════════════════ */
+.cell-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+.cell-sub {
+  font-size: 0.76rem;
+  color: #94a3b8;
+}
+
+/* ══════════════════════════════════════════════════
+   DETAIL / VIEW PAGES — record cards with a label/value grid
+   <div class="detail-card"><h5>Section</h5>
+     <div class="row"><div class="col-md-6 mb-3">
+       <div class="detail-label">Name</div><div class="detail-val">…</div>
+   ══════════════════════════════════════════════════ */
+.detail-card {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06);
+  padding: 20px 22px;
+  margin-bottom: 18px;
+}
+.detail-card > h5 {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #6b7280;
+  border-bottom: 1px solid #eef1f5;
+  padding-bottom: 10px;
+  margin: 0 0 16px;
+}
+.detail-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #9ca3af;
+  margin-bottom: 2px;
+}
+.detail-val {
+  font-size: 0.9rem;
+  color: #1f2937;
+}
+.detail-val a {
+  color: var(--adm-primary);
+}
+
+/* Labelled check list — consented services, permissions, feature flags … */
+.check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px 18px;
+}
+.check-grid .ck {
+  font-size: 0.85rem;
+  color: #15803d;
+}
+.check-grid .ck-off {
+  font-size: 0.85rem;
+  color: #9ca3af;
+}
+
+@media (max-width: 767.98px) {
+  .detail-card {
+    padding: 16px 14px;
+  }
+  .check-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   DOCTOR SCHEDULE MANAGEMENT
+   ══════════════════════════════════════════════════ */
+.schedule-table td {
+  vertical-align: middle;
+}
+.schedule-table .day-label {
+  font-weight: 600;
+}
+.schedule-table .not-configured {
+  color: #9aa0ac;
+  font-style: italic;
+}
+#doctorSelect {
+  max-width: 360px;
+}
+
+/* ══════════════════════════════════════════════════
+   GENERIC MODERN PAGE SHELL
+   Auto-applies to every admin page's content area so pages using
+   plain Bootstrap markup (.white_card / .card / .table / forms)
+   get the Flipkart-seller look + mobile behaviour without per-page CSS.
+   Scoped to .main_content_iner so it never touches the sidebar/topbar.
+   ══════════════════════════════════════════════════ */
+.main_content_iner .white_card,
+.main_content_iner .main-content-card,
+.main_content_iner > .container-fluid .card {
+  border: 1px solid #e7e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(20, 23, 40, 0.04);
+}
+
+/* card headers — consistent */
+.main_content_iner .white_card > .white_card_header,
+.main_content_iner .white_card > .card-header,
+.main_content_iner .card > .card-header {
+  padding: 15px 20px !important;
+  border-bottom: 1px solid #eef0f5 !important;
+  background: #fff !important;
+  border-radius: 12px 12px 0 0;
+}
+.main_content_iner .white_card_header h1,
+.main_content_iner .white_card_header h2,
+.main_content_iner .white_card_header h3,
+.main_content_iner .card-header h2,
+.main_content_iner .card-header h3,
+.main_content_iner .box_header .main-title h3 {
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  margin: 0;
+}
+.main_content_iner .white_card > .white_card_body,
+.main_content_iner .white_card > .card-body,
+.main_content_iner .card > .card-body { padding: 18px 20px !important; }
+
+/* old .page-header pattern → responsive title/action row */
+.main_content_iner .page-header { margin-bottom: 18px; }
+.main_content_iner .page-header .d-flex.justify-content-between,
+.main_content_iner .page-header .d-flex.align-items-center.justify-content-between {
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+}
+.main_content_iner .page-header h1,
+.main_content_iner .page-header h2 { font-size: 1.2rem; font-weight: 700; margin: 0; }
+
+/* generic tables — modern even without .tbl-admin */
+.main_content_iner .table > thead th,
+.main_content_iner .table > thead.table-light th {
+  background: #f7f8fb;
+  border-bottom: 1px solid #e7e8f0;
+  border-top: none;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #6b7089;
+  white-space: nowrap;
+  padding: 11px 14px;
+}
+.main_content_iner .table td {
+  border-color: #eef0f5;
+  vertical-align: middle;
+  padding: 11px 14px;
+}
+.main_content_iner .table.table-bordered td,
+.main_content_iner .table.table-bordered th { border-color: #eef0f5; }
+.main_content_iner .table-hover tbody tr:hover td { background: #f9fafc; }
+
+/* forms — modern & consistent */
+.main_content_iner .form-control:not(.form-control-sm):not(.form-control-lg),
+.main_content_iner .form-select:not(.form-select-sm):not(.form-select-lg) {
+  border-radius: 8px;
+  border-color: #e2e4ee;
+  font-size: 0.9rem;
+  min-height: 40px;
+}
+.main_content_iner .form-control-sm,
+.main_content_iner .form-select-sm { border-radius: 7px; }
+.main_content_iner .form-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #3a3f55;
+  margin-bottom: 4px;
+}
+.main_content_iner textarea.form-control { min-height: 92px; }
+.main_content_iner .btn { border-radius: 8px; }
+
+/* ── Mobile: tighten content, stack card headers, full-width primary actions ── */
+@media (max-width: 767.98px) {
+  .main_content_iner { padding: 14px !important; }
+  .main_content_iner .white_card > .white_card_header,
+  .main_content_iner .white_card > .card-header,
+  .main_content_iner .card > .card-header,
+  .main_content_iner .white_card > .white_card_body,
+  .main_content_iner .white_card > .card-body,
+  .main_content_iner .card > .card-body { padding: 14px !important; }
+
+  .main_content_iner .page-header .d-flex.justify-content-between,
+  .main_content_iner .page-header .d-flex.align-items-center.justify-content-between {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .main_content_iner .page-header .d-flex .btn { width: 100%; }
+  .main_content_iner .box_header { flex-wrap: wrap; row-gap: 10px; }
+
+  /* any content row of >2 buttons wraps instead of overflowing */
+  .main_content_iner .d-flex.gap-2,
+  .main_content_iner .action-buttons { flex-wrap: wrap; }
+}
+
+/* ══════════════════════════════════════════════════
+   STAT BOX AS A LINK / QUICK-FILTER
+   <a class="stat-box bg-stat-blue stat-box-active"> …
+   ══════════════════════════════════════════════════ */
+a.stat-box { transition: box-shadow .15s, border-color .15s, transform .15s; }
+a.stat-box:hover {
+  border-color: var(--accent);
+  box-shadow: 0 3px 10px rgba(20, 23, 40, 0.08);
+  color: #1f2233;
+}
+a.stat-box.stat-box-active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+a.stat-box.stat-box-active .num { color: var(--accent); }
+
+/* ══════════════════════════════════════════════════
+   APPOINTMENTS — modal detail cards + row bits
+   ══════════════════════════════════════════════════ */
+#apptDetailModal .detail-card { box-shadow: none; border: 1px solid #eef0f5; margin-bottom: 0; }
+#apptDetailModal .modal-header { background: var(--adm-primary); color: #fff; }
+#apptDetailModal .modal-header .btn-close { filter: invert(1) grayscale(100%) brightness(200%); }
+.tbl-admin td .pill + .cell-sub { margin-top: 4px; }
+
+@media (max-width: 767.98px) {
+  /* keep the actions cell left-aligned & wrapping inside the stacked card */
+  .tbl-admin.tbl-cards td[data-label="Actions"] { justify-content: flex-start; }
+  .tbl-admin.tbl-cards td[data-label="Actions"] .d-inline-flex { justify-content: flex-start !important; }
 }

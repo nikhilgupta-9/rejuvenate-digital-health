@@ -403,6 +403,23 @@ if (!empty($customer['dob']) && $customer['dob'] != '0000-00-00') {
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Appointments -->
+                            <div class="col-md-12">
+                                <div class="info-card">
+                                    <div class="info-card-header">
+                                        <span><i class="fas fa-calendar-check me-2"></i>Appointments</span>
+                                    </div>
+                                    <div class="info-card-body p-2">
+                                        <?php
+                                        $ap_scope = 'user';
+                                        $ap_id = (int) $customer['id'];
+                                        $ap_limit = 10;
+                                        include __DIR__ . '/inc/appointments-panel.php';
+                                        ?>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Action Buttons -->

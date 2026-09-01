@@ -45,42 +45,7 @@ if ($selected_doctor_id) {
     <link rel="icon" href="assets/img/logo.png" type="image/png">
 
     <?php include "links.php"; ?>
-
-    <style>
-        .schedule-table td {
-            vertical-align: middle;
-        }
-
-        .day-label {
-            font-weight: 600;
-        }
-
-        .avail-badge {
-            padding: 4px 12px;
-            border-radius: 30px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-
-        .avail-yes {
-            background: #e8f8f0;
-            color: #2ecc71;
-        }
-
-        .avail-no {
-            background: #fdecea;
-            color: #e74c3c;
-        }
-
-        .not-configured {
-            color: #9aa0ac;
-            font-style: italic;
-        }
-
-        #doctorSelect {
-            max-width: 360px;
-        }
-    </style>
+    <!-- styles in assets/css/colors/default.css -->
 </head>
 
 <body class="crm_body_bg">
@@ -158,38 +123,39 @@ if ($selected_doctor_id) {
                                     </div>
 
                                     <div class="table-responsive">
-                                        <table class="table table-bordered table-hover schedule-table">
+                                        <table class="table table-hover tbl-admin tbl-cards schedule-table">
                                             <thead>
                                                 <tr>
                                                     <th scope="col">Day</th>
                                                     <th scope="col">Consulting Hours</th>
                                                     <th scope="col">Slot Duration</th>
                                                     <th scope="col">Availability</th>
-                                                    <th scope="col" width="160">Action</th>
+                                                    <th scope="col">Action</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 <?php foreach ($days as $day): $sc = $schedules_by_day[$day] ?? null; ?>
                                                     <tr>
-                                                        <td class="day-label"><?= $day ?></td>
-                                                        <td>
+                                                        <td data-label="Day" class="day-label"><?= $day ?></td>
+                                                        <td data-label="Consulting Hours">
                                                             <?php if ($sc): ?>
                                                                 <?= date('h:i A', strtotime($sc['start_time'])) ?> &ndash; <?= date('h:i A', strtotime($sc['end_time'])) ?>
                                                             <?php else: ?>
                                                                 <span class="not-configured">Not configured</span>
                                                             <?php endif; ?>
                                                         </td>
-                                                        <td><?= $sc ? (int) $sc['slot_duration_minutes'] . ' min' : '—' ?></td>
-                                                        <td>
+                                                        <td data-label="Slot Duration"><?= $sc ? (int) $sc['slot_duration_minutes'] . ' min' : '—' ?></td>
+                                                        <td data-label="Availability">
                                                             <?php if ($sc): ?>
-                                                                <span class="avail-badge <?= $sc['is_available'] ? 'avail-yes' : 'avail-no' ?>">
+                                                                <span class="pill <?= $sc['is_available'] ? 'pill-success' : 'pill-danger' ?>">
                                                                     <?= $sc['is_available'] ? 'Available' : 'Unavailable' ?>
                                                                 </span>
                                                             <?php else: ?>
                                                                 &mdash;
                                                             <?php endif; ?>
                                                         </td>
-                                                        <td>
+                                                        <td data-label="Action">
+                                                            <div class="d-inline-flex flex-wrap gap-1 justify-content-end">
                                                             <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#scheduleModal-<?= $day ?>">
                                                                 <i class="fas <?= $sc ? 'fa-edit' : 'fa-plus' ?> me-1"></i><?= $sc ? 'Edit' : 'Add' ?>
                                                             </button>
@@ -203,6 +169,7 @@ if ($selected_doctor_id) {
                                                                     </button>
                                                                 </form>
                                                             <?php endif; ?>
+                                                            </div>
                                                         </td>
                                                     </tr>
 

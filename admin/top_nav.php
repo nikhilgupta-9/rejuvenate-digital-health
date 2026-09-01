@@ -22,6 +22,12 @@ $stmt->close();
               <div class="sidebar_icon d-lg-none">
                 <i class="ti-menu"></i>
               </div>
+              <button type="button" id="sidebarCollapseBtn" class="d-none d-lg-inline-flex align-items-center justify-content-center"
+                style="width:36px;height:36px;border:none;background:transparent;color:#fff;font-size:16px;cursor:pointer;margin-right:14px;border-radius:8px;transition:background .15s;"
+                onmouseover="this.style.background='rgba(255,255,255,.12)'" onmouseout="this.style.background='transparent'"
+                title="Toggle sidebar">
+                <i class="ti-menu"></i>
+              </button>
               <div class="serach_field-area d-flex align-items-center">
                 <div class="search_inner">
                   <form action="#">
@@ -149,3 +155,24 @@ $stmt->close();
           </div>
         </div>
       </div>
+<script>
+(function () {
+  var KEY = 'rdh_sidebar_collapsed';
+  var btn = document.getElementById('sidebarCollapseBtn');
+  var sidebar = document.querySelector('.sidebar');
+  var content = document.querySelector('.main_content');
+  var footer = document.querySelector('.footer_part');
+  function apply(collapsed) {
+    if (!sidebar || !content) return;
+    sidebar.classList.toggle('hide_vertical_menu', collapsed);
+    content.classList.toggle('main_content_padding_hide', collapsed);
+    if (footer) footer.classList.toggle('pl-0', collapsed);
+  }
+  try { if (localStorage.getItem(KEY) === '1' && window.innerWidth > 991) apply(true); } catch (e) {}
+  if (btn) btn.addEventListener('click', function () {
+    var collapsed = !sidebar.classList.contains('hide_vertical_menu');
+    apply(collapsed);
+    try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (e) {}
+  });
+})();
+</script>

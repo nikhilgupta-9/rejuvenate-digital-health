@@ -455,24 +455,12 @@ if (!empty($doctor['gallery_images'])) {
     <style>
         .doctor-form {
             background: #fff;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            padding: 30px;
+            border: 1px solid #e7e8f0;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(20,23,40,.04);
+            padding: 24px;
         }
-        .form-label {
-            font-weight: 500;
-            color: #495057;
-            margin-bottom: 8px;
-        }
-        .form-control, .form-select {
-            border-radius: 6px;
-            padding: 10px 15px;
-            border: 1px solid #e0e0e0;
-        }
-        .form-control:focus, .form-select:focus {
-            border-color: #7367f0;
-            box-shadow: 0 0 0 3px rgba(115,103,240,.15);
-        }
+        @media (max-width: 767.98px) { .doctor-form { padding: 16px; } }
         .image-preview {
             max-width: 200px;
             max-height: 150px;
@@ -543,23 +531,15 @@ if (!empty($doctor['gallery_images'])) {
         .file-upload-label:hover {
             background-color: #e9ecef;
         }
-        .btn-primary {
-            background-color: #7367f0;
-            border-color: #7367f0;
-            padding: 10px 25px;
-            border-radius: 6px;
-            font-weight: 500;
-        }
-        .btn-primary:hover {
-            background-color: #5d50e6;
-            border-color: #5d50e6;
-        }
         .section-title {
-            border-bottom: 2px solid #f0f0f0;
+            font-size: .78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .8px;
+            color: #6b7280;
+            border-bottom: 1px solid #eef1f5;
             padding-bottom: 10px;
-            margin-bottom: 20px;
-            color: #495057;
-            font-weight: 600;
+            margin-bottom: 18px;
         }
         .current-image-section {
             margin-top: 10px;
@@ -579,6 +559,30 @@ if (!empty($doctor['gallery_images'])) {
             overflow-y: auto;
             width: 100%;
         }
+
+        /* ---- compact 2-column edit layout ---- */
+        .dr-edit-wrap { max-width: 1480px; }
+        .dr-rail { position: sticky; top: 74px; }
+        @media (max-width: 1199.98px) { .dr-rail { position: static; } }
+        .doctor-form .section-title { margin-top: 22px; }
+        .doctor-form .row:first-child .section-title,
+        .doctor-form > .section-title:first-child { margin-top: 0; }
+        .doctor-form hr { margin: 16px 0; border-color: #eef0f5; }
+
+        .doc-avatar-lg {
+            width: 52px; height: 52px; border-radius: 12px; object-fit: cover;
+            background: #eef1f6; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .doc-avatar-lg i { color: #9aa0b4; font-size: 20px; }
+
+        /* tighten the info rows in the rail — always single column */
+        .dr-rail .mb-2 { margin-bottom: .3rem !important; font-size: .84rem; }
+        .dr-rail h6 { font-size: .82rem; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #6b7089; margin-top: 14px; }
+        .dr-rail .badge { font-weight: 600; }
+        .dr-rail .row { --bs-gutter-x: 0; }
+        .dr-rail .row > [class*="col-"] { flex: 0 0 100%; max-width: 100%; margin-bottom: .5rem; }
+        .dr-rail hr { margin: 12px 0; }
+        .dr-rail .btn-sm { font-size: .78rem; }
     </style>
 </head>
 <body class="crm_body_bg">
@@ -594,22 +598,39 @@ if (!empty($doctor['gallery_images'])) {
         </div>
 
         <div class="main_content_iner">
-            <div class="container-fluid">
-                <div class="row justify-content-center">
-                    <div class="col-12">
-                        <div class="page-header mb-4">
-                            <div class="d-flex align-items-center justify-content-between">
-                                <h2 class="mb-0">Edit Doctor</h2>
-                                <a href="doctors-list.php" class="btn btn-outline-secondary">
-                                    <i class="fas fa-arrow-left me-2"></i> Back to List
-                                </a>
+            <div class="container-fluid dr-edit-wrap">
+                <div class="list-page-head">
+                    <div class="d-flex align-items-center gap-3">
+                        <?php if (!empty($doctor['profile_image'])): ?>
+                            <img src="<?= htmlspecialchars($doctor['profile_image']) ?>" alt="" class="doc-avatar-lg" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                            <div class="doc-avatar-lg" style="display:none;"><i class="fas fa-user-md"></i></div>
+                        <?php else: ?>
+                            <div class="doc-avatar-lg"><i class="fas fa-user-md"></i></div>
+                        <?php endif; ?>
+                        <div>
+                            <h4 class="mb-0 fw-bold"><?= htmlspecialchars($doctor['name']) ?></h4>
+                            <div class="cell-sub"><?= htmlspecialchars($doctor['doctor_uid']) ?><?= $doctor['specialization'] ? ' · ' . htmlspecialchars($doctor['specialization']) : '' ?></div>
+                            <div class="mt-1 d-flex flex-wrap gap-1">
+                                <span class="pill <?= $doctor['is_verified'] ? 'pill-success' : 'pill-warn' ?>"><i class="fas fa-<?= $doctor['is_verified'] ? 'check-circle' : 'clock' ?>"></i><?= $doctor['is_verified'] ? 'Verified' : 'Unverified' ?></span>
+                                <span class="pill <?= $doctor['status'] === 'Active' ? 'pill-success' : 'pill-muted' ?>"><?= htmlspecialchars($doctor['status']) ?></span>
+                                <span class="pill <?= $doc_bookable ? 'pill-info' : 'pill-muted' ?>"><i class="fas fa-<?= $doc_bookable ? 'globe' : 'eye-slash' ?>"></i><?= $doc_bookable ? 'Bookable' : 'Not bookable' ?></span>
                             </div>
                         </div>
                     </div>
+                    <a href="doctors-list.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back to List</a>
+                </div>
 
-                    <div class="col-lg-12">
-                        <div class="doctor-form mb-4">
-                            <h4 class="section-title">Verification &amp; Documents</h4>
+                <?php if (!empty($success_message)): ?>
+                    <div class="alert alert-success alert-dismissible fade show" role="alert"><i class="fas fa-check-circle me-2"></i><?= $success_message ?><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>
+                <?php endif; ?>
+                <?php if (!empty($error_message)): ?>
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert"><i class="fas fa-exclamation-circle me-2"></i><?= $error_message ?><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>
+                <?php endif; ?>
+
+                <div class="row g-4">
+                    <div class="col-xl-4 order-xl-2">
+                        <div class="doctor-form dr-rail">
+                            <h4 class="section-title">Verification &amp; Status</h4>
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <div class="mb-2"><strong>Email:</strong> <?= htmlspecialchars($doctor['email'] ?: '—') ?></div>
@@ -751,96 +772,11 @@ if (!empty($doctor['gallery_images'])) {
                                     </a>
                                 </div>
                             </div>
-
-                            <hr>
-                            <h6 class="fw-bold mb-3">Uploaded Documents (<?= count($doctor_documents) ?>)</h6>
-                            <?php if (empty($doctor_documents)): ?>
-                                <p class="text-muted mb-0">No documents uploaded.</p>
-                            <?php else: ?>
-                                <div class="table-responsive">
-                                    <table class="table table-sm align-middle">
-                                        <thead><tr><th>Type</th><th>File</th><th>Uploaded</th><th>Status</th><th>Action</th></tr></thead>
-                                        <tbody>
-                                        <?php foreach ($doctor_documents as $doc): ?>
-                                            <tr>
-                                                <td><?= htmlspecialchars(strtoupper($doc['document_type'])) ?></td>
-                                                <td><a href="<?= BASE_URL . htmlspecialchars($doc['file_path']) ?>" target="_blank" rel="noopener"><?= htmlspecialchars($doc['document_name']) ?></a></td>
-                                                <td><?= date('d M Y', strtotime($doc['uploaded_at'])) ?></td>
-                                                <td>
-                                                    <?php if ($doc['is_verified']): ?>
-                                                        <span class="badge bg-success">Verified</span>
-                                                    <?php else: ?>
-                                                        <span class="badge bg-secondary">Unverified</span>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <?php if ($doc['is_verified']): ?>
-                                                        <a href="doctor-edit.php?id=<?= $doctor_id ?>&unverify_doc=<?= $doc['id'] ?>" class="btn btn-sm btn-outline-secondary">Unmark</a>
-                                                    <?php else: ?>
-                                                        <a href="doctor-edit.php?id=<?= $doctor_id ?>&verify_doc=<?= $doc['id'] ?>" class="btn btn-sm btn-outline-success">Mark Verified</a>
-                                                    <?php endif; ?>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            <?php endif; ?>
-
-                            <hr>
-                            <h6 class="fw-bold mb-3">Payment History (<?= count($doctor_payments) ?>)</h6>
-                            <?php if (empty($doctor_payments)): ?>
-                                <p class="text-muted mb-0">No payments yet.</p>
-                            <?php else: ?>
-                                <div class="table-responsive">
-                                    <table class="table table-sm align-middle">
-                                        <thead><tr><th>Plan</th><th>Amount</th><th>Status</th><th>Period</th><th>Payment ID</th><th>Purchased On</th></tr></thead>
-                                        <tbody>
-                                        <?php foreach ($doctor_payments as $pay):
-                                            $payBadge = [
-                                                'paid'    => 'bg-success',
-                                                'pending' => 'bg-warning text-dark',
-                                                'failed'  => 'bg-danger',
-                                            ][$pay['status']] ?? 'bg-secondary';
-                                        ?>
-                                            <tr>
-                                                <td><?= htmlspecialchars($pay['plan_name'] ?? ('Plan #' . $pay['plan_id'])) ?></td>
-                                                <td>₹<?= number_format($pay['amount'], 2) ?></td>
-                                                <td><span class="badge <?= $payBadge ?>"><?= ucfirst($pay['status']) ?></span></td>
-                                                <td>
-                                                    <?php if ($pay['starts_at'] && $pay['expires_at']): ?>
-                                                        <?= date('d M Y', strtotime($pay['starts_at'])) ?> – <?= date('d M Y', strtotime($pay['expires_at'])) ?>
-                                                    <?php else: ?>
-                                                        —
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td><small class="text-muted"><?= htmlspecialchars($pay['razorpay_payment_id'] ?: '—') ?></small></td>
-                                                <td><?= date('d M Y, h:i A', strtotime($pay['created_at'])) ?></td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            <?php endif; ?>
                         </div>
                     </div>
 
-                    <div class="col-lg-12">
+                    <div class="col-xl-8 order-xl-1">
                         <div class="doctor-form">
-                            <?php if (!empty($success_message)): ?>
-                                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                                    <?= $success_message ?>
-                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                                </div>
-                            <?php endif; ?>
-                            
-                            <?php if (!empty($error_message)): ?>
-                                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                                    <?= $error_message ?>
-                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                                </div>
-                            <?php endif; ?>
-                            
                             <form method="post" enctype="multipart/form-data" id="doctorForm">
                                 <input type="hidden" name="current_profile_image" value="<?= $doctor['profile_image'] ?>">
                                 <input type="hidden" name="current_gallery_images" value='<?= $doctor['gallery_images'] ?>'>
@@ -1092,11 +1028,94 @@ if (!empty($doctor['gallery_images'])) {
                         </div>
                     </div>
                 </div>
+
+                <div class="row g-4">
+                    <div class="col-xl-6">
+                        <div class="doctor-form">
+                            <h4 class="section-title">Uploaded Documents (<?= count($doctor_documents) ?>)</h4>
+                            <?php if (empty($doctor_documents)): ?>
+                                <p class="text-muted mb-0">No documents uploaded.</p>
+                            <?php else: ?>
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle tbl-admin">
+                                        <thead><tr><th>Type</th><th>File</th><th>Uploaded</th><th>Status</th><th>Action</th></tr></thead>
+                                        <tbody>
+                                        <?php foreach ($doctor_documents as $doc): ?>
+                                            <tr>
+                                                <td><?= htmlspecialchars(strtoupper($doc['document_type'])) ?></td>
+                                                <td><a href="<?= BASE_URL . htmlspecialchars($doc['file_path']) ?>" target="_blank" rel="noopener"><?= htmlspecialchars($doc['document_name']) ?></a></td>
+                                                <td><span class="cell-sub"><?= date('d M Y', strtotime($doc['uploaded_at'])) ?></span></td>
+                                                <td><?= $doc['is_verified'] ? '<span class="pill pill-success">Verified</span>' : '<span class="pill pill-muted">Unverified</span>' ?></td>
+                                                <td>
+                                                    <?php if ($doc['is_verified']): ?>
+                                                        <a href="doctor-edit.php?id=<?= $doctor_id ?>&unverify_doc=<?= $doc['id'] ?>" class="btn btn-sm btn-outline-secondary">Unmark</a>
+                                                    <?php else: ?>
+                                                        <a href="doctor-edit.php?id=<?= $doctor_id ?>&verify_doc=<?= $doc['id'] ?>" class="btn btn-sm btn-outline-success">Mark Verified</a>
+                                                    <?php endif; ?>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <div class="col-xl-6">
+                        <div class="doctor-form">
+                            <h4 class="section-title">Payment History (<?= count($doctor_payments) ?>)</h4>
+                            <?php if (empty($doctor_payments)): ?>
+                                <p class="text-muted mb-0">No payments yet.</p>
+                            <?php else: ?>
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle tbl-admin">
+                                        <thead><tr><th>Plan</th><th>Amount</th><th>Status</th><th>Period</th><th>Payment ID</th><th>Purchased On</th></tr></thead>
+                                        <tbody>
+                                        <?php foreach ($doctor_payments as $pay):
+                                            $payPill = [
+                                                'paid'    => 'pill-success',
+                                                'pending' => 'pill-warn',
+                                                'failed'  => 'pill-danger',
+                                            ][$pay['status']] ?? 'pill-muted';
+                                        ?>
+                                            <tr>
+                                                <td><?= htmlspecialchars($pay['plan_name'] ?? ('Plan #' . $pay['plan_id'])) ?></td>
+                                                <td>₹<?= number_format($pay['amount'], 2) ?></td>
+                                                <td><span class="pill <?= $payPill ?>"><?= ucfirst($pay['status']) ?></span></td>
+                                                <td>
+                                                    <?php if ($pay['starts_at'] && $pay['expires_at']): ?>
+                                                        <span class="cell-sub"><?= date('d M Y', strtotime($pay['starts_at'])) ?> – <?= date('d M Y', strtotime($pay['expires_at'])) ?></span>
+                                                    <?php else: ?>
+                                                        —
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td><small class="text-muted"><?= htmlspecialchars($pay['razorpay_payment_id'] ?: '—') ?></small></td>
+                                                <td><span class="cell-sub"><?= date('d M Y, h:i A', strtotime($pay['created_at'])) ?></span></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="doctor-form">
+                            <h4 class="section-title">Appointments</h4>
+                            <?php
+                            $ap_scope = 'doctor';
+                            $ap_id = (int) $doctor_id;
+                            $ap_limit = 15;
+                            include __DIR__ . '/inc/appointments-panel.php';
+                            ?>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
         <?php include "footer.php"; ?>
-    </section>
 
     <script src="https://cdn.ckeditor.com/4.21.0/standard/ckeditor.js"></script>
     <script>

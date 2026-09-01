@@ -183,29 +183,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <style>
         .doctor-form {
             background: #fff;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-            padding: 30px;
+            border: 1px solid #e7e8f0;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(20, 23, 40, .04);
+            padding: 24px;
         }
-
-        .form-label {
-            font-weight: 500;
-            color: #495057;
-            margin-bottom: 8px;
-        }
-
-        .form-control,
-        .form-select {
-            border-radius: 6px;
-            padding: 10px 15px;
-            border: 1px solid #e0e0e0;
-        }
-
-        .form-control:focus,
-        .form-select:focus {
-            border-color: #7367f0;
-            box-shadow: 0 0 0 3px rgba(115, 103, 240, .15);
-        }
+        @media (max-width: 767.98px) { .doctor-form { padding: 16px; } }
 
         .image-preview {
             max-width: 200px;
@@ -260,25 +243,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             background-color: #e9ecef;
         }
 
-        .btn-primary {
-            background-color: #7367f0;
-            border-color: #7367f0;
-            padding: 10px 25px;
-            border-radius: 6px;
-            font-weight: 500;
-        }
-
-        .btn-primary:hover {
-            background-color: #5d50e6;
-            border-color: #5d50e6;
-        }
-
         .section-title {
-            border-bottom: 2px solid #f0f0f0;
+            font-size: .78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .8px;
+            color: #6b7280;
+            border-bottom: 1px solid #eef1f5;
             padding-bottom: 10px;
-            margin-bottom: 20px;
-            color: #495057;
-            font-weight: 600;
+            margin-bottom: 18px;
         }
     </style>
 </head>

@@ -1232,56 +1232,111 @@ function get_doctors_by_department_slug($slug) {
 }
 
 /**
- * Available appointment slots for a doctor on a given date.
- * Standard clinic hours 9:00–17:30 in 30-minute steps with a 12:00–14:00
- * lunch break, minus whatever is already booked (pending/approved) for
- * that doctor on that date. Past times on today's date are excluded.
+ * Build a doctor's bookable slots for a given date from their weekly schedule
+ * (admin/doctor "Manage Schedule" → table `doctor_schedules`).
+ *
+ *  - Looks up the row for the weekday of $date.
+ *  - Returns [] when that weekday is switched off (is_available = 0) or has no row
+ *    while the doctor DOES have a schedule configured for other days.
+ *  - When the doctor has NO schedule configured at all, falls back to a default
+ *    09:00–17:30 grid so un-configured doctors keep working (legacy behaviour).
+ *  - Slots run start_time → end_time in slot_duration_minutes steps; a slot is
+ *    kept only if a full block fits before end_time.
+ *  - Already-booked times (pending/approved/completed) are flagged, not removed.
+ *  - Past times on today's date are dropped.
+ *
+ * Returns [ ['time'=>'09:00:00','display'=>'09:00 AM','booked'=>bool,'duration'=>int], ... ]
+ */
+function generate_doctor_slots($conn, $doctorId, $date, $fallbackDuration = 30)
+{
+    $doctorId = (int) $doctorId;
+    $ts = strtotime((string) $date);
+    if ($doctorId <= 0 || $ts === false) return [];
+
+    $weekday = date('l', $ts);              // Monday … Sunday
+    $isToday = ($date === date('Y-m-d'));
+    $nowT    = date('H:i:s');
+
+    // 1. Resolve the working window for this weekday
+    $cnt = mysqli_query($conn, "SELECT COUNT(*) c FROM doctor_schedules WHERE doctor_id = $doctorId");
+    $configured = $cnt && (int) mysqli_fetch_assoc($cnt)['c'] > 0;
+
+    if ($configured) {
+        $st = mysqli_prepare($conn, "SELECT start_time, end_time, slot_duration_minutes, is_available
+                                     FROM doctor_schedules WHERE doctor_id = ? AND day_of_week = ? LIMIT 1");
+        mysqli_stmt_bind_param($st, 'is', $doctorId, $weekday);
+        mysqli_stmt_execute($st);
+        $row = mysqli_fetch_assoc(mysqli_stmt_get_result($st));
+        mysqli_stmt_close($st);
+
+        if (!$row || (int) $row['is_available'] !== 1) {
+            return [];                       // doctor not consulting this weekday
+        }
+        $start = $row['start_time'];
+        $end   = $row['end_time'];
+        $step  = max(5, (int) $row['slot_duration_minutes']);
+    } else {
+        $start = '09:00:00';
+        $end   = '17:30:00';
+        $step  = (int) $fallbackDuration > 0 ? (int) $fallbackDuration : 30;
+    }
+
+    // 2. Booked times for that date
+    $booked = [];
+    $bk = mysqli_prepare($conn, "SELECT appointment_time FROM appointments
+                                 WHERE doctor_id = ? AND appointment_date = ?
+                                   AND status IN ('pending','approved','completed')");
+    mysqli_stmt_bind_param($bk, 'is', $doctorId, $date);
+    mysqli_stmt_execute($bk);
+    $bkr = mysqli_stmt_get_result($bk);
+    while ($b = mysqli_fetch_assoc($bkr)) {
+        $booked[substr((string) $b['appointment_time'], 0, 8)] = true;
+    }
+    mysqli_stmt_close($bk);
+
+    // 3. Candidate times
+    if ($configured) {
+        // Walk the configured window in fixed steps
+        $times = [];
+        $cur   = strtotime($start);
+        $endTs = strtotime($end);
+        if ($cur === false || $endTs === false) return [];
+        while ($cur + $step * 60 <= $endTs) {
+            $times[] = date('H:i:s', $cur);
+            $cur += $step * 60;
+        }
+    } else {
+        // Legacy default grid — clinic hours with a 12:30–14:00 lunch gap
+        $times = [
+            '09:00:00', '09:30:00', '10:00:00', '10:30:00', '11:00:00', '11:30:00',
+            '12:00:00', '14:00:00', '14:30:00', '15:00:00', '15:30:00',
+            '16:00:00', '16:30:00', '17:00:00', '17:30:00',
+        ];
+    }
+
+    $slots = [];
+    foreach ($times as $t) {
+        if ($isToday && $t <= $nowT) continue;
+        $slots[] = [
+            'time'     => $t,
+            'display'  => date('h:i A', strtotime($t)),
+            'booked'   => isset($booked[$t]),
+            'duration' => $step,
+        ];
+    }
+
+    return $slots;
+}
+
+/**
+ * Available appointment slots for a doctor on a given date — thin wrapper around
+ * generate_doctor_slots() kept for existing callers (public booking, dept pages).
  *
  * Returns [ ['time' => '09:00:00', 'display' => '09:00 AM', 'booked' => bool], ... ]
  */
 function get_available_slots($doctorId, $date) {
     global $conn;
-
-    $doctorId = (int) $doctorId;
-    $slots = [];
-
-    $timeSlots = [
-        '09:00:00' => '09:00 AM', '09:30:00' => '09:30 AM',
-        '10:00:00' => '10:00 AM', '10:30:00' => '10:30 AM',
-        '11:00:00' => '11:00 AM', '11:30:00' => '11:30 AM',
-        '12:00:00' => '12:00 PM',
-        '14:00:00' => '02:00 PM', '14:30:00' => '02:30 PM',
-        '15:00:00' => '03:00 PM', '15:30:00' => '03:30 PM',
-        '16:00:00' => '04:00 PM', '16:30:00' => '04:30 PM',
-        '17:00:00' => '05:00 PM', '17:30:00' => '05:30 PM',
-    ];
-
-    $bookedSlots = [];
-    $stmt = mysqli_prepare($conn, "
-        SELECT appointment_time FROM appointments
-        WHERE doctor_id = ? AND appointment_date = ? AND status IN ('pending', 'approved')
-    ");
-    mysqli_stmt_bind_param($stmt, 'is', $doctorId, $date);
-    mysqli_stmt_execute($stmt);
-    $result = mysqli_stmt_get_result($stmt);
-    while ($row = mysqli_fetch_assoc($result)) {
-        $bookedSlots[] = $row['appointment_time'];
-    }
-    mysqli_stmt_close($stmt);
-
-    $isToday = $date === date('Y-m-d');
-    $now = date('H:i:s');
-
-    foreach ($timeSlots as $time => $display) {
-        if ($isToday && $time <= $now) continue; // don't offer times already past today
-        $slots[] = [
-            'time'   => $time,
-            'display' => $display,
-            'booked' => in_array($time, $bookedSlots, true),
-        ];
-    }
-
-    return $slots;
+    return generate_doctor_slots($conn, (int) $doctorId, $date);
 }
 
 ?>

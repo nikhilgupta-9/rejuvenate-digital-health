@@ -21,13 +21,15 @@ $conn->query("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 ");
 
-// Auto-import existing appointment patients
-$conn->query("
+// Auto-import existing appointment patients (skip guest bookings — user_id NULL)
+$imp = $conn->prepare("
     INSERT IGNORE INTO doctor_patients (doctor_id, patient_id, added_via)
     SELECT DISTINCT a.doctor_id, a.user_id, 'appointment'
     FROM appointments a
-    WHERE a.doctor_id = $doctor_id
+    WHERE a.doctor_id = ? AND a.user_id IS NOT NULL AND a.user_id > 0
 ");
+$imp->bind_param('i', $doctor_id);
+$imp->execute();
 
 $search = trim($_GET['search'] ?? '');
 
@@ -371,9 +373,9 @@ $total = count($patients);
 
                     <!-- Actions -->
                     <td>
-                      <div style="display:flex;gap:4px;align-items:center;">
+                      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
                         <a href="patient-profile.php?id=<?= $pid ?>"
-                          class="btn btn-sm" title="View"
+                          class="btn btn-sm" title="View profile"
                           style="background:#e0f2fe;color:#0277bd;border:none;width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;">
                           <i class="fa fa-eye" style="font-size:.78rem;"></i>
                         </a>
@@ -382,27 +384,15 @@ $total = count($patients);
                           style="background:#e8f5e9;color:#2e7d32;border:none;width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;">
                           <i class="fa fa-calendar" style="font-size:.78rem;"></i>
                         </a>
-                        <div style="position:relative;">
-                          <button onclick="toggleMenu(<?= $pid ?>, event)"
-                            style="background:#f3f4f6;border:none;width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;cursor:pointer;color:#6b7280;">
-                            <i class="fa fa-ellipsis-v" style="font-size:.78rem;"></i>
-                          </button>
-                          <div id="menu-<?= $pid ?>" style="display:none;position:absolute;right:0;top:34px;background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.15);min-width:150px;z-index:100;">
-                            <a href="patient-documents.php?patient_id=<?= $pid ?>"
-                              style="display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:.82rem;color:#374151;text-decoration:none;">
-                              <i class="fa fa-file-text-o" style="color:#6b7280;width:14px;"></i> Documents
-                            </a>
-                            <a href="patient-profile.php?id=<?= $pid ?>"
-                              style="display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:.82rem;color:#374151;text-decoration:none;">
-                              <i class="fa fa-user" style="color:#6b7280;width:14px;"></i> Full Profile
-                            </a>
-                            <div style="border-top:1px solid #f3f4f6;"></div>
-                            <a href="#" onclick="removePatient(<?= $pid ?>); return false;"
-                              style="display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:.82rem;color:#dc3545;text-decoration:none;">
-                              <i class="fa fa-times" style="width:14px;"></i> Remove
-                            </a>
-                          </div>
-                        </div>
+                        <a href="patient-documents.php?patient_id=<?= $pid ?>"
+                          class="btn btn-sm" title="Documents"
+                          style="background:#fef3c7;color:#b45309;border:none;width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;">
+                          <i class="fa fa-file-text-o" style="font-size:.78rem;"></i>
+                        </a>
+                        <button type="button" onclick="removePatient(<?= $pid ?>)" title="Remove from my list"
+                          style="background:#fee2e2;color:#dc2626;border:none;width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;cursor:pointer;">
+                          <i class="fa fa-times" style="font-size:.78rem;"></i>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -525,6 +515,7 @@ $total = count($patients);
     </div>
   </div>
 
+  <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
   <script>
     var _sel = null,
       _st = null,

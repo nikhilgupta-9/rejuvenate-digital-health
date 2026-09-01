@@ -295,8 +295,8 @@ if ($result) {
                                     <div class="QA_section">
                                         <div class="QA_table mb_30">
                                             <div class="table-responsive">
-                                                <table class="table lms_table_active table-bordered table-hover">
-                                                    <thead class="table-light">
+                                                <table class="table table-hover tbl-admin tbl-cards">
+                                                    <thead>
                                                         <tr>
                                                             <th scope="col" width="40">
                                                                 <input type="checkbox" class="form-check-input" id="selectAllHeader">
@@ -312,31 +312,29 @@ if ($result) {
                                                     </thead>
                                                     <tbody>
                                                         <?php if (empty($specializations)): ?>
-                                                            <tr>
-                                                                <td colspan="8" class="text-center py-4">
-                                                                    <div class="d-flex flex-column align-items-center">
-                                                                        <i class="fas fa-stethoscope fs-1 text-muted mb-2"></i>
-                                                                        <span class="text-muted">No specializations found. Add your first one above.</span>
-                                                                    </div>
+                                                            <tr class="empty-row">
+                                                                <td colspan="8">
+                                                                    <i class="fas fa-stethoscope fa-3x mb-3 d-block opacity-25"></i>
+                                                                    No specializations found. Add your first one above.
                                                                 </td>
                                                             </tr>
                                                         <?php else: $sno = 1; foreach ($specializations as $spec): ?>
                                                             <tr>
-                                                                <td class="text-center">
+                                                                <td data-label="Select" class="text-center">
                                                                     <input type="checkbox" class="form-check-input row-checkbox" name="selected_ids[]" value="<?= (int) $spec['id'] ?>">
                                                                 </td>
                                                                 <td class="text-center"><?= $sno++ ?></td>
-                                                                <td class="fw-semibold"><?= htmlspecialchars($spec['name']) ?></td>
-                                                                <td><span class="text-muted"><?= htmlspecialchars($spec['slug_url']) ?></span></td>
-                                                                <td class="text-center">
-                                                                    <span class="badge_3"><?= (int) $spec['doctor_count'] ?> doctor<?= $spec['doctor_count'] == 1 ? '' : 's' ?></span>
+                                                                <td data-label="Name" class="fw-semibold"><?= htmlspecialchars($spec['name']) ?></td>
+                                                                <td data-label="Slug URL"><span class="cell-sub"><?= htmlspecialchars($spec['slug_url']) ?></span></td>
+                                                                <td data-label="Doctors" class="text-center">
+                                                                    <span class="pill pill-info"><?= (int) $spec['doctor_count'] ?> doctor<?= $spec['doctor_count'] == 1 ? '' : 's' ?></span>
                                                                 </td>
-                                                                <td class="text-center">
-                                                                    <?= $spec['status'] == 1 ? '<span class="badge_1">Active</span>' : '<span class="badge_2">Inactive</span>' ?>
+                                                                <td data-label="Status" class="text-center">
+                                                                    <?= $spec['status'] == 1 ? '<span class="pill pill-success">Active</span>' : '<span class="pill pill-muted">Inactive</span>' ?>
                                                                 </td>
-                                                                <td class="text-center"><?= date('d M Y', strtotime($spec['added_on'])) ?></td>
-                                                                <td class="text-center">
-                                                                    <div class="d-flex justify-content-center gap-2">
+                                                                <td data-label="Added On" class="text-center"><span class="cell-sub"><?= date('d M Y', strtotime($spec['added_on'])) ?></span></td>
+                                                                <td data-label="Action" class="text-center">
+                                                                    <div class="d-flex flex-wrap justify-content-end gap-2">
                                                                         <button type="button"
                                                                             class="btn btn-sm btn-outline-primary rounded-circle p-2 edit-spec-btn"
                                                                             data-bs-toggle="modal" data-bs-target="#specModal"

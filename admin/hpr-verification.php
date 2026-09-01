@@ -41,8 +41,8 @@ if ($res) { while ($x = $res->fetch_assoc()) $rows[] = $x; }
                             </div>
                         <?php else: ?>
                             <div class="table-responsive">
-                                <table class="table table-bordered table-hover">
-                                    <thead class="table-light">
+                                <table class="table table-hover tbl-admin tbl-cards">
+                                    <thead>
                                         <tr>
                                             <th>Requested</th>
                                             <th>Doctor</th>
@@ -52,29 +52,31 @@ if ($res) { while ($x = $res->fetch_assoc()) $rows[] = $x; }
                                             <th>State Council</th>
                                             <th>Year</th>
                                             <th>Note</th>
-                                            <th style="width:150px;">Review</th>
+                                            <th>Review</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <?php foreach ($rows as $r): ?>
                                             <tr>
-                                                <td><?= date('d M Y', strtotime($r['requested_at'])) ?></td>
-                                                <td>
-                                                    <a href="doctor-edit.php?id=<?= (int)$r['doctor_id'] ?>#verification" class="fw-semibold text-decoration-none">
-                                                        Dr. <?= htmlspecialchars($r['doctor_name']) ?>
-                                                    </a><br>
-                                                    <span class="text-muted small"><?= htmlspecialchars($r['specialization'] ?: '') ?></span>
+                                                <td data-label="Requested"><span class="cell-sub"><?= date('d M Y', strtotime($r['requested_at'])) ?></span></td>
+                                                <td data-label="Doctor">
+                                                    <a href="doctor-edit.php?id=<?= (int)$r['doctor_id'] ?>#verification" class="text-decoration-none">
+                                                        <div class="cell-title">Dr. <?= htmlspecialchars($r['doctor_name']) ?></div>
+                                                    </a>
+                                                    <div class="cell-sub"><?= htmlspecialchars($r['specialization'] ?: '') ?></div>
                                                 </td>
-                                                <td><?= htmlspecialchars($r['hpr_id'] ?: '—') ?></td>
-                                                <td><?= htmlspecialchars($r['hfr_id'] ?: '—') ?></td>
-                                                <td><?= htmlspecialchars($r['nmc_reg_number'] ?: '—') ?></td>
-                                                <td><?= htmlspecialchars($r['council_name'] ?: '—') ?></td>
-                                                <td><?= htmlspecialchars($r['year_of_registration'] ?: '—') ?></td>
-                                                <td class="small"><?= htmlspecialchars($r['doctor_note'] ?: '—') ?></td>
-                                                <td>
-                                                    <a href="doctor-edit.php?id=<?= (int)$r['doctor_id'] ?>&hpr_approve=1" class="btn btn-sm btn-success mb-1"
-                                                       onclick="return confirm('Approve HPR verification for this doctor?')">Approve</a>
-                                                    <a href="doctor-edit.php?id=<?= (int)$r['doctor_id'] ?>" class="btn btn-sm btn-outline-secondary">Open &amp; review</a>
+                                                <td data-label="HPR ID"><?= htmlspecialchars($r['hpr_id'] ?: '—') ?></td>
+                                                <td data-label="HFR ID"><?= htmlspecialchars($r['hfr_id'] ?: '—') ?></td>
+                                                <td data-label="NMC Reg."><?= htmlspecialchars($r['nmc_reg_number'] ?: '—') ?></td>
+                                                <td data-label="State Council"><?= htmlspecialchars($r['council_name'] ?: '—') ?></td>
+                                                <td data-label="Year"><?= htmlspecialchars($r['year_of_registration'] ?: '—') ?></td>
+                                                <td data-label="Note"><span class="cell-sub"><?= htmlspecialchars($r['doctor_note'] ?: '—') ?></span></td>
+                                                <td data-label="Review">
+                                                    <div class="d-inline-flex flex-wrap gap-1 justify-content-end">
+                                                        <a href="doctor-edit.php?id=<?= (int)$r['doctor_id'] ?>&hpr_approve=1" class="btn btn-sm btn-success"
+                                                           onclick="return confirm('Approve HPR verification for this doctor?')">Approve</a>
+                                                        <a href="doctor-edit.php?id=<?= (int)$r['doctor_id'] ?>" class="btn btn-sm btn-outline-secondary">Review</a>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>

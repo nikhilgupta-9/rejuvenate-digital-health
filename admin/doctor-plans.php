@@ -224,8 +224,8 @@ if ($res) { while ($r = $res->fetch_assoc()) $plans[] = $r; }
                                 </div>
 
                                 <div class="QA_section"><div class="QA_table mb_30"><div class="table-responsive">
-                                    <table class="table lms_table_active table-bordered table-hover">
-                                        <thead class="table-light">
+                                    <table class="table table-hover tbl-admin tbl-cards">
+                                        <thead>
                                             <tr>
                                                 <th width="40"><input type="checkbox" class="form-check-input" id="selectAllHeader"></th>
                                                 <th width="50">#</th>
@@ -240,32 +240,30 @@ if ($res) { while ($r = $res->fetch_assoc()) $plans[] = $r; }
                                         </thead>
                                         <tbody>
                                             <?php if (empty($plans)): ?>
-                                                <tr><td colspan="9" class="text-center py-4">
-                                                    <div class="d-flex flex-column align-items-center">
-                                                        <i class="fas fa-id-card fs-1 text-muted mb-2"></i>
-                                                        <span class="text-muted">No plans yet. Add your first one above.</span>
-                                                    </div>
+                                                <tr class="empty-row"><td colspan="9">
+                                                    <i class="fas fa-id-card fa-3x mb-3 d-block opacity-25"></i>
+                                                    No plans yet. Add your first one above.
                                                 </td></tr>
                                             <?php else: $sno = 1; foreach ($plans as $p): ?>
                                                 <tr>
-                                                    <td class="text-center"><input type="checkbox" class="form-check-input row-checkbox" name="selected_ids[]" value="<?= (int)$p['id'] ?>"></td>
+                                                    <td data-label="Select" class="text-center"><input type="checkbox" class="form-check-input row-checkbox" name="selected_ids[]" value="<?= (int)$p['id'] ?>"></td>
                                                     <td class="text-center"><?= $sno++ ?></td>
-                                                    <td>
-                                                        <span class="fw-semibold"><?= htmlspecialchars($p['name']) ?></span>
+                                                    <td data-label="Plan">
+                                                        <span class="cell-title"><?= htmlspecialchars($p['name']) ?></span>
                                                         <?php if ($p['is_highlighted']): ?> <i class="fas fa-star text-warning" title="Highlighted"></i><?php endif; ?>
-                                                        <?php if (!empty($p['tagline'])): ?><br><span class="text-muted small"><?= htmlspecialchars($p['tagline']) ?></span><?php endif; ?>
+                                                        <?php if (!empty($p['tagline'])): ?><div class="cell-sub"><?= htmlspecialchars($p['tagline']) ?></div><?php endif; ?>
                                                     </td>
-                                                    <td class="text-center">&#8377;<?= number_format((float)$p['price']) ?></td>
-                                                    <td class="text-center"><?= htmlspecialchars(_dp_cycle_label((int)$p['billing_cycle_days'])) ?><br><span class="text-muted small"><?= (int)$p['billing_cycle_days'] ?>d</span></td>
-                                                    <td class="text-center">
+                                                    <td data-label="Price" class="text-center fw-semibold">&#8377;<?= number_format((float)$p['price']) ?></td>
+                                                    <td data-label="Cycle" class="text-center"><?= htmlspecialchars(_dp_cycle_label((int)$p['billing_cycle_days'])) ?> <span class="cell-sub">(<?= (int)$p['billing_cycle_days'] ?>d)</span></td>
+                                                    <td data-label="Est. Patients" class="text-center">
                                                         <?php if ($p['est_patients_min'] !== null && $p['est_patients_max'] !== null): ?>
-                                                            <span class="badge_3"><?= (int)$p['est_patients_min'] ?>&ndash;<?= (int)$p['est_patients_max'] ?>/mo</span>
+                                                            <span class="pill pill-info"><?= (int)$p['est_patients_min'] ?>&ndash;<?= (int)$p['est_patients_max'] ?>/mo</span>
                                                         <?php else: ?><span class="text-muted">&mdash;</span><?php endif; ?>
                                                     </td>
-                                                    <td class="text-center"><span class="badge_3"><?= (int)$p['active_subs'] ?> active</span></td>
-                                                    <td class="text-center"><?= $p['is_active'] ? '<span class="badge_1">Active</span>' : '<span class="badge_2">Inactive</span>' ?></td>
-                                                    <td class="text-center">
-                                                        <div class="d-flex justify-content-center gap-2">
+                                                    <td data-label="Subscribers" class="text-center"><span class="pill pill-muted"><?= (int)$p['active_subs'] ?> active</span></td>
+                                                    <td data-label="Status" class="text-center"><?= $p['is_active'] ? '<span class="pill pill-success">Active</span>' : '<span class="pill pill-muted">Inactive</span>' ?></td>
+                                                    <td data-label="Action" class="text-center">
+                                                        <div class="d-flex flex-wrap justify-content-end gap-2">
                                                             <button type="button" class="btn btn-sm btn-outline-primary rounded-circle p-2 edit-plan-btn"
                                                                 data-bs-toggle="modal" data-bs-target="#planModal"
                                                                 data-id="<?= (int)$p['id'] ?>"

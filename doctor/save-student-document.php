@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/auth/guard.php';
 require_once dirname(__DIR__) . '/config/connect.php';
+require_once __DIR__ . '/inc/consent-helper.php';
 $payload = doctor_jwt_guard();
 $doctor_id = (int) ($payload['doctor_id'] ?? $payload['sub'] ?? 0);
 
@@ -32,6 +33,9 @@ if (!$member) {
     header('Location: ' . BASE_URL . 'doctor/school-students.php');
     exit;
 }
+
+// Parent consent must be on file before health documents are attached
+consent_gate_or_redirect($conn, $member_id);
 
 if (empty($_FILES['document_file']) || $_FILES['document_file']['error'] !== UPLOAD_ERR_OK) {
     $_SESSION['doc_error'] = 'Please select a file to upload.';

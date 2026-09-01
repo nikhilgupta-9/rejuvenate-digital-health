@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/auth/guard.php';
 require_once dirname(__DIR__) . '/config/connect.php';
+require_once __DIR__ . '/inc/consent-helper.php';
 $payload = doctor_jwt_guard();
 $doctor_id = (int) ($payload['doctor_id'] ?? $payload['sub'] ?? 0);
 
@@ -25,6 +26,9 @@ if (!$member) {
     header('Location: ' . BASE_URL . 'doctor/school-students.php');
     exit;
 }
+
+// Parent consent must be on file before any checkup data is recorded
+consent_gate_or_redirect($conn, $member_id);
 
 $blood_group         = trim($_POST['blood_group'] ?? '');
 $height_cm            = isset($_POST['height_cm']) && $_POST['height_cm'] !== '' ? (float)$_POST['height_cm'] : null;

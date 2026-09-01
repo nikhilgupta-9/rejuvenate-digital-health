@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/auth/guard.php';
 require_once dirname(__DIR__) . '/config/connect.php';
+require_once __DIR__ . '/inc/consent-helper.php';
 $payload = doctor_jwt_guard();
 $doctor_id = (int) ($payload['doctor_id'] ?? $payload['sub'] ?? 0);
 
@@ -39,6 +40,9 @@ if (!$member) {
     header('Location: ' . BASE_URL . 'doctor/school-students.php');
     exit;
 }
+
+// Parent consent must be on file before a certificate can be issued
+consent_gate_or_redirect($conn, $member_id);
 
 $leave_from_val = $leave_from ?: null;
 $leave_to_val = $leave_to ?: null;
