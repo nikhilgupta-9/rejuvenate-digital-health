@@ -25,6 +25,7 @@ function routeSelect($selected, $name) {
 include_once(__DIR__ . "/../config/connect.php");
 include_once(__DIR__ . "/../util/function.php");
 require_once(__DIR__ . "/../lib/Settlement.php");
+require_once(__DIR__ . "/../util/prescription-render.php"); // shared read-only "parcha" — same as user/admin/video-call
 require_once(__DIR__ . "/auth/guard.php");
 
 $jwt_doctor = doctor_jwt_guard();
@@ -386,11 +387,13 @@ $svt = fn($k) => htmlspecialchars($s_vt_data[$k] ?? '');
     <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/css/style.css">
     <style>
         :root {
-            --rdh-blue: #2c5aa0;
+            --rdh-blue: #0C74C5;   /* matches doctor portal --primary */
+            --rdh-blue-dk: #0a5fa0;
             --rdh-teal: #02c9b8;
-            --rdh-green: #0e7c5b;
+            --rdh-green: #16a34a;
         }
-        body { background: #f0f4f8; font-size: .9rem; }
+        body { background: #f4f6fb; font-size: .9rem; color: #1f2937; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
 
         /* ── Mode toggle tabs ── */
         .mode-tabs {
@@ -419,36 +422,37 @@ $svt = fn($k) => htmlspecialchars($s_vt_data[$k] ?? '');
         /* ── Section card ── */
         .rx-card {
             background: #fff;
+            border: 1px solid #e7e8f0;
             border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,.06);
+            box-shadow: 0 1px 3px rgba(20,23,40,.04);
             margin-bottom: 16px;
             overflow: hidden;
         }
         .rx-card-header {
-            background: linear-gradient(135deg, var(--rdh-blue), #4a7bc8);
-            color: #fff;
-            padding: 11px 16px;
-            font-weight: 600;
-            font-size: .88rem;
+            background: #f7f8fb;
+            color: #1f2233;
+            border-bottom: 1px solid #eef0f5;
+            padding: 12px 16px;
+            font-weight: 700;
+            font-size: .85rem;
             display: flex;
             align-items: center;
             gap: 8px;
         }
-        .rx-card-header.student-header {
-            background: linear-gradient(135deg, var(--rdh-green), #16a34a);
-        }
+        .rx-card-header i { color: var(--rdh-blue); }
+        .rx-card-header.student-header i { color: var(--rdh-green); }
         .rx-card-body { padding: 16px; }
 
         /* ── Patient / Student banner ── */
         .patient-banner {
-            background: linear-gradient(135deg, #1a2340, #0a4a8a);
+            background: var(--rdh-blue);
             color: #fff;
             border-radius: 12px;
             padding: 14px 18px;
             margin-bottom: 16px;
         }
         .student-banner {
-            background: linear-gradient(135deg, #064e3b, #065f46);
+            background: var(--rdh-green);
             color: #fff;
             border-radius: 12px;
             padding: 14px 18px;
@@ -616,9 +620,18 @@ $svt = fn($k) => htmlspecialchars($s_vt_data[$k] ?? '');
         </button>
     <?php endif; ?>
 
-    <button type="button" onclick="window.print()" class="btn btn-primary btn-sm">
-        <i class="fa fa-print me-1"></i> Print
-    </button>
+    <?php if ($mode === 'patient' && $existing_rx): ?>
+        <button type="button" onclick="toggleParcha()" class="btn btn-outline-primary btn-sm" id="parchaToggleBtn">
+            <i class="fa fa-file-medical me-1"></i> Preview Parcha
+        </button>
+        <a href="<?= BASE_URL ?>doctor/opd-slip.php?appointment_id=<?= $appointment_id ?>" target="_blank" class="btn btn-primary btn-sm">
+            <i class="fa fa-print me-1"></i> Print / PDF
+        </a>
+    <?php elseif ($mode === 'student'): ?>
+        <button type="button" onclick="window.print()" class="btn btn-primary btn-sm">
+            <i class="fa fa-print me-1"></i> Print
+        </button>
+    <?php endif; ?>
     <button type="button" class="btn btn-outline-info btn-sm sidebar-toggle-btn" onclick="toggleSidebar()">
         <i class="fa fa-columns"></i> Info
     </button>
@@ -717,6 +730,31 @@ $svt = fn($k) => htmlspecialchars($s_vt_data[$k] ?? '');
             </div>
         </div>
     </div>
+
+    <?php if ($existing_rx): ?>
+    <!-- ── Unified parcha preview (same component the patient & admin see) ── -->
+    <div id="parcha-preview" class="rx-card no-print" style="display:none;">
+        <div class="rx-card-header">
+            <i class="fa fa-file-medical"></i> Prescription Preview
+            <span class="badge-<?= $existing_rx['status'] ?>" style="margin-left:auto;"><?= ucfirst($existing_rx['status']) ?></span>
+        </div>
+        <div class="rx-card-body">
+            <?php render_prescription_view(
+                $existing_rx,
+                ['name' => $doctor['name'] ?? '', 'degrees' => $doctor['degrees'] ?? '', 'specialization' => $doctor['specialization'] ?? '', 'hpr_id' => $doctor['hpr_id'] ?? '', 'phone' => $doctor['phone'] ?? ''],
+                [
+                    'name'         => trim($patient['patient_name'] . ' ' . ($patient['patient_last_name'] ?? '')),
+                    'abha_number'  => $patient['abha_number'] ?? '',
+                    'abha_address' => $patient['abha_address'] ?? '',
+                    'patient_age'  => $patient['patient_age'] ?? '',
+                    'gender'       => $patient['gender'] ?? '',
+                ],
+                $rx_attachments,
+                ['doc_base' => BASE_URL, 'pdf_url' => BASE_URL . 'doctor/opd-slip.php?appointment_id=' . $appointment_id]
+            ); ?>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- PATIENT FORM -->
     <form id="rx-form" method="POST" action="">
@@ -1287,6 +1325,19 @@ if (extraLabEl) extraLabEl.addEventListener('input', () => syncChecks('lab-check
 function toggleSidebar() {
     const s = document.getElementById('rx-sidebar');
     if (s) s.classList.toggle('collapsed');
+}
+
+/* ── Parcha preview toggle ── */
+function toggleParcha() {
+    const p = document.getElementById('parcha-preview');
+    const btn = document.getElementById('parchaToggleBtn');
+    if (!p) return;
+    const show = p.style.display === 'none';
+    p.style.display = show ? '' : 'none';
+    if (btn) btn.innerHTML = show
+        ? '<i class="fa fa-times me-1"></i> Hide Parcha'
+        : '<i class="fa fa-file-medical me-1"></i> Preview Parcha';
+    if (show) p.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 /* ── Report attachments (patient mode) ── */

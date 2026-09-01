@@ -142,7 +142,10 @@ function rowline($label, $val, $cols = 'col-md-6')
                                 rowline('Gender', $c['student_gender']);
                                 rowline('Class / Section', trim(($c['student_class'] ?? '') . ' ' . ($c['student_section'] ?? '')));
                                 rowline('Roll No.', $c['student_roll_no']);
+                                rowline('Student / APAAR ID', $c['student_apaar_id'] ?? '');
                                 rowline('Blood Group', $c['blood_group']);
+                                rowline('Height / Weight / BMI', trim(($c['height_cm'] ? $c['height_cm'] . ' cm' : '') . ($c['weight_kg'] ? ' · ' . $c['weight_kg'] . ' kg' : '') . ($c['bmi'] ? ' · BMI ' . $c['bmi'] : ''), ' ·'));
+                                rowline('ABHA Status', $c['student_abha_status'] ?? '');
                                 rowline('ABHA Number', $c['student_abha_number']);
                                 rowline('ABHA Address', $c['student_abha_address']);
                                 rowline('Address', trim(($c['student_address'] ?? '') . ' ' . ($c['student_city'] ?? '') . ' ' . ($c['student_state'] ?? '') . ' ' . ($c['student_pincode'] ?? '')));
@@ -154,6 +157,7 @@ function rowline($label, $val, $cols = 'col-md-6')
                             <h5><i class="fas fa-notes-medical me-2"></i>Medical History (declared)</h5>
                             <div class="row">
                                 <?php
+                                rowline('Parent Aadhaar-linked Mobile', $c['parent_aadhar_mobile'] ?? '');
                                 rowline('Known Allergies', $c['known_allergies']);
                                 rowline('Existing Conditions', $c['existing_conditions']);
                                 rowline('Current Medications', $c['current_medications']);
@@ -162,6 +166,99 @@ function rowline($label, $val, $cols = 'col-md-6')
                         </div>
                     </div>
                 </div>
+
+                <?php
+                $hd = json_decode($c['health_data'] ?? 'null', true);
+                if (is_array($hd)):
+                    $hv = function ($v) {
+                        if (is_array($v)) $v = implode(', ', array_filter($v));
+                        return trim((string) $v);
+                    };
+                    $groups = [
+                        'Eye Health' => [
+                            'Uses glasses' => $hd['eye']['uses_glasses'] ?? '',
+                            'Glasses currently in use' => $hd['eye']['glasses_in_use'] ?? '',
+                            'Power / number' => $hd['eye']['glasses_power'] ?? '',
+                            'Conditions' => $hd['eye']['conditions'] ?? [],
+                            'Last ophthalmologist exam' => $hd['eye']['last_ophthal_exam'] ?? '',
+                            'Exam date / remarks' => $hd['eye']['exam_remarks'] ?? '',
+                        ],
+                        'Dental Health' => [
+                            'Present condition' => $hd['dental']['present_condition'] ?? '',
+                            'Cavities' => $hd['dental']['cavities'] ?? '',
+                            'Bleeding gums' => $hd['dental']['bleeding_gums'] ?? '',
+                            'Discoloration' => $hd['dental']['discoloration'] ?? '',
+                            'Toothache' => $hd['dental']['toothache'] ?? '',
+                            'Proper alignment' => $hd['dental']['alignment_ok'] ?? '',
+                            'Hygiene habits' => $hd['dental']['hygiene_habits'] ?? '',
+                            'Brush frequency' => $hd['dental']['brush_frequency'] ?? '',
+                        ],
+                        'Immunization' => [
+                            'Vaccination status' => $hd['immunization']['vaccination_status'] ?? '',
+                            'Deworming taken' => $hd['immunization']['deworming_taken'] ?? '',
+                            'Deworming given at' => $hd['immunization']['deworming_where'] ?? '',
+                        ],
+                        'Allergy & Chronic Illness' => [
+                            'Has allergy' => $hd['allergy']['has_allergy'] ?? '',
+                            'Allergy type' => $hd['allergy']['types'] ?? '',
+                            'Other allergy' => $hd['allergy']['other_type'] ?? '',
+                            'Allergy detail' => $hd['allergy']['detail'] ?? '',
+                            'Has chronic illness' => $hd['chronic']['has_chronic'] ?? '',
+                            'Chronic type' => $hd['chronic']['type'] ?? '',
+                            'Chronic detail' => $hd['chronic']['detail'] ?? '',
+                            'Additional medical details' => $hd['chronic']['additional'] ?? '',
+                        ],
+                        'Surgical & Hospitalization' => [
+                            'History of surgery' => $hd['surgical']['had_surgery'] ?? '',
+                            'Surgery detail' => $hd['surgical']['surgery_detail'] ?? '',
+                            'Ever hospitalized' => $hd['surgical']['hospitalized'] ?? '',
+                            'Hospitalization reason' => $hd['surgical']['hospitalization_reason'] ?? '',
+                            'Medical record available' => $hd['surgical']['record_available'] ?? '',
+                        ],
+                        'Nutrition & Lifestyle' => [
+                            'Dietary preference' => $hd['nutrition']['dietary_pref'] ?? '',
+                            'Adequate food provided' => $hd['nutrition']['adequate_food'] ?? '',
+                            'Daily physical activity' => $hd['nutrition']['physical_activity'] ?? '',
+                            'Daily screen time' => $hd['nutrition']['screen_time'] ?? '',
+                        ],
+                    ];
+                ?>
+                <div class="detail-card">
+                    <h5><i class="fas fa-heart-pulse me-2"></i>Health Assessment</h5>
+                    <div class="row">
+                        <?php foreach ($groups as $gname => $fields):
+                            $shown = array_filter($fields, fn($v) => $hv($v) !== '');
+                            if (!$shown) continue; ?>
+                            <div class="col-12"><div class="detail-label mt-2" style="color:var(--adm-primary,#0c74c5)"><?= htmlspecialchars($gname) ?></div></div>
+                            <?php foreach ($fields as $lbl => $val) rowline($lbl, $hv($val), 'col-md-4'); ?>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <?php
+                $files = [
+                    'ID Proof (Aadhaar / Birth Certificate)' => $c['file_id_proof'] ?? '',
+                    'Eye Examination Report' => $c['file_eye_report'] ?? '',
+                    'Dental Examination Report' => $c['file_dental_report'] ?? '',
+                    'Vaccination Certificate' => $c['file_vaccination_cert'] ?? '',
+                    'Medical Records' => $c['file_medical_records'] ?? '',
+                ];
+                $files = array_filter($files);
+                if ($files): ?>
+                <div class="detail-card">
+                    <h5><i class="fas fa-paperclip me-2"></i>Uploaded Documents</h5>
+                    <div class="row">
+                        <?php foreach ($files as $lbl => $path): ?>
+                            <div class="col-md-6 mb-2">
+                                <a href="<?= htmlspecialchars(BASE_URL . ltrim($path, '/')) ?>" target="_blank" rel="noopener">
+                                    <i class="fas fa-file-arrow-down me-1"></i><?= htmlspecialchars($lbl) ?>
+                                </a>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
 
                 <div class="detail-card">
                     <h5><i class="fas fa-clipboard-check me-2"></i>Consented Services (<?= count(array_filter($items)) ?>/<?= count($labels) ?>)</h5>

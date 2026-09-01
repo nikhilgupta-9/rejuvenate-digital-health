@@ -62,6 +62,57 @@ $conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS linked_a
 $conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS reviewed_at DATETIME DEFAULT NULL AFTER linked_at");
 $conn->query("ALTER TABLE parent_consent_forms ADD INDEX IF NOT EXISTS idx_member (member_id)");
 
+/* ── Full Student Health Assessment fields (based on the school Google Form) ── */
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS student_apaar_id VARCHAR(40) DEFAULT NULL AFTER student_roll_no");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS parent_aadhar_mobile VARCHAR(15) DEFAULT NULL AFTER parent_aadhar_last4");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS student_abha_status VARCHAR(20) DEFAULT NULL AFTER student_abha_address");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS height_cm DECIMAL(5,1) DEFAULT NULL AFTER blood_group");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS weight_kg DECIMAL(5,1) DEFAULT NULL AFTER height_cm");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS bmi DECIMAL(5,1) DEFAULT NULL AFTER weight_kg");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS health_data JSON DEFAULT NULL AFTER current_medications");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS file_id_proof VARCHAR(255) DEFAULT NULL AFTER health_data");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS file_eye_report VARCHAR(255) DEFAULT NULL AFTER file_id_proof");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS file_dental_report VARCHAR(255) DEFAULT NULL AFTER file_eye_report");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS file_vaccination_cert VARCHAR(255) DEFAULT NULL AFTER file_dental_report");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS file_medical_records VARCHAR(255) DEFAULT NULL AFTER file_vaccination_cert");
+
+/**
+ * Save one uploaded file from a public submission.
+ * Whitelisted types only, random name, capped size, stored under
+ * school/uploads/consent/ (which has an exec-off .htaccess).
+ * Returns the web-relative path or null.
+ */
+function pcf_save_upload(string $field): ?string
+{
+    if (empty($_FILES[$field]) || ($_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        return null;
+    }
+    $f = $_FILES[$field];
+    if ($f['size'] <= 0 || $f['size'] > 6 * 1024 * 1024) {   // 6 MB cap
+        return null;
+    }
+    $allowed = [
+        'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+        'webp' => 'image/webp', 'pdf' => 'application/pdf',
+    ];
+    $ext  = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
+    $mime = function_exists('finfo_file')
+        ? (new finfo(FILEINFO_MIME_TYPE))->file($f['tmp_name'])
+        : ($f['type'] ?? '');
+    if (!isset($allowed[$ext]) || ($mime && $mime !== $allowed[$ext])) {
+        return null;
+    }
+    $dir = __DIR__ . '/uploads/consent';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+    }
+    $name = date('Ymd') . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
+    if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $name)) {
+        return null;
+    }
+    return 'school/uploads/consent/' . $name;
+}
+
 /* ── Header logo (same source as the rest of the site, with static fallback) ── */
 $logo_src = BASE_URL . 'assets/img/logo/black-logo.svg';
 $lr = $conn->query("SELECT logo_path FROM logos WHERE location='header' ORDER BY id DESC LIMIT 1");
@@ -92,14 +143,90 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
     $student_class = trim($_POST['student_class'] ?? '');
     $student_sec = trim($_POST['student_section'] ?? '');
     $student_roll = trim($_POST['student_roll_no'] ?? '');
+    $student_apaar = trim($_POST['student_apaar_id'] ?? '') ?: null;
     $student_address = trim($_POST['student_address'] ?? '') ?: null;
     $student_city = trim($_POST['student_city'] ?? '') ?: null;
     $student_state = trim($_POST['student_state'] ?? '') ?: null;
     $student_pincode = trim($_POST['student_pincode'] ?? '') ?: null;
+    $parent_aadhar_mobile = preg_replace('/\D/', '', trim($_POST['parent_aadhar_mobile'] ?? '')) ?: null;
     $blood_group = trim($_POST['blood_group'] ?? '') ?: null;
     $allergies = trim($_POST['known_allergies'] ?? '') ?: null;
     $conditions = trim($_POST['existing_conditions'] ?? '') ?: null;
     $medications = trim($_POST['current_medications'] ?? '') ?: null;
+
+    $abha_status = in_array($_POST['student_abha_status'] ?? '', ['Generated', 'Not Generated'], true) ? $_POST['student_abha_status'] : null;
+
+    /* ── Height / weight / BMI ── */
+    $height_cm = is_numeric($_POST['height_cm'] ?? '') ? (float) $_POST['height_cm'] : null;
+    $weight_kg = is_numeric($_POST['weight_kg'] ?? '') ? (float) $_POST['weight_kg'] : null;
+    $bmi = ($height_cm && $weight_kg) ? round($weight_kg / (($height_cm / 100) ** 2), 1) : null;
+
+    /* ── Structured clinical answers (Google Form sections 5–10) → one JSON column ── */
+    $g = fn($k) => trim($_POST[$k] ?? '') ?: null;
+    $garr = fn($k) => array_values(array_filter(array_map('trim', (array) ($_POST[$k] ?? []))));
+    $health_arr = [
+        'eye' => [
+            'uses_glasses'      => $g('eye_uses_glasses'),
+            'glasses_in_use'    => $g('eye_glasses_in_use'),
+            'glasses_power'     => $g('eye_glasses_power'),
+            'conditions'        => $g('eye_conditions'),
+            'last_ophthal_exam' => $g('eye_last_exam'),
+            'exam_remarks'      => $g('eye_exam_remarks'),
+        ],
+        'dental' => [
+            'present_condition' => $g('dental_condition'),
+            'cavities'          => $g('dental_cavities'),
+            'bleeding_gums'     => $g('dental_bleeding'),
+            'discoloration'     => $g('dental_discolor'),
+            'toothache'         => $g('dental_toothache'),
+            'alignment_ok'      => $g('dental_alignment'),
+            'hygiene_habits'    => $g('dental_hygiene'),
+            'brush_frequency'   => $g('dental_brush_freq'),
+        ],
+        'immunization' => [
+            'vaccination_status' => $g('imm_vaccination'),
+            'deworming_taken'    => $g('imm_deworming'),
+            'deworming_where'    => $g('imm_deworming_where'),
+        ],
+        'allergy' => [
+            'has_allergy' => $g('allergy_has'),
+            'types'       => $g('allergy_types'),
+            'other_type'  => $g('allergy_other'),
+            'detail'      => $g('allergy_detail'),
+        ],
+        'chronic' => [
+            'has_chronic' => $g('chronic_has'),
+            'type'        => $g('chronic_type'),
+            'detail'      => $g('chronic_detail'),
+            'additional'  => $g('additional_medical'),
+        ],
+        'surgical' => [
+            'had_surgery'            => $g('surg_had'),
+            'surgery_detail'         => $g('surg_detail'),
+            'hospitalized'           => $g('surg_hospitalized'),
+            'hospitalization_reason' => $g('surg_hosp_reason'),
+            'record_available'       => $g('surg_record_available'),
+        ],
+        'nutrition' => [
+            'dietary_pref'      => $g('nut_diet'),
+            'adequate_food'     => $g('nut_adequate'),
+            'physical_activity' => $g('nut_activity'),
+            'screen_time'       => $g('nut_screen'),
+        ],
+    ];
+    $health_json = json_encode($health_arr, JSON_UNESCAPED_UNICODE);
+
+    /* Mirror the structured allergy / chronic answers into the flat legacy
+       columns so existing admin list views stay meaningful. */
+    if (!$allergies && ($health_arr['allergy']['has_allergy'] ?? '') === 'Yes') {
+        $allergies = trim(implode(', ', (array) $health_arr['allergy']['types'])
+            . ' ' . ($health_arr['allergy']['other_type'] ?? '')
+            . ' ' . ($health_arr['allergy']['detail'] ?? '')) ?: 'Yes (unspecified)';
+    }
+    if (!$conditions && ($health_arr['chronic']['has_chronic'] ?? '') === 'Yes') {
+        $conditions = trim(($health_arr['chronic']['type'] ?? '') . ' — ' . ($health_arr['chronic']['detail'] ?? ''), ' —')
+            ?: 'Yes (unspecified)';
+    }
 
     /* ── Student Health ID (ABHA) — optional, validated to ABDM format ── */
     $abha_err = '';
@@ -140,9 +267,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
         $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
         $decl = "I, {$parent_name}, hereby give consent for the health checkup of my ward {$student_name}.";
 
-        $ins = $conn->prepare("INSERT INTO parent_consent_forms (token,school_id,school_name_manual,parent_name,relation,parent_mobile,parent_email,parent_aadhar_last4,student_name,student_dob,student_gender,student_class,student_section,student_roll_no,student_address,student_city,student_state,student_pincode,student_abha_number,student_abha_address,blood_group,known_allergies,existing_conditions,current_medications,consent_items,consent_given,declaration_text,ip_address,user_agent) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-        $types = 'si' . str_repeat('s', 23) . 'isss'; // 29 params
-        $ins->bind_param($types, $token, $school_id, $school_manual, $parent_name, $relation, $parent_mobile, $parent_email, $aadhar_last4, $student_name, $student_dob, $student_gender, $student_class, $student_sec, $student_roll, $student_address, $student_city, $student_state, $student_pincode, $student_abha_number, $student_abha_address, $blood_group, $allergies, $conditions, $medications, $consent_json, $consent_given, $decl, $ip, $ua);
+        $row = [
+            'token'                => $token,
+            'school_id'            => $school_id,
+            'school_name_manual'   => $school_manual ?: null,
+            'parent_name'          => $parent_name,
+            'relation'             => $relation,
+            'parent_mobile'        => $parent_mobile,
+            'parent_email'         => $parent_email,
+            'parent_aadhar_last4'  => $aadhar_last4,
+            'parent_aadhar_mobile' => $parent_aadhar_mobile,
+            'student_name'         => $student_name,
+            'student_dob'          => $student_dob,
+            'student_gender'       => $student_gender,
+            'student_class'        => $student_class ?: null,
+            'student_section'      => $student_sec ?: null,
+            'student_roll_no'      => $student_roll ?: null,
+            'student_apaar_id'     => $student_apaar,
+            'student_address'      => $student_address,
+            'student_city'         => $student_city,
+            'student_state'        => $student_state,
+            'student_pincode'      => $student_pincode,
+            'student_abha_number'  => $student_abha_number,
+            'student_abha_address' => $student_abha_address,
+            'student_abha_status'  => $abha_status,
+            'blood_group'          => $blood_group,
+            'height_cm'            => $height_cm,
+            'weight_kg'            => $weight_kg,
+            'bmi'                  => $bmi,
+            'known_allergies'      => $allergies,
+            'existing_conditions'  => $conditions,
+            'current_medications'  => $medications,
+            'health_data'          => $health_json,
+            'file_id_proof'        => pcf_save_upload('file_id_proof'),
+            'file_eye_report'      => pcf_save_upload('file_eye_report'),
+            'file_dental_report'   => pcf_save_upload('file_dental_report'),
+            'file_vaccination_cert' => pcf_save_upload('file_vaccination_cert'),
+            'file_medical_records' => pcf_save_upload('file_medical_records'),
+            'consent_items'        => $consent_json,
+            'consent_given'        => $consent_given,
+            'declaration_text'     => $decl,
+            'ip_address'           => $ip,
+            'user_agent'           => $ua,
+        ];
+
+        $cols  = array_keys($row);
+        $ph    = implode(',', array_fill(0, count($cols), '?'));
+        $types = '';
+        $vals  = [];
+        foreach ($row as $val) {
+            $types .= is_int($val) ? 'i' : (is_float($val) ? 'd' : 's');
+            $vals[] = $val;
+        }
+        $ins = $conn->prepare("INSERT INTO parent_consent_forms (`" . implode('`,`', $cols) . "`) VALUES ($ph)");
+        $ins->bind_param($types, ...$vals);
         if ($ins->execute()) {
             $success = true;
         } else {
@@ -151,6 +329,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
         $ins->close();
     }
 
+}
+
+/* ── Tiny render helpers for the assessment fields ── */
+function pcf_old($k, $d = '') { return htmlspecialchars((string) ($_POST[$k] ?? $d), ENT_QUOTES); }
+
+function pcf_radio(string $name, array $opts): string
+{
+    $cur = (string) ($_POST[$name] ?? '');
+    $h = '<div class="opt-row">';
+    foreach ($opts as $o) {
+        $h .= '<label class="form-check"><input class="form-check-input" type="radio" name="' . $name . '" value="'
+            . htmlspecialchars($o, ENT_QUOTES) . '"' . ($cur === (string) $o ? ' checked' : '')
+            . '> <span class="form-check-label">' . htmlspecialchars($o) . '</span></label>';
+    }
+    return $h . '</div>';
+}
+
+function pcf_checks(string $name, array $opts): string
+{
+    $cur = array_map('strval', (array) ($_POST[$name] ?? []));
+    $h = '<div class="opt-row">';
+    foreach ($opts as $o) {
+        $h .= '<label class="form-check"><input class="form-check-input" type="checkbox" name="' . $name . '[]" value="'
+            . htmlspecialchars($o, ENT_QUOTES) . '"' . (in_array((string) $o, $cur, true) ? ' checked' : '')
+            . '> <span class="form-check-label">' . htmlspecialchars($o) . '</span></label>';
+    }
+    return $h . '</div>';
+}
+
+function pcf_select(string $name, array $opts, string $ph = '— Select —'): string
+{
+    $cur = (string) ($_POST[$name] ?? '');
+    $h = '<select name="' . $name . '" class="form-select"><option value="">' . htmlspecialchars($ph) . '</option>';
+    foreach ($opts as $o) {
+        $h .= '<option value="' . htmlspecialchars($o, ENT_QUOTES) . '"' . ($cur === (string) $o ? ' selected' : '') . '>'
+            . htmlspecialchars($o) . '</option>';
+    }
+    return $h . '</select>';
 }
 ?>
 <!DOCTYPE html>
@@ -433,6 +649,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
             color: #94a3b8;
         }
 
+        /* ── Assessment field helpers ── */
+        .opt-row { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-top: 2px; }
+        .opt-row .form-check { padding-left: 1.6em; margin: 0; }
+        .opt-row .form-check-label { font-size: .87rem; }
+        .sub-head {
+            font-size: .72rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+            color: var(--primary); margin: 4px 0 2px; display: flex; align-items: center; gap: 6px;
+        }
+        .q-label { font-size: .87rem; font-weight: 600; color: #374151; margin-bottom: 3px; display: block; }
+        .cond { display: none; }
+        .cond.show { display: block; }
+        .file-drop {
+            border: 1.5px dashed #cbd5e1; border-radius: 10px; padding: 12px 14px;
+            font-size: .82rem; color: #64748b; background: #f8fafc;
+        }
+        .file-drop input[type=file] { font-size: .8rem; }
+
         @media (min-width: 992px) {
             .consent-wrapper { max-width: 820px; padding: 32px 20px 70px; }
             .form-header { padding: 30px 24px 24px; }
@@ -487,8 +720,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
     <div class="form-header">
         <img src="<?= htmlspecialchars($logo_src) ?>" alt="Rejuvenate Digital Health" class="brand-logo"
             onerror="this.onerror=null;this.src='<?= BASE_URL ?>assets/img/logo/logo.png';">
-        <h1><i class="fas fa-file-signature me-2"></i>Parent Consent Form</h1>
-        <p>Student Health Checkup — Please fill in all details carefully</p>
+        <h1><i class="fas fa-file-signature me-2"></i>Student Health Assessment &amp; Consent</h1>
+        <p>Please fill in your child's details and health information carefully</p>
         <div class="progress-bar-wrap">
             <div class="progress-bar-fill" id="pgBar"></div>
         </div>
@@ -522,7 +755,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
                 </div>
             <?php endif; ?>
 
-            <form method="POST" id="cForm" novalidate>
+            <form method="POST" id="cForm" enctype="multipart/form-data" novalidate>
                 <input type="hidden" name="submit_consent" value="1">
 
                 <!-- 1. School -->
@@ -585,8 +818,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
                             <div class="col-md-6">
                                 <label class="form-label">Aadhaar Last 4 Digits</label>
                                 <input type="text" name="parent_aadhar" class="form-control" placeholder="XXXX"
-                                    maxlength="4" value="<?= htmlspecialchars($_POST['parent_aadhar'] ?? '') ?>">
-                                <div class="hint"><i class="fas fa-lock me-1"></i>Only last 4 digits stored</div>
+                                    maxlength="4" inputmode="numeric" value="<?= pcf_old('parent_aadhar') ?>">
+                                <div class="hint"><i class="fas fa-lock me-1"></i>Only last 4 digits stored — full Aadhaar is never saved</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Aadhaar-linked Mobile Number</label>
+                                <input type="tel" name="parent_aadhar_mobile" class="form-control" placeholder="10-digit number"
+                                    maxlength="10" inputmode="numeric" value="<?= pcf_old('parent_aadhar_mobile') ?>">
+                                <div class="hint">Mobile number registered with the parent/guardian's Aadhaar.</div>
                             </div>
                         </div>
                     </div>
@@ -621,7 +860,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
                                     value="<?= htmlspecialchars($_POST['student_section'] ?? '') ?>"></div>
                             <div class="col-md-6"><label class="form-label">Roll Number</label><input type="text"
                                     name="student_roll_no" class="form-control" placeholder="Roll / Admission No."
-                                    value="<?= htmlspecialchars($_POST['student_roll_no'] ?? '') ?>"></div>
+                                    value="<?= pcf_old('student_roll_no') ?>"></div>
+                            <div class="col-md-6"><label class="form-label">Student ID / APAAR ID</label><input type="text"
+                                    name="student_apaar_id" class="form-control" placeholder="APAAR / Student ID"
+                                    value="<?= pcf_old('student_apaar_id') ?>"></div>
                             <div class="col-12"><label class="form-label">Address Line <span
                                         style="color:#94a3b8;font-weight:400">(house no., street, locality)</span></label><textarea
                                     name="student_address" class="form-control" rows="2"
@@ -636,14 +878,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
                             <div class="col-md-3"><label class="form-label">PIN Code</label><input type="text"
                                     name="student_pincode" class="form-control" placeholder="e.g. 226001" maxlength="6"
                                     inputmode="numeric" pattern="[0-9]{6}"
-                                    value="<?= htmlspecialchars($_POST['student_pincode'] ?? '') ?>"></div>
-                            <div class="col-md-6"><label class="form-label">Blood Group</label><select name="blood_group"
-                                    class="form-select">
-                                    <option value="">— Select if known —</option>
-                                    <?php foreach (['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as $bg): ?>
-                                        <option value="<?= $bg ?>" <?= (($_POST['blood_group'] ?? '') === $bg) ? 'selected' : '' ?>>
-                                            <?= $bg ?></option><?php endforeach; ?>
-                                </select></div>
+                                    value="<?= pcf_old('student_pincode') ?>"></div>
+                            <div class="col-12">
+                                <div class="file-drop">
+                                    <label class="q-label mb-1"><i class="fas fa-paperclip me-1" style="color:var(--primary)"></i>Aadhaar Card / Birth Certificate <span style="font-weight:400;color:#94a3b8">(optional — JPG / PNG / PDF, max 6 MB)</span></label>
+                                    <input type="file" name="file_id_proof" class="form-control" accept=".jpg,.jpeg,.png,.webp,.pdf">
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -657,18 +898,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
                     </div>
                     <div class="section-body">
                         <div class="row g-3">
+                            <div class="col-12">
+                                <label class="q-label">ABHA Status</label>
+                                <?= pcf_radio('student_abha_status', ['Generated', 'Not Generated']) ?>
+                            </div>
                             <div class="col-md-6">
                                 <label class="form-label">ABHA Number</label>
                                 <input type="text" name="student_abha_number" class="form-control"
                                     placeholder="XX-XXXX-XXXX-XXXX" maxlength="17" inputmode="numeric"
-                                    value="<?= htmlspecialchars($_POST['student_abha_number'] ?? '') ?>">
+                                    value="<?= pcf_old('student_abha_number') ?>">
                                 <div class="hint">14-digit Ayushman Bharat Health Account number.</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">ABHA Address</label>
                                 <input type="text" name="student_abha_address" class="form-control"
                                     placeholder="name@abdm"
-                                    value="<?= htmlspecialchars($_POST['student_abha_address'] ?? '') ?>">
+                                    value="<?= pcf_old('student_abha_address') ?>">
                                 <div class="hint">e.g. <code>aryan.kumar@abdm</code></div>
                             </div>
                         </div>
@@ -680,35 +925,194 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
                     </div>
                 </div>
 
-                <!-- 5. Medical History -->
+                <!-- 5. General Health -->
                 <div class="form-section">
                     <div class="section-head">
                         <div class="s-num">5</div>
-                        <h5><i class="fas fa-notes-medical me-2" style="color:var(--primary)"></i>Medical History <span
-                                style="font-size:.75rem;font-weight:400;color:#94a3b8">(optional)</span></h5>
+                        <h5><i class="fas fa-weight-scale me-2" style="color:var(--primary)"></i>General Health</h5>
                     </div>
                     <div class="section-body">
                         <div class="row g-3">
-                            <div class="col-12"><label class="form-label">Known Allergies</label><input type="text"
-                                    name="known_allergies" class="form-control"
-                                    placeholder="e.g. Penicillin, Peanuts — or leave blank"
-                                    value="<?= htmlspecialchars($_POST['known_allergies'] ?? '') ?>"></div>
-                            <div class="col-12"><label class="form-label">Existing Medical Conditions</label><input
-                                    type="text" name="existing_conditions" class="form-control"
-                                    placeholder="e.g. Asthma, Diabetes — or leave blank"
-                                    value="<?= htmlspecialchars($_POST['existing_conditions'] ?? '') ?>"></div>
-                            <div class="col-12"><label class="form-label">Current Medications</label><input type="text"
-                                    name="current_medications" class="form-control"
-                                    placeholder="e.g. Salbutamol inhaler — or leave blank"
-                                    value="<?= htmlspecialchars($_POST['current_medications'] ?? '') ?>"></div>
+                            <div class="col-6 col-md-3"><label class="form-label">Height (cm)</label>
+                                <input type="number" step="0.1" min="0" name="height_cm" id="ht" class="form-control" value="<?= pcf_old('height_cm') ?>"></div>
+                            <div class="col-6 col-md-3"><label class="form-label">Weight (kg)</label>
+                                <input type="number" step="0.1" min="0" name="weight_kg" id="wt" class="form-control" value="<?= pcf_old('weight_kg') ?>"></div>
+                            <div class="col-6 col-md-3"><label class="form-label">BMI</label>
+                                <input type="text" id="bmi" class="form-control" readonly placeholder="auto"></div>
+                            <div class="col-6 col-md-3"><label class="form-label">Blood Group</label>
+                                <?= pcf_select('blood_group', ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'], '— if known —') ?></div>
                         </div>
                     </div>
                 </div>
 
-                <!-- 6. Consent -->
+                <!-- 6. Eye Health -->
                 <div class="form-section">
                     <div class="section-head">
                         <div class="s-num">6</div>
+                        <h5><i class="fas fa-eye me-2" style="color:var(--primary)"></i>Eye Health</h5>
+                    </div>
+                    <div class="section-body">
+                        <div class="row g-3">
+                            <div class="col-12"><label class="q-label">Does the student use glasses?</label>
+                                <?= pcf_radio('eye_uses_glasses', ['Yes', 'No']) ?></div>
+                            <div class="col-12 cond" data-when="eye_uses_glasses" data-eq="Yes">
+                                <div class="row g-3">
+                                    <div class="col-md-6"><label class="q-label">Are the glasses currently being used?</label>
+                                        <?= pcf_radio('eye_glasses_in_use', ['Yes', 'No', 'Occasionally']) ?></div>
+                                    <div class="col-md-6"><label class="form-label">Power / number of glasses</label>
+                                        <input type="text" name="eye_glasses_power" class="form-control" value="<?= pcf_old('eye_glasses_power') ?>"></div>
+                                </div>
+                            </div>
+                            <div class="col-12"><label class="q-label">Does the student have any type of the following conditions?</label>
+                                <?= pcf_radio('eye_conditions', ['Squint', 'Watery eyes / excessive tearing', 'Recurrent or excessive rubbing of eyes', 'Other', 'None']) ?></div>
+                            <div class="col-md-6"><label class="q-label">Last examined by an ophthalmologist?</label>
+                                <?= pcf_radio('eye_last_exam', ['Date confirmed', 'Date not confirmed']) ?></div>
+                            <div class="col-md-6"><label class="form-label">Date / remarks</label>
+                                <input type="text" name="eye_exam_remarks" class="form-control" placeholder="e.g. Jan 2025 — normal" value="<?= pcf_old('eye_exam_remarks') ?>"></div>
+                            <div class="col-12">
+                                <div class="file-drop">
+                                    <label class="q-label mb-1"><i class="fas fa-paperclip me-1" style="color:var(--primary)"></i>Eye examination report <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
+                                    <input type="file" name="file_eye_report" class="form-control" accept=".jpg,.jpeg,.png,.webp,.pdf">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 7. Dental Health -->
+                <div class="form-section">
+                    <div class="section-head">
+                        <div class="s-num">7</div>
+                        <h5><i class="fas fa-tooth me-2" style="color:var(--primary)"></i>Dental Health</h5>
+                    </div>
+                    <div class="section-body">
+                        <div class="row g-3">
+                            <div class="col-12"><label class="q-label">Present dental condition</label>
+                                <?= pcf_radio('dental_condition', ['Normal', 'Abnormal']) ?></div>
+                            <div class="col-12 cond" data-when="dental_condition" data-eq="Abnormal">
+                                <div class="row g-3">
+                                    <div class="col-md-6"><label class="q-label">Cavities</label><?= pcf_radio('dental_cavities', ['Yes', 'No']) ?></div>
+                                    <div class="col-md-6"><label class="q-label">Bleeding from gums</label><?= pcf_radio('dental_bleeding', ['Yes', 'No']) ?></div>
+                                    <div class="col-md-6"><label class="q-label">Discoloration of teeth</label><?= pcf_radio('dental_discolor', ['Yellow', 'Black']) ?></div>
+                                    <div class="col-md-6"><label class="q-label">Toothache</label><?= pcf_radio('dental_toothache', ['Yes', 'No']) ?></div>
+                                </div>
+                            </div>
+                            <div class="col-md-6"><label class="q-label">Proper alignment of teeth?</label><?= pcf_radio('dental_alignment', ['Yes', 'No']) ?></div>
+                            <div class="col-md-6"><label class="q-label">Dental hygiene habits</label><?= pcf_radio('dental_hygiene', ['Brushing', 'Flossing', 'Both', 'Neither']) ?></div>
+                            <div class="col-md-6"><label class="q-label">How many times does the student brush per day?</label><?= pcf_radio('dental_brush_freq', ['Once', 'Twice', 'Three or more']) ?></div>
+                            <div class="col-12">
+                                <div class="file-drop">
+                                    <label class="q-label mb-1"><i class="fas fa-paperclip me-1" style="color:var(--primary)"></i>Dental examination report <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
+                                    <input type="file" name="file_dental_report" class="form-control" accept=".jpg,.jpeg,.png,.webp,.pdf">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 8. Immunization -->
+                <div class="form-section">
+                    <div class="section-head">
+                        <div class="s-num">8</div>
+                        <h5><i class="fas fa-syringe me-2" style="color:var(--primary)"></i>Immunization</h5>
+                    </div>
+                    <div class="section-body">
+                        <div class="row g-3">
+                            <div class="col-md-6"><label class="q-label">Vaccination status</label><?= pcf_radio('imm_vaccination', ['Vaccinated', 'Not Vaccinated']) ?></div>
+                            <div class="col-md-6"><label class="q-label">Has the student taken deworming medicine?</label><?= pcf_radio('imm_deworming', ['Yes', 'No']) ?></div>
+                            <div class="col-12 cond" data-when="imm_deworming" data-eq="Yes">
+                                <label class="q-label">If yes, given where?</label><?= pcf_radio('imm_deworming_where', ['In school', 'By local doctor']) ?>
+                            </div>
+                            <div class="col-12">
+                                <div class="file-drop">
+                                    <label class="q-label mb-1"><i class="fas fa-paperclip me-1" style="color:var(--primary)"></i>Vaccination certificate <span style="font-weight:400;color:#94a3b8">(if available)</span></label>
+                                    <input type="file" name="file_vaccination_cert" class="form-control" accept=".jpg,.jpeg,.png,.webp,.pdf">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 9. Medical History & Allergies -->
+                <div class="form-section">
+                    <div class="section-head">
+                        <div class="s-num">9</div>
+                        <h5><i class="fas fa-notes-medical me-2" style="color:var(--primary)"></i>Medical History &amp; Allergies</h5>
+                    </div>
+                    <div class="section-body">
+                        <div class="row g-3">
+                            <div class="col-12"><label class="q-label">Does the student have any known allergy?</label><?= pcf_radio('allergy_has', ['Yes', 'No']) ?></div>
+                            <div class="col-12 cond" data-when="allergy_has" data-eq="Yes">
+                                <div class="row g-3">
+                                    <div class="col-12"><label class="q-label">If yes, type of allergy</label><?= pcf_radio('allergy_types', ['Medicine', 'Dust', 'Smoke', 'Food', 'None', 'Other']) ?></div>
+                                    <div class="col-md-6"><label class="form-label">Other type (if any)</label><input type="text" name="allergy_other" class="form-control" value="<?= pcf_old('allergy_other') ?>"></div>
+                                    <div class="col-md-6"><label class="form-label">Detail of allergy</label><input type="text" name="allergy_detail" class="form-control" value="<?= pcf_old('allergy_detail') ?>"></div>
+                                </div>
+                            </div>
+                            <div class="col-12"><label class="q-label">Does the student have any chronic (long-duration) illness?</label><?= pcf_radio('chronic_has', ['Yes', 'No']) ?></div>
+                            <div class="col-12 cond" data-when="chronic_has" data-eq="Yes">
+                                <div class="row g-3">
+                                    <div class="col-md-6"><label class="q-label">Type of chronic illness</label><?= pcf_radio('chronic_type', ['Asthma', 'Diabetes', 'Seizure', 'Other', 'None']) ?></div>
+                                    <div class="col-12"><label class="form-label">Details of chronic disease</label><textarea name="chronic_detail" class="form-control" rows="2"><?= pcf_old('chronic_detail') ?></textarea></div>
+                                </div>
+                            </div>
+                            <div class="col-12"><label class="form-label">Current medications <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
+                                <input type="text" name="current_medications" class="form-control" placeholder="e.g. Salbutamol inhaler" value="<?= pcf_old('current_medications') ?>"></div>
+                            <div class="col-12"><label class="form-label">Additional medical details <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
+                                <textarea name="additional_medical" class="form-control" rows="2"><?= pcf_old('additional_medical') ?></textarea></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 10. Surgical & Hospitalization History -->
+                <div class="form-section">
+                    <div class="section-head">
+                        <div class="s-num">10</div>
+                        <h5><i class="fas fa-hospital me-2" style="color:var(--primary)"></i>Surgical &amp; Hospitalization History</h5>
+                    </div>
+                    <div class="section-body">
+                        <div class="row g-3">
+                            <div class="col-12"><label class="q-label">History of any surgery?</label><?= pcf_radio('surg_had', ['Yes', 'No']) ?></div>
+                            <div class="col-12 cond" data-when="surg_had" data-eq="Yes">
+                                <label class="form-label">Name / type of surgery <span style="font-weight:400;color:#94a3b8">(plain language is fine)</span></label>
+                                <input type="text" name="surg_detail" class="form-control" value="<?= pcf_old('surg_detail') ?>">
+                            </div>
+                            <div class="col-12"><label class="q-label">Was the student ever admitted to a hospital?</label><?= pcf_radio('surg_hospitalized', ['Yes', 'No']) ?></div>
+                            <div class="col-12 cond" data-when="surg_hospitalized" data-eq="Yes">
+                                <label class="form-label">Reason for hospital admission</label>
+                                <textarea name="surg_hosp_reason" class="form-control" rows="2"><?= pcf_old('surg_hosp_reason') ?></textarea>
+                            </div>
+                            <div class="col-12"><label class="q-label">Is a patient / medical record available?</label><?= pcf_radio('surg_record_available', ['Yes', 'No']) ?></div>
+                            <div class="col-12">
+                                <div class="file-drop">
+                                    <label class="q-label mb-1"><i class="fas fa-paperclip me-1" style="color:var(--primary)"></i>Medical records <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
+                                    <input type="file" name="file_medical_records" class="form-control" accept=".jpg,.jpeg,.png,.webp,.pdf">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 11. Nutrition & Dietary Habits -->
+                <div class="form-section">
+                    <div class="section-head">
+                        <div class="s-num">11</div>
+                        <h5><i class="fas fa-utensils me-2" style="color:var(--primary)"></i>Nutrition &amp; Dietary Habits</h5>
+                    </div>
+                    <div class="section-body">
+                        <div class="row g-3">
+                            <div class="col-md-6"><label class="q-label">Dietary preference</label><?= pcf_radio('nut_diet', ['Vegetarian', 'Non vegetarian', 'Other']) ?></div>
+                            <div class="col-md-6"><label class="q-label">Is adequate food provided?</label><?= pcf_radio('nut_adequate', ['Yes', 'No']) ?></div>
+                            <div class="col-12"><label class="q-label">Daily physical activity</label><?= pcf_radio('nut_activity', ['Less than 30 minutes', '30 minutes to 60 minutes', 'More than 60 minutes', 'No regular physical activity']) ?></div>
+                            <div class="col-12"><label class="q-label">Daily screen time</label><?= pcf_radio('nut_screen', ['Less than 1 hour', '1 hour to 2 hours', '2 hours to 4 hours', 'More than 4 hours']) ?></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 12. Consent -->
+                <div class="form-section">
+                    <div class="section-head">
+                        <div class="s-num">12</div>
                         <h5><i class="fas fa-clipboard-check me-2" style="color:var(--primary)"></i>I Give Consent For</h5>
                     </div>
                     <div class="section-body">
@@ -748,10 +1152,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
                     </div>
                 </div>
 
-                <!-- 7. Declaration -->
+                <!-- 13. Declaration -->
                 <div class="form-section">
                     <div class="section-head">
-                        <div class="s-num">7</div>
+                        <div class="s-num">13</div>
                         <h5><i class="fas fa-pen-fancy me-2" style="color:var(--primary)"></i>Declaration</h5>
                     </div>
                     <div class="section-body">
@@ -824,6 +1228,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
         document.querySelectorAll('#cForm input,#cForm select').forEach(el => el.addEventListener('change', updateProgress));
         document.querySelectorAll('.consent-item input:checked').forEach(cb => toggleCI(cb.closest('.consent-item').id.replace('ci', ''), true));
         updateProgress();
+
+        /* ── BMI auto-calc ── */
+        const ht = document.getElementById('ht'), wt = document.getElementById('wt'), bmiEl = document.getElementById('bmi');
+        function calcBmi() {
+            const h = parseFloat(ht.value), w = parseFloat(wt.value);
+            bmiEl.value = (h > 0 && w > 0) ? (w / ((h / 100) ** 2)).toFixed(1) : '';
+        }
+        if (ht && wt) { ht.addEventListener('input', calcBmi); wt.addEventListener('input', calcBmi); calcBmi(); }
+
+        /* ── Conditional "If yes" blocks ── */
+        function syncConds() {
+            document.querySelectorAll('.cond[data-when]').forEach(box => {
+                const name = box.dataset.when, want = box.dataset.eq;
+                const picked = document.querySelector('input[name="' + name + '"]:checked');
+                box.classList.toggle('show', !!picked && picked.value === want);
+            });
+        }
+        document.querySelectorAll('#cForm input[type=radio]').forEach(r => r.addEventListener('change', syncConds));
+        syncConds();
     </script>
 </body>
 
