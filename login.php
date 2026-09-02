@@ -26,8 +26,21 @@ if (!empty($_SESSION['doctor_logged_in'])) {
   exit();
 }
 if (!empty($_SESSION['admin_logged_in'])) {
-  header("Location: " . BASE_URL . "admin/index.php");
-  exit();
+  // The admin panel is JWT-based — $_SESSION['admin_logged_in'] can linger
+  // after the JWT cookies are gone (logout / expiry / different browser).
+  // Only bounce to the admin panel if a JWT cookie actually exists,
+  // otherwise clear the stale flag so this login form is shown instead of
+  // ping-ponging to admin/auth/login.php?err=session_expired.
+  if (!empty($_COOKIE['rdh_admin_token']) || !empty($_COOKIE['rdh_admin_refresh'])) {
+    header("Location: " . BASE_URL . "admin/index.php");
+    exit();
+  }
+  unset(
+    $_SESSION['admin_logged_in'],
+    $_SESSION['admin_id'],
+    $_SESSION['admin_user'],
+    $_SESSION['admin_role']
+  );
 }
 
 /* ── Remember-me auto login (patient) ── */

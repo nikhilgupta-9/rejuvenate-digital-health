@@ -12,7 +12,7 @@ try {
     $claims = JWT::verify($ticket, TELEMED_SECRET);
     if (($claims['purpose'] ?? '') !== 'telemed_join') {
         throw new RuntimeException('Wrong ticket purpose');
-    }
+    } 
 } catch (Throwable $e) {
     http_response_code(401);
     exit('This video call link has expired. Please go back and click "Join Video Call" again.');

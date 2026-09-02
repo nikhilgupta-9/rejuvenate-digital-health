@@ -55,14 +55,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($chk2->get_result()->num_rows > 0)
       throw new Exception("This email is already in use.");
 
-    /* ── Insert school (optional fields are NULL for now) ── */
+    /* ── Insert school ──
+       address / pincode are collected later from the school dashboard,
+       but the columns are NOT NULL with no default, so seed them empty.
+       principal_name defaults to the admin's name for now. */
+    $address  = '';
+    $pincode  = '';
     $ins = $conn->prepare("INSERT INTO schools
-            (school_name, email, phone, city, state, status)
-            VALUES (?, ?, ?, ?, ?, 'Pending')");
-    $ins->bind_param('sssss', $school_name, $email, $phone, $city, $state);
+            (school_name, email, phone, address, city, state, pincode, principal_name, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending')");
+    $ins->bind_param('ssssssss', $school_name, $email, $phone, $address, $city, $state, $pincode, $admin_name);
     if (!$ins->execute())
       throw new Exception("Registration failed. Please try again.");
     $school_id = $ins->insert_id;
+
+    /* fetch the trigger-generated school UID for the notification emails */
+    $uidRow = $conn->query("SELECT school_uid FROM schools WHERE id = " . (int) $school_id);
+    $school_uid = $uidRow && $uidRow->num_rows ? $uidRow->fetch_assoc()['school_uid'] : '';
 
     /* ── Insert admin account ── */
     $hash = password_hash($password, PASSWORD_DEFAULT);
@@ -72,6 +81,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $ins2->bind_param('issss', $school_id, $admin_name, $email, $phone, $hash);
     if (!$ins2->execute())
       throw new Exception("Admin account creation failed.");
+
+    /* ── Notify admin + school (2 emails) ── */
+    $contact    = function_exists('contact_us') ? contact_us() : null;
+    $adminEmail = $contact['email'] ?? (defined('MAIL_USERNAME') ? MAIL_USERNAME : 'support@rejuvenatedigitalhealth.com');
+
+    try {
+      $mailer = new Mailer();
+
+      /* 1. Admin — new school registration awaiting review */
+      $adminHtml = "
+        <p>A new school has registered and is awaiting review.</p>
+        <table style='width:100%;border-collapse:collapse;font-size:14px;'>
+          <tr><td style='padding:8px 0;font-weight:bold;width:40%;'>School Name</td><td>" . htmlspecialchars($school_name) . "</td></tr>
+          <tr><td style='padding:8px 0;font-weight:bold;'>School UID</td><td>" . htmlspecialchars($school_uid) . "</td></tr>
+          <tr><td style='padding:8px 0;font-weight:bold;'>Email</td><td>" . htmlspecialchars($email) . "</td></tr>
+          <tr><td style='padding:8px 0;font-weight:bold;'>Phone</td><td>+91 " . htmlspecialchars($phone) . "</td></tr>
+          <tr><td style='padding:8px 0;font-weight:bold;'>City / State</td><td>" . htmlspecialchars(trim($city . ', ' . $state, ', ')) . "</td></tr>
+          <tr><td style='padding:8px 0;font-weight:bold;'>Admin Contact</td><td>" . htmlspecialchars($admin_name) . "</td></tr>
+        </table>
+        <p style='margin-top:16px;'>Review and approve this school from the admin panel.</p>
+      ";
+      $adminText =
+        "New school registration awaiting review\n\n" .
+        "School: {$school_name}\nUID: {$school_uid}\nEmail: {$email}\nPhone: +91 {$phone}\n" .
+        "City/State: {$city}, {$state}\nAdmin Contact: {$admin_name}\n";
+      $mailer->sendCustom($adminEmail, 'Admin', 'New School Registration — ' . $school_name, $adminHtml, $adminText);
+
+      /* 2. School — confirmation that the registration was received */
+      $schoolHtml = "
+        <p>Hello <strong>" . htmlspecialchars($admin_name) . "</strong>,</p>
+        <p>Thank you for registering <strong>" . htmlspecialchars($school_name) . "</strong> with REJUVENATE Digital Health.</p>
+        <div style='background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:14px;line-height:2;'>
+          <strong>School UID:</strong> " . htmlspecialchars($school_uid) . "<br>
+          <strong>Login Email:</strong> " . htmlspecialchars($email) . "<br>
+          <strong>Status:</strong> Pending review
+        </div>
+        <p>Your registration is under review. Our team usually completes verification within 24 hours, and you'll receive another email once your school is approved. You can then log in and add your logo, board, address and other details.</p>
+      ";
+      $schoolText =
+        "Hello {$admin_name},\n\n" .
+        "Thank you for registering {$school_name} with REJUVENATE Digital Health.\n\n" .
+        "School UID: {$school_uid}\nLogin Email: {$email}\nStatus: Pending review\n\n" .
+        "Your registration is under review (usually within 24 hours). You'll get another email once approved.";
+      $mailer->sendCustom($email, $admin_name, 'School Registration Received — REJUVENATE Digital Health', $schoolHtml, $schoolText);
+    } catch (Exception $mailErr) {
+      error_log('[school-register] notification email failed: ' . $mailErr->getMessage());
+    }
 
     $success = "Registration submitted! Your school is under review. We'll notify you once approved.";
   } catch (Exception $e) {

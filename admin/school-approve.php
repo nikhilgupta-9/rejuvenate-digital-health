@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/db-conn.php';
 require_once __DIR__ . '/auth/guard.php';
+require_once __DIR__ . '/../util/mail_config.php';
 admin_jwt_guard();
 
 $id       = intval($_GET['id'] ?? 0);
@@ -14,11 +15,79 @@ if (!$id || !in_array($action, ['approve','reject','activate','deactivate'])) {
 $school = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM schools WHERE id=$id"));
 if (!$school) { header("Location: schools-list.php"); exit(); }
 
+// School admin account — used for the greeting / recipient name in emails
+$school_admin = mysqli_fetch_assoc(mysqli_query(
+    $conn,
+    "SELECT name, email FROM school_users WHERE school_id=$id ORDER BY id ASC LIMIT 1"
+));
+$notify_email = $school_admin['email'] ?? $school['email'];
+$notify_name  = $school_admin['name']  ?? ($school['principal_name'] ?: 'School Admin');
+
+/**
+ * Email the school admin about an approval / rejection decision.
+ */
+function notify_school_decision(string $toEmail, string $toName, array $school, string $decision, string $reason = ''): void
+{
+    if (!$toEmail) return;
+    $loginUrl   = (defined('APP_SITE_URL') ? APP_SITE_URL : 'http://localhost/rejuvenate-digital-health/') . 'school-login.php';
+    $schoolName = htmlspecialchars($school['school_name']);
+    $schoolUid  = htmlspecialchars($school['school_uid']);
+
+    try {
+        $mailer = new Mailer();
+
+        if ($decision === 'approve') {
+            $html = "
+                <p>Hello <strong>" . htmlspecialchars($toName) . "</strong>,</p>
+                <p>Good news — <strong>{$schoolName}</strong> has been <strong>verified and approved</strong> on
+                REJUVENATE Digital Health.</p>
+                <div style='background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:14px;line-height:2;'>
+                  <strong>School UID:</strong> {$schoolUid}<br>
+                  <strong>Login Email:</strong> " . htmlspecialchars($school['email']) . "<br>
+                  <strong>Status:</strong> <span style='color:#00875a;font-weight:700;'>Active</span>
+                </div>
+                <p>You can now log in to your school dashboard to add your logo, board, address, and start
+                onboarding teachers, students and staff.</p>
+                <div style='text-align:center;margin:24px 0;'>
+                  <a href='{$loginUrl}' style='background:#00875a;color:#fff;text-decoration:none;padding:13px 32px;border-radius:10px;font-weight:700;font-size:15px;display:inline-block;'>
+                    Login to School Dashboard
+                  </a>
+                </div>
+            ";
+            $text = "Hello {$toName},\n\n{$school['school_name']} has been verified and approved on REJUVENATE Digital Health.\n"
+                  . "School UID: {$school['school_uid']}\nLogin Email: {$school['email']}\nStatus: Active\n\n"
+                  . "Login: {$loginUrl}";
+            $mailer->sendCustom($toEmail, $toName, 'School Approved — ' . $school['school_name'], $html, $text);
+        } else { // reject
+            $reasonHtml = nl2br(htmlspecialchars($reason ?: 'No reason provided.'));
+            $html = "
+                <p>Hello <strong>" . htmlspecialchars($toName) . "</strong>,</p>
+                <p>We're sorry to inform you that the registration for <strong>{$schoolName}</strong> could not be
+                approved at this time.</p>
+                <div style='background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;border-radius:6px;margin:20px 0;font-size:14px;'>
+                  <strong>Reason:</strong><br>{$reasonHtml}
+                </div>
+                <p>If you believe this is a mistake or can provide the required information, please reply to this
+                email or contact our support team.</p>
+            ";
+            $text = "Hello {$toName},\n\nThe registration for {$school['school_name']} could not be approved at this time.\n\n"
+                  . "Reason: " . ($reason ?: 'No reason provided.') . "\n\n"
+                  . "If you can provide the required information, please contact our support team.";
+            $mailer->sendCustom($toEmail, $toName, 'School Registration Update — ' . $school['school_name'], $html, $text);
+        }
+    } catch (Exception $e) {
+        error_log('[school-approve] notification email failed: ' . $e->getMessage());
+    }
+}
+
 // POST: rejection with reason
 if ($action === 'reject' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $reason = mysqli_real_escape_string($conn, trim($_POST['rejection_reason'] ?? 'No reason provided.'));
+    $reason_raw = trim($_POST['rejection_reason'] ?? 'No reason provided.');
+    $reason = mysqli_real_escape_string($conn, $reason_raw);
     mysqli_query($conn, "UPDATE schools SET status='Rejected', rejection_reason='$reason', approved_by=$admin_id, approved_at=NOW() WHERE id=$id");
     mysqli_query($conn, "UPDATE school_users SET status='Suspended' WHERE school_id=$id");
+    notify_school_decision($notify_email, $notify_name, $school, 'reject', $reason_raw);
+    $_SESSION['success_message'] = $school['school_name'] . ' was rejected. The school admin has been notified by email.';
     header("Location: schools-list.php?msg=rejected"); exit();
 }
 
@@ -26,6 +95,8 @@ switch ($action) {
     case 'approve':
         mysqli_query($conn, "UPDATE schools SET status='Active', approved_by=$admin_id, approved_at=NOW(), rejection_reason=NULL WHERE id=$id");
         mysqli_query($conn, "UPDATE school_users SET status='Active' WHERE school_id=$id");
+        notify_school_decision($notify_email, $notify_name, $school, 'approve');
+        $_SESSION['success_message'] = $school['school_name'] . ' has been approved. A notification email was sent to ' . $notify_email . '.';
         header("Location: school-view.php?id=$id&msg=approved"); exit();
     case 'activate':
         mysqli_query($conn, "UPDATE schools SET status='Active' WHERE id=$id");
