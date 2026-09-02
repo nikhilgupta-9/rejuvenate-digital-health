@@ -76,6 +76,41 @@ $conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS file_den
 $conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS file_vaccination_cert VARCHAR(255) DEFAULT NULL AFTER file_dental_report");
 $conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS file_medical_records VARCHAR(255) DEFAULT NULL AFTER file_vaccination_cert");
 
+/* ── Health-plan selection + payment (Razorpay) ── */
+$conn->query("
+CREATE TABLE IF NOT EXISTS school_health_plans (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(120) NOT NULL,
+  tier VARCHAR(40) DEFAULT NULL,
+  tagline VARCHAR(200) DEFAULT NULL,
+  price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  billing_label VARCHAR(40) NOT NULL DEFAULT 'per student / year',
+  age_min TINYINT UNSIGNED DEFAULT NULL,
+  age_max TINYINT UNSIGNED DEFAULT NULL,
+  features TEXT DEFAULT NULL,
+  accent_color VARCHAR(20) NOT NULL DEFAULT '#0C74C5',
+  is_popular TINYINT(1) NOT NULL DEFAULT 0,
+  show_on_consent TINYINT(1) NOT NULL DEFAULT 0,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS plan_id INT UNSIGNED DEFAULT NULL AFTER school_name_manual");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS plan_name VARCHAR(120) DEFAULT NULL AFTER plan_id");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS plan_price DECIMAL(10,2) DEFAULT NULL AFTER plan_name");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS payment_status ENUM('pending','paid','failed') NOT NULL DEFAULT 'pending' AFTER plan_price");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(64) DEFAULT NULL AFTER payment_status");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS razorpay_payment_id VARCHAR(64) DEFAULT NULL AFTER razorpay_order_id");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS paid_at DATETIME DEFAULT NULL AFTER razorpay_payment_id");
+$conn->query("ALTER TABLE parent_consent_forms ADD INDEX IF NOT EXISTS idx_pcf_order (razorpay_order_id)");
+
+require_once __DIR__ . '/../config/payment.php';   // RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET
+require_once __DIR__ . '/../util/mail_config.php'; // Mailer
+require_once __DIR__ . '/../util/function.php';    // contact_us()
+
 /**
  * Save one uploaded file from a public submission.
  * Whitelisted types only, random name, capped size, stored under
@@ -125,14 +160,273 @@ $sr = $conn->query("SELECT id, school_name FROM schools WHERE status='Active' OR
 if ($sr)
     $schools = $sr->fetch_all(MYSQLI_ASSOC);
 
+/* ── Health plans offered on this form (age-picked, then paid) ── */
+$consent_plans = [];
+$cpr = $conn->query("SELECT * FROM school_health_plans WHERE is_active = 1 AND show_on_consent = 1 ORDER BY sort_order ASC, price ASC, id ASC");
+if ($cpr) {
+    while ($r = $cpr->fetch_assoc()) {
+        $r['feature_list'] = array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', (string) $r['features']))));
+        $consent_plans[] = $r;
+    }
+}
+$plans_enabled = !empty($consent_plans);
+
+/**
+ * Age in whole years on a given date (defaults today). Returns null for a bad date.
+ */
+function pcf_age_from_dob(?string $dob): ?int
+{
+    if (!$dob) return null;
+    $d = DateTime::createFromFormat('!Y-m-d', $dob);
+    if (!$d || $d->format('Y-m-d') !== $dob) return null;
+    return (int) $d->diff(new DateTime('today'))->y;
+}
+
+/**
+ * The plan a child of this age is enrolled in — first match by sort_order.
+ * $plans is the $consent_plans array. Returns the plan row or null.
+ */
+function pcf_plan_for_age(array $plans, ?int $age): ?array
+{
+    if ($age === null) return null;
+    foreach ($plans as $p) {
+        $min = ($p['age_min'] === null || $p['age_min'] === '') ? null : (int) $p['age_min'];
+        $max = ($p['age_max'] === null || $p['age_max'] === '') ? null : (int) $p['age_max'];
+        if (($min === null || $age >= $min) && ($max === null || $age <= $max)) return $p;
+    }
+    return null;
+}
+
+/**
+ * Create a Razorpay order. Returns [orderArray|null, errorMessage].
+ */
+function pcf_create_razorpay_order(int $amountPaise, string $receipt, array $notes): array
+{
+    if (!defined('RAZORPAY_KEY_ID') || !RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+        error_log('[parent-consent] Razorpay keys not configured');
+        return [null, 'Online payment is temporarily unavailable. Please try again later or contact the school.'];
+    }
+    $ch = curl_init('https://api.razorpay.com/v1/orders');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_USERPWD        => RAZORPAY_KEY_ID . ':' . RAZORPAY_KEY_SECRET,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+        CURLOPT_POSTFIELDS     => json_encode([
+            'amount'   => $amountPaise,
+            'currency' => 'INR',
+            'receipt'  => $receipt,
+            'notes'    => $notes,
+        ]),
+        CURLOPT_TIMEOUT => 15,
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr  = curl_error($ch);
+    curl_close($ch);
+    if ($curlErr || $httpCode !== 200) {
+        error_log('[parent-consent] Razorpay order failed: ' . $curlErr . ' HTTP ' . $httpCode . ' ' . $response);
+        return [null, 'Could not start the payment. Please try again.'];
+    }
+    $order = json_decode($response, true);
+    if (empty($order['id'])) {
+        error_log('[parent-consent] Razorpay unexpected order response: ' . $response);
+        return [null, 'Could not start the payment. Please try again.'];
+    }
+    return [$order, ''];
+}
+
 $success = false;
 $error = '';
+$errors = [];          // field_key => message  (shown inline + in summary)
 $token = '';
 
 // Pre-select a school when the link is shared from the admin panel (?school_id=)
 $prefill_school = (int) ($_GET['school_id'] ?? $_POST['school_id'] ?? 0);
+// Deep-link from school-program.php ("Choose <plan>") — informational only; age still decides.
+$prefill_plan = (int) ($_GET['plan'] ?? 0);
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
+/* ── Resume an abandoned payment: ?resume=<token> ── */
+$resume_row = null;
+if (!empty($_GET['resume'])) {
+    $rt = preg_replace('/[^a-f0-9]/', '', (string) $_GET['resume']);
+    if (strlen($rt) === 32) {
+        $rs = $conn->prepare("SELECT * FROM parent_consent_forms WHERE token = ? AND payment_status = 'pending' LIMIT 1");
+        $rs->bind_param('s', $rt);
+        $rs->execute();
+        $resume_row = $rs->get_result()->fetch_assoc() ?: null;
+    }
+}
+
+$pcf_action = $_POST['pcf_action'] ?? '';
+
+/* ═══════════════════════════════════════════════════════════════
+   AJAX: verify a completed Razorpay payment → mark paid + email
+═══════════════════════════════════════════════════════════════ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $pcf_action === 'verify_payment') {
+    header('Content-Type: application/json');
+    $rpOrderId   = trim($_POST['razorpay_order_id'] ?? '');
+    $rpPaymentId = trim($_POST['razorpay_payment_id'] ?? '');
+    $rpSignature = trim($_POST['razorpay_signature'] ?? '');
+    $formToken   = preg_replace('/[^a-f0-9]/', '', (string) ($_POST['token'] ?? ''));
+
+    if (!$rpOrderId || !$rpPaymentId || !$rpSignature || strlen($formToken) !== 32) {
+        echo json_encode(['success' => false, 'message' => 'Payment was not completed. Please try again.']);
+        exit;
+    }
+    if (!defined('RAZORPAY_KEY_SECRET') || !RAZORPAY_KEY_SECRET) {
+        echo json_encode(['success' => false, 'message' => 'Payment verification is unavailable right now. If money was deducted it will auto-refund — please contact the school.']);
+        exit;
+    }
+    $expected = hash_hmac('sha256', $rpOrderId . '|' . $rpPaymentId, RAZORPAY_KEY_SECRET);
+    if (!hash_equals($expected, $rpSignature)) {
+        error_log('[parent-consent] signature mismatch order=' . $rpOrderId);
+        echo json_encode(['success' => false, 'message' => 'Payment verification failed. If money was deducted it will be refunded automatically — please contact the school.']);
+        exit;
+    }
+
+    $ps = $conn->prepare("SELECT * FROM parent_consent_forms WHERE token = ? AND razorpay_order_id = ? AND payment_status = 'pending' LIMIT 1");
+    $ps->bind_param('ss', $formToken, $rpOrderId);
+    $ps->execute();
+    $pcf = $ps->get_result()->fetch_assoc();
+    if (!$pcf) {
+        // Idempotency: already verified is still a success for the user.
+        $chk = $conn->prepare("SELECT id FROM parent_consent_forms WHERE token = ? AND payment_status = 'paid' LIMIT 1");
+        $chk->bind_param('s', $formToken);
+        $chk->execute();
+        if ($chk->get_result()->num_rows) {
+            echo json_encode(['success' => true, 'ref' => strtoupper(substr($formToken, 0, 8))]);
+            exit;
+        }
+        echo json_encode(['success' => false, 'message' => 'Could not match this payment to your form. Please contact the school with your reference number.']);
+        exit;
+    }
+
+    $upd = $conn->prepare("UPDATE parent_consent_forms SET payment_status = 'paid', razorpay_payment_id = ?, paid_at = NOW() WHERE id = ?");
+    $upd->bind_param('si', $rpPaymentId, $pcf['id']);
+    $upd->execute();
+
+    /* ── School name for the emails ── */
+    $schoolName = $pcf['school_name_manual'] ?: 'your school';
+    if (!empty($pcf['school_id'])) {
+        $sn = $conn->query("SELECT school_name FROM schools WHERE id = " . (int) $pcf['school_id']);
+        if ($sn && $sn->num_rows) $schoolName = $sn->fetch_assoc()['school_name'];
+    }
+    $ref      = strtoupper(substr($formToken, 0, 8));
+    $amount   = number_format((float) $pcf['plan_price']);
+    $adminUrl = rtrim($_ENV['SITE'] ?? BASE_URL, '/') . '/admin/parent-consent-view.php?id=' . (int) $pcf['id'];
+
+    try {
+        $mailer = new Mailer();
+
+        /* 1. Parent */
+        if (!empty($pcf['parent_email'])) {
+            $pHtml = "
+                <p>Hello <strong>" . htmlspecialchars($pcf['parent_name']) . "</strong>,</p>
+                <p>Payment received &mdash; <strong>" . htmlspecialchars($pcf['student_name']) . "</strong> is now enrolled in the
+                school health programme.</p>
+                <div style='background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:14px;line-height:2;'>
+                  <strong>Reference:</strong> {$ref}<br>
+                  <strong>Plan:</strong> " . htmlspecialchars($pcf['plan_name']) . "<br>
+                  <strong>Amount paid:</strong> &#8377;{$amount}<br>
+                  <strong>Payment ID:</strong> " . htmlspecialchars($rpPaymentId) . "<br>
+                  <strong>School:</strong> " . htmlspecialchars($schoolName) . "
+                </div>
+                <p>Your consent and your child's health details have been recorded securely as per ABDM / ABHA
+                guidelines. The school health team will schedule the checkup and share updates with you.</p>
+                <p style='font-size:13px;color:#6b7280;'>Keep the reference number above for any queries.</p>
+            ";
+            $pText = "Hello {$pcf['parent_name']},\n\nPayment received. {$pcf['student_name']} is enrolled in the school health programme.\n\n"
+                . "Reference: {$ref}\nPlan: {$pcf['plan_name']}\nAmount paid: Rs {$amount}\nPayment ID: {$rpPaymentId}\nSchool: {$schoolName}\n\n"
+                . "Your consent and health details are recorded securely. The school health team will schedule the checkup.";
+            $mailer->sendCustom($pcf['parent_email'], $pcf['parent_name'], 'Payment Received — ' . $pcf['student_name'] . ' enrolled', $pHtml, $pText);
+        }
+
+        /* 2. Admin */
+        $contact    = function_exists('contact_us') ? contact_us() : null;
+        $adminEmail = $contact['email'] ?? (defined('MAIL_USERNAME') ? MAIL_USERNAME : 'support@rejuvenatedigitalhealth.com');
+        $aHtml = "
+            <p>A parent has completed a paid health-programme enrolment.</p>
+            <table style='width:100%;border-collapse:collapse;font-size:14px;'>
+              <tr><td style='padding:8px 0;font-weight:bold;width:40%;'>Reference</td><td>{$ref}</td></tr>
+              <tr><td style='padding:8px 0;font-weight:bold;'>Student</td><td>" . htmlspecialchars($pcf['student_name']) . "</td></tr>
+              <tr><td style='padding:8px 0;font-weight:bold;'>Parent</td><td>" . htmlspecialchars($pcf['parent_name']) . " (" . htmlspecialchars($pcf['parent_mobile']) . ")</td></tr>
+              <tr><td style='padding:8px 0;font-weight:bold;'>School</td><td>" . htmlspecialchars($schoolName) . "</td></tr>
+              <tr><td style='padding:8px 0;font-weight:bold;'>Plan</td><td>" . htmlspecialchars($pcf['plan_name']) . "</td></tr>
+              <tr><td style='padding:8px 0;font-weight:bold;'>Amount</td><td>&#8377;{$amount}</td></tr>
+              <tr><td style='padding:8px 0;font-weight:bold;'>Razorpay Payment ID</td><td>" . htmlspecialchars($rpPaymentId) . "</td></tr>
+              <tr><td style='padding:8px 0;font-weight:bold;'>Order ID</td><td>" . htmlspecialchars($rpOrderId) . "</td></tr>
+            </table>
+            <p style='margin-top:16px;'><a href='{$adminUrl}'>Open the consent record in the admin panel &rarr;</a></p>
+        ";
+        $aText = "Paid health-programme enrolment\n\nReference: {$ref}\nStudent: {$pcf['student_name']}\nParent: {$pcf['parent_name']} ({$pcf['parent_mobile']})\n"
+            . "School: {$schoolName}\nPlan: {$pcf['plan_name']}\nAmount: Rs {$amount}\nPayment ID: {$rpPaymentId}\nOrder ID: {$rpOrderId}\n\n{$adminUrl}";
+        $mailer->sendCustom($adminEmail, 'Admin', 'Paid enrolment — ' . $pcf['student_name'] . ' (' . $schoolName . ')', $aHtml, $aText);
+    } catch (Throwable $mailErr) {
+        error_log('[parent-consent] payment email failed: ' . $mailErr->getMessage());
+    }
+
+    echo json_encode(['success' => true, 'ref' => $ref]);
+    exit;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   AJAX: create a fresh Razorpay order for an abandoned (pending) row
+═══════════════════════════════════════════════════════════════ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $pcf_action === 'resume_pay') {
+    header('Content-Type: application/json');
+    $rt = preg_replace('/[^a-f0-9]/', '', (string) ($_POST['resume_token'] ?? ''));
+    if (strlen($rt) !== 32) {
+        echo json_encode(['success' => false, 'message' => 'Invalid resume link.']);
+        exit;
+    }
+    $rs = $conn->prepare("SELECT * FROM parent_consent_forms WHERE token = ? AND payment_status = 'pending' LIMIT 1");
+    $rs->bind_param('s', $rt);
+    $rs->execute();
+    $pr = $rs->get_result()->fetch_assoc();
+    if (!$pr || $pr['plan_price'] === null) {
+        echo json_encode(['success' => false, 'message' => 'This payment link is no longer valid — it may already be paid.']);
+        exit;
+    }
+    if ((float) $pr['plan_price'] <= 0) {
+        $conn->query("UPDATE parent_consent_forms SET payment_status='paid', paid_at=NOW() WHERE id=" . (int) $pr['id']);
+        echo json_encode(['success' => true, 'free' => true, 'ref' => strtoupper(substr($rt, 0, 8))]);
+        exit;
+    }
+    $amountPaise = (int) round(((float) $pr['plan_price']) * 100);
+    [$order, $orderErr] = pcf_create_razorpay_order(
+        $amountPaise,
+        'pcf_' . (int) $pr['id'] . '_' . time(),
+        ['consent_id' => (int) $pr['id'], 'plan_id' => (int) $pr['plan_id'], 'purpose' => 'school_health_consent_resume']
+    );
+    if (!$order) {
+        echo json_encode(['success' => false, 'message' => $orderErr]);
+        exit;
+    }
+    $oid = $order['id'];
+    $uo = $conn->prepare("UPDATE parent_consent_forms SET razorpay_order_id = ? WHERE id = ?");
+    $uo->bind_param('si', $oid, $pr['id']);
+    $uo->execute();
+    echo json_encode([
+        'success'   => true,
+        'key_id'    => RAZORPAY_KEY_ID,
+        'order_id'  => $order['id'],
+        'amount'    => $amountPaise,
+        'currency'  => 'INR',
+        'plan_name' => $pr['plan_name'],
+        'token'     => $rt,
+        'ref'       => strtoupper(substr($rt, 0, 8)),
+        'prefill'   => ['name' => $pr['parent_name'], 'email' => $pr['parent_email'] ?? '', 'contact' => $pr['parent_mobile']],
+    ]);
+    exit;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   AJAX: validate the form + create a Razorpay order (pending row)
+═══════════════════════════════════════════════════════════════ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($pcf_action === 'create_order' || isset($_POST['submit_consent']))) {
+    $is_ajax = $pcf_action === 'create_order';
+    $resume_token = preg_replace('/[^a-f0-9]/', '', (string) ($_POST['resume_token'] ?? ''));
     $school_id = (int) ($_POST['school_id'] ?? 0) ?: null;
     $school_manual = trim($_POST['school_name_manual'] ?? '');
     $parent_name = trim($_POST['parent_name'] ?? '');
@@ -258,22 +552,127 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
     $consent_json = json_encode($consent_given_items);
     $consent_given = isset($_POST['i_agree']) ? 1 : 0;
 
-    if (!$parent_name || !$student_name || strlen($parent_mobile) < 10) {
-        $error = 'Please fill in all required fields correctly.';
-    } elseif ($abha_err) {
-        $error = $abha_err;
-    } elseif (!$consent_given) {
-        $error = 'You must agree to the declaration to submit the form.';
+    /* ─────────────────────────────────────────────
+       Field-by-field validation. Every failure is
+       recorded against a field key so the form can
+       highlight the exact input and list what's
+       missing — the parent never gets a vague
+       "fill all fields correctly" dead end.
+    ───────────────────────────────────────────── */
+    $raw_aadhar        = preg_replace('/\D/', '', trim($_POST['parent_aadhar'] ?? ''));
+    $raw_student_dob   = trim($_POST['student_dob'] ?? '');
+
+    // 1. School
+    if (!empty($schools)) {
+        if (!$school_id && !$school_manual) {
+            $errors['school'] = 'Please select your child\'s school. If it is not listed, choose "Other" and type the name.';
+        }
+    } elseif (!$school_manual) {
+        $errors['school'] = 'Please enter the school name.';
+    }
+
+    // 2. Parent / guardian
+    if (mb_strlen($parent_name) < 2) {
+        $errors['parent_name'] = 'Please enter the parent / guardian\'s full name.';
+    }
+    if (!preg_match('/^[6-9]\d{9}$/', $parent_mobile)) {
+        $errors['parent_mobile'] = 'Enter a valid 10-digit mobile number (starting with 6, 7, 8 or 9).';
+    }
+    if ($parent_email !== null && !filter_var($parent_email, FILTER_VALIDATE_EMAIL)) {
+        $errors['parent_email'] = 'This email address does not look valid. Correct it or leave the field blank.';
+    }
+    if ($raw_aadhar !== '' && strlen($raw_aadhar) !== 4) {
+        $errors['parent_aadhar'] = 'Enter only the last 4 digits of the Aadhaar number.';
+    }
+    if ($parent_aadhar_mobile !== null && !preg_match('/^[6-9]\d{9}$/', $parent_aadhar_mobile)) {
+        $errors['parent_aadhar_mobile'] = 'The Aadhaar-linked mobile must be a valid 10-digit number, or leave it blank.';
+    }
+
+    // 3. Student
+    if (mb_strlen($student_name) < 2) {
+        $errors['student_name'] = 'Please enter the student\'s full name.';
+    }
+    if ($raw_student_dob === '' && $plans_enabled) {
+        $errors['student_dob'] = 'Date of birth is required — the health plan and fee are set from your child\'s age.';
+    } elseif ($raw_student_dob !== '') {
+        $d = DateTime::createFromFormat('!Y-m-d', $raw_student_dob);
+        if (!$d || $d->format('Y-m-d') !== $raw_student_dob) {
+            $errors['student_dob'] = 'Enter the date of birth in a valid format.';
+        } elseif ($d > new DateTime('today')) {
+            $errors['student_dob'] = 'The date of birth cannot be in the future.';
+        } elseif ($d < new DateTime('-25 years')) {
+            $errors['student_dob'] = 'Please re-check the date of birth.';
+        }
+    }
+    if ($student_pincode !== null && !preg_match('/^\d{6}$/', $student_pincode)) {
+        $errors['student_pincode'] = 'PIN code must be exactly 6 digits, or leave it blank.';
+    }
+
+    // 4. Health ID (ABHA) — $abha_err was set earlier
+    if ($abha_err) {
+        $errors['student_abha'] = $abha_err;
+    }
+
+    // 5. General health — only validated when a value is entered
+    if ($height_cm !== null && ($height_cm < 30 || $height_cm > 250)) {
+        $errors['height_cm'] = 'Enter the height in centimetres (between 30 and 250), or leave it blank.';
+    }
+    if ($weight_kg !== null && ($weight_kg < 5 || $weight_kg > 200)) {
+        $errors['weight_kg'] = 'Enter the weight in kilograms (between 5 and 200), or leave it blank.';
+    }
+
+    // 12 & 13. Consent
+    if (!in_array(true, $consent_given_items, true)) {
+        $errors['consent'] = 'Please tick at least one health service you are giving consent for.';
+    }
+    if (!$consent_given) {
+        $errors['i_agree'] = 'You must tick the declaration checkbox before submitting the form.';
+    }
+
+    /* ── Resolve the plan from the child's age (server-authoritative) ── */
+    $pcf_age  = pcf_age_from_dob($raw_student_dob ?: null);
+    $pcf_plan = $plans_enabled ? pcf_plan_for_age($consent_plans, $pcf_age) : null;
+    if ($plans_enabled && !$errors && !$pcf_plan) {
+        $errors['student_dob'] = 'We could not match a health plan to age ' . (int) $pcf_age
+            . '. Please check the date of birth, or contact the school.';
+    }
+
+    if ($errors) {
+        $msg = 'Please complete the highlighted field'
+            . (count($errors) > 1 ? 's' : '') . ' — ' . count($errors) . ' item'
+            . (count($errors) > 1 ? 's need' : ' needs') . ' your attention.';
+        if ($is_ajax) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => $msg, 'errors' => $errors]);
+            exit;
+        }
+        $error = $msg;
     } else {
-        $token = bin2hex(random_bytes(16));
+        /* Reuse a pending row when resuming an abandoned payment, else insert fresh. */
+        $existing = null;
+        if ($resume_token && strlen($resume_token) === 32) {
+            $es = $conn->prepare("SELECT id, token FROM parent_consent_forms WHERE token = ? AND payment_status = 'pending' LIMIT 1");
+            $es->bind_param('s', $resume_token);
+            $es->execute();
+            $existing = $es->get_result()->fetch_assoc() ?: null;
+        }
+        $token = $existing['token'] ?? bin2hex(random_bytes(16));
         $ip = $_SERVER['REMOTE_ADDR'] ?? '';
         $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
         $decl = "I, {$parent_name}, hereby give consent for the health checkup of my ward {$student_name}.";
+
+        $plan_id    = $pcf_plan ? (int) $pcf_plan['id'] : null;
+        $plan_name  = $pcf_plan['name'] ?? null;
+        $plan_price = $pcf_plan ? (float) $pcf_plan['price'] : null;
 
         $row = [
             'token'                => $token,
             'school_id'            => $school_id,
             'school_name_manual'   => $school_manual ?: null,
+            'plan_id'              => $plan_id,
+            'plan_name'            => $plan_name,
+            'plan_price'           => $plan_price,
+            'payment_status'       => 'pending',
             'parent_name'          => $parent_name,
             'relation'             => $relation,
             'parent_mobile'        => $parent_mobile,
@@ -315,27 +714,112 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_consent'])) {
         ];
 
         $cols  = array_keys($row);
-        $ph    = implode(',', array_fill(0, count($cols), '?'));
         $types = '';
         $vals  = [];
         foreach ($row as $val) {
             $types .= is_int($val) ? 'i' : (is_float($val) ? 'd' : 's');
             $vals[] = $val;
         }
-        $ins = $conn->prepare("INSERT INTO parent_consent_forms (`" . implode('`,`', $cols) . "`) VALUES ($ph)");
-        $ins->bind_param($types, ...$vals);
-        if ($ins->execute()) {
-            $success = true;
+
+        $consent_id = 0;
+        if ($existing) {
+            $set = implode(',', array_map(fn($c) => "`$c`=?", $cols));
+            $u = $conn->prepare("UPDATE parent_consent_forms SET $set, razorpay_order_id = NULL WHERE id = ?");
+            $existing_id = (int) $existing['id'];
+            $upvals = array_merge($vals, [$existing_id]);
+            $u->bind_param($types . 'i', ...$upvals);
+            $u->execute();
+            $consent_id = (int) $existing['id'];
+            $u->close();
         } else {
-            $error = 'Submission failed. Please try again.';
+            $ph  = implode(',', array_fill(0, count($cols), '?'));
+            $ins = $conn->prepare("INSERT INTO parent_consent_forms (`" . implode('`,`', $cols) . "`) VALUES ($ph)");
+            $ins->bind_param($types, ...$vals);
+            if (!$ins->execute()) {
+                $ins->close();
+                $out = ['success' => false, 'message' => 'Could not save the form. Please try again.'];
+                if ($is_ajax) { header('Content-Type: application/json'); echo json_encode($out); exit; }
+                $error = $out['message'];
+                goto pcf_done;
+            }
+            $consent_id = (int) $ins->insert_id;
+            $ins->close();
         }
-        $ins->close();
+
+        /* ── Free plan (₹0) — nothing to charge, mark paid straight away ── */
+        if ($plan_price !== null && $plan_price <= 0) {
+            $conn->query("UPDATE parent_consent_forms SET payment_status='paid', paid_at=NOW() WHERE id=" . $consent_id);
+            if ($is_ajax) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => true, 'free' => true, 'ref' => strtoupper(substr($token, 0, 8))]);
+                exit;
+            }
+            $success = true;
+            goto pcf_done;
+        }
+
+        /* ── Create the Razorpay order ── */
+        $amountPaise = (int) round(((float) $plan_price) * 100);
+        [$order, $orderErr] = pcf_create_razorpay_order(
+            $amountPaise,
+            'pcf_' . $consent_id . '_' . time(),
+            ['consent_id' => $consent_id, 'plan_id' => (int) $plan_id, 'purpose' => 'school_health_consent']
+        );
+        if (!$order) {
+            $out = ['success' => false, 'message' => $orderErr, 'token' => $token];
+            if ($is_ajax) { header('Content-Type: application/json'); echo json_encode($out); exit; }
+            $error = $orderErr;
+            goto pcf_done;
+        }
+        $oid = $order['id'];
+        $uo = $conn->prepare("UPDATE parent_consent_forms SET razorpay_order_id = ? WHERE id = ?");
+        $uo->bind_param('si', $oid, $consent_id);
+        $uo->execute();
+
+        if ($is_ajax) {
+            header('Content-Type: application/json');
+            echo json_encode([
+                'success'  => true,
+                'key_id'   => RAZORPAY_KEY_ID,
+                'order_id' => $order['id'],
+                'amount'   => $amountPaise,
+                'currency' => 'INR',
+                'plan_name' => $plan_name,
+                'token'    => $token,
+                'ref'      => strtoupper(substr($token, 0, 8)),
+                'prefill'  => [
+                    'name'    => $parent_name,
+                    'email'   => $parent_email ?? '',
+                    'contact' => $parent_mobile,
+                ],
+            ]);
+            exit;
+        }
+        // Non-AJAX (JS disabled): the wizard can't run without JS anyway.
+        $error = 'Please enable JavaScript to complete the secure payment.';
     }
 
+    pcf_done:
 }
 
 /* ── Tiny render helpers for the assessment fields ── */
 function pcf_old($k, $d = '') { return htmlspecialchars((string) ($_POST[$k] ?? $d), ENT_QUOTES); }
+
+/* Inline validation error under a field (empty string when the field is OK). */
+function pcf_err(string $key): string
+{
+    global $errors;
+    return isset($errors[$key])
+        ? '<div class="field-error"><i class="fas fa-circle-exclamation"></i> ' . htmlspecialchars($errors[$key]) . '</div>'
+        : '';
+}
+
+/* " is-invalid" class fragment for an <input>/<select> that failed validation. */
+function pcf_inv(string $key): string
+{
+    global $errors;
+    return isset($errors[$key]) ? ' is-invalid' : '';
+}
 
 function pcf_radio(string $name, array $opts): string
 {
@@ -384,6 +868,9 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>school/assets/school.css">
+    <?php if ($plans_enabled): ?>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <?php endif; ?>
     <style>
         /* Theme aligned with the School Portal — White | #0C74C5 | #02c9b8, no gradients */
         :root {
@@ -715,6 +1202,168 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
 
             .form-footer { font-size: .68rem; padding: 12px 16px; line-height: 1.6; }
         }
+
+        /* ── Step tabs ── */
+        .step-nav {
+            display: flex;
+            gap: 6px;
+            max-width: 760px;
+            margin: 0 auto 18px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .step-tab {
+            flex: 1 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            background: #fff;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 9px;
+            padding: 8px 12px;
+            font-size: .78rem;
+            font-weight: 600;
+            color: #64748b;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: border-color .2s, color .2s, background .2s;
+        }
+        .step-tab .step-dot {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #e2e8f0;
+            color: #64748b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .72rem;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        .step-tab.active {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: #f0f7ff;
+        }
+        .step-tab.active .step-dot { background: var(--primary); color: #fff; }
+        .step-tab.done .step-dot { background: var(--accent); color: #fff; }
+        .step-tab.has-error { border-color: #ef4444; color: #b91c1c; }
+        .step-tab.has-error .step-dot { background: #ef4444; color: #fff; }
+
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; animation: fadeStep .25s ease; }
+        @keyframes fadeStep { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+        /* ── Inline field errors ── */
+        .field-error {
+            color: #b91c1c;
+            font-size: .76rem;
+            font-weight: 600;
+            margin-top: 4px;
+            display: flex;
+            align-items: flex-start;
+            gap: 5px;
+        }
+        .form-control.is-invalid,
+        .form-select.is-invalid {
+            border-color: #ef4444 !important;
+            background: #fef2f2;
+        }
+        .opt-row.is-invalid,
+        .consent-item.is-invalid { outline: 1.5px solid #ef4444; outline-offset: 3px; border-radius: 8px; }
+        .section-body.is-invalid { outline: 1.5px solid #ef4444; outline-offset: -1px; border-radius: 8px; }
+
+        /* ── Wizard nav buttons ── */
+        .wizard-nav {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            max-width: 760px;
+            margin: 4px auto 0;
+        }
+        .wz-count { flex: 1; text-align: center; font-size: .78rem; color: #94a3b8; font-weight: 600; }
+        .btn-wz {
+            border: none;
+            border-radius: 10px;
+            padding: 12px 22px;
+            font-size: .92rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background .2s, opacity .2s;
+        }
+        .btn-wz-back { background: #eef2f7; color: #475569; }
+        .btn-wz-back:hover { background: #e2e8f0; }
+        .btn-wz-next { background: var(--primary); color: #fff; }
+        .btn-wz-next:hover { background: var(--primary-dk); }
+        .btn-wz-submit { background: #059669; color: #fff; }
+        .btn-wz-submit:hover { background: #047857; }
+
+        @media (max-width: 575px) {
+            .step-tab .step-txt { display: none; }
+            .step-tab { flex: 1 1 auto; justify-content: center; padding: 9px; }
+            .wizard-nav { flex-wrap: wrap; }
+            .btn-wz { flex: 1 1 auto; }
+            .wz-count { order: -1; flex-basis: 100%; margin-bottom: 4px; }
+        }
+
+        /* ── Plan summary bar + plan card + payment ── */
+        .plan-summary-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            max-width: 760px;
+            margin: 0 auto 14px;
+            padding: 10px 16px;
+            background: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            border-radius: 10px;
+            font-size: .85rem;
+            color: #065f46;
+        }
+        .plan-summary-price { font-weight: 800; white-space: nowrap; }
+
+        .plan-card { border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 16px; }
+        .plan-card.filled { border-color: var(--accent); background: #f0fefe; }
+        .plan-card .pc-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        .plan-card .pc-name { font-size: 1rem; font-weight: 800; }
+        .plan-card .pc-tier { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+        .plan-card .pc-price { font-size: 1.35rem; font-weight: 800; }
+        .plan-card .pc-price small { font-size: .72rem; font-weight: 600; color: #64748b; }
+        .plan-card .pc-age { font-size: .74rem; color: #64748b; margin-top: 2px; }
+        .plan-card ul { list-style: none; padding: 0; margin: 12px 0 0; }
+        .plan-card li { font-size: .82rem; padding: 3px 0 3px 22px; position: relative; }
+        .plan-card li::before { content: "\f058"; font-family: "Font Awesome 6 Free"; font-weight: 900; position: absolute; left: 0; color: var(--accent); }
+        .plan-card .pc-lock { margin-top: 12px; font-size: .74rem; color: #94a3b8; }
+
+        .pcf-spinner {
+            display: inline-block; width: 15px; height: 15px; vertical-align: -2px;
+            border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; border-radius: 50%;
+            animation: pcfSpin .7s linear infinite;
+        }
+        .pcf-spinner-lg { width: 34px; height: 34px; border-width: 3px; border-color: rgba(12,116,197,.25); border-top-color: var(--primary); }
+        @keyframes pcfSpin { to { transform: rotate(360deg); } }
+
+        #payOverlay {
+            position: fixed; inset: 0; z-index: 3000;
+            background: rgba(15,23,42,.55); backdrop-filter: blur(2px);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .pay-overlay-box {
+            background: #fff; border-radius: 14px; padding: 28px 34px; text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,.25); max-width: 320px;
+        }
+        .pay-overlay-box p { margin: 14px 0 0; font-size: .9rem; font-weight: 600; color: var(--ink); }
+
+        .btn-wz-submit[disabled] { opacity: .8; cursor: progress; }
+        #btnSubmit .btn-spin { display: inline-flex; align-items: center; gap: 8px; }
+        .pcf-resume-note {
+            background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px;
+            padding: 12px 15px; font-size: .82rem; color: #78350f; margin-top: 14px;
+        }
+        .pcf-resume-note code { background: #fff; border: 1px solid #fcd34d; border-radius: 5px; padding: 1px 6px; word-break: break-all; }
     </style>
 </head>
 
@@ -732,7 +1381,34 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
 
     <div class="consent-wrapper">
 
-        <?php if ($success): ?>
+        <?php if ($resume_row): ?>
+            <?php
+            $rr_amount = number_format((float) $resume_row['plan_price']);
+            ?>
+            <div class="success-card" style="max-width:460px;">
+                <div class="success-icon" style="background:#fef3c7;color:#92400e;"><i class="fas fa-clock"></i></div>
+                <h4 style="font-weight:700;color:var(--primary);">Complete your payment</h4>
+                <p style="color:#64748b;font-size:.86rem;">Your consent form for
+                    <strong><?= htmlspecialchars($resume_row['student_name']) ?></strong> is saved. Finish the payment to submit it.</p>
+                <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px 16px;margin:14px 0;font-size:.85rem;line-height:1.9;text-align:left;">
+                    <strong>Reference:</strong> <?= strtoupper(substr($resume_row['token'], 0, 8)) ?><br>
+                    <strong>Plan:</strong> <?= htmlspecialchars($resume_row['plan_name']) ?><br>
+                    <strong>Amount:</strong> &#8377;<?= $rr_amount ?>
+                </div>
+                <button type="button" id="resumePayBtn" class="btn-submit" data-token="<?= htmlspecialchars($resume_row['token'], ENT_QUOTES) ?>">
+                    <span class="btn-label"><i class="fas fa-lock me-1"></i>Pay &#8377;<?= $rr_amount ?> now</span>
+                    <span class="btn-spin" hidden><span class="pcf-spinner"></span> Please wait…</span>
+                </button>
+                <p style="font-size:.75rem;color:#94a3b8;margin-top:12px;">Secured by Razorpay. You will get an email once payment is confirmed.</p>
+            </div>
+            <div id="payOverlay" hidden>
+                <div class="pay-overlay-box">
+                    <span class="pcf-spinner pcf-spinner-lg"></span>
+                    <p id="payOverlayMsg">Confirming your payment…</p>
+                </div>
+            </div>
+
+        <?php elseif ($success): ?>
             <div class="success-card">
                 <div class="success-icon"><i class="fas fa-check"></i></div>
                 <h4 style="font-weight:700;color:var(--primary);">Consent Submitted!</h4>
@@ -753,13 +1429,72 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
         <?php else: ?>
 
             <?php if ($error): ?>
-                <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" style="border-radius:10px;">
-                    <i class="fas fa-exclamation-circle"></i> <?= htmlspecialchars($error) ?>
+                <div class="alert alert-danger mb-3" style="border-radius:10px;" id="errBox">
+                    <div class="d-flex align-items-center gap-2 fw-semibold">
+                        <i class="fas fa-exclamation-circle"></i> <?= htmlspecialchars($error) ?>
+                    </div>
+                    <?php if ($errors): ?>
+                        <ul class="mb-0 mt-2" style="padding-left:1.1rem;font-size:.83rem;">
+                            <?php foreach ($errors as $k => $msg): ?>
+                                <li><a href="#" class="err-jump" data-field="<?= htmlspecialchars($k, ENT_QUOTES) ?>"
+                                        style="color:#b91c1c;"><?= htmlspecialchars($msg) ?></a></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
                 </div>
             <?php endif; ?>
 
-            <form method="POST" id="cForm" enctype="multipart/form-data" novalidate>
+            <!-- Step navigation -->
+            <div class="step-nav" id="stepNav">
+                <?php
+                $steps = [
+                    ['fa-school', 'School &amp; Parent'],
+                    ['fa-child', 'Student'],
+                    ['fa-heart-pulse', 'Health Screening'],
+                    ['fa-notes-medical', 'Medical History'],
+                    [$plans_enabled ? 'fa-credit-card' : 'fa-clipboard-check', $plans_enabled ? 'Consent &amp; Pay' : 'Consent'],
+                ];
+                foreach ($steps as $i => [$ic, $lbl]): ?>
+                    <button type="button" class="step-tab<?= $i === 0 ? ' active' : '' ?>" data-step="<?= $i ?>">
+                        <span class="step-dot"><?= $i + 1 ?></span>
+                        <span class="step-txt"><i class="fas <?= $ic ?> me-1"></i><?= $lbl ?></span>
+                    </button>
+                <?php endforeach; ?>
+            </div>
+
+            <?php if ($plans_enabled): ?>
+            <div class="plan-summary-bar" id="planSummary" hidden>
+                <span><i class="fas fa-layer-group me-2"></i>Your plan: <strong id="planSummaryName">—</strong></span>
+                <span class="plan-summary-price" id="planSummaryPrice">—</span>
+            </div>
+            <?php endif; ?>
+
+            <?php
+            $plans_json = [];
+            foreach ($consent_plans as $p) {
+                $plans_json[] = [
+                    'id'     => (int) $p['id'],
+                    'name'   => $p['name'],
+                    'tier'   => $p['tier'],
+                    'price'  => (float) $p['price'],
+                    'billing' => $p['billing_label'],
+                    'age_min' => $p['age_min'] === null ? null : (int) $p['age_min'],
+                    'age_max' => $p['age_max'] === null ? null : (int) $p['age_max'],
+                    'accent' => preg_match('/^#[0-9a-fA-F]{6}$/', $p['accent_color'] ?? '') ? $p['accent_color'] : '#0C74C5',
+                    'features' => $p['feature_list'],
+                ];
+            }
+            $resume_dob = $resume_row['student_dob'] ?? '';
+            ?>
+            <form method="POST" id="cForm" enctype="multipart/form-data" novalidate
+                data-plans='<?= htmlspecialchars(json_encode($plans_json), ENT_QUOTES) ?>'
+                data-plans-enabled="<?= $plans_enabled ? '1' : '0' ?>"
+                data-resume-token="<?= htmlspecialchars($resume_row['token'] ?? '', ENT_QUOTES) ?>">
                 <input type="hidden" name="submit_consent" value="1">
+                <input type="hidden" name="pcf_action" id="pcfAction" value="create_order">
+                <input type="hidden" name="resume_token" value="<?= htmlspecialchars($resume_row['token'] ?? '', ENT_QUOTES) ?>">
+
+                <div class="tab-pane active" data-step="0"><!-- STEP 1: School & Parent -->
 
                 <!-- 1. School -->
                 <div class="form-section">
@@ -770,8 +1505,8 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                     <div class="section-body">
                         <?php if (!empty($schools)): ?>
                             <div class="mb-3">
-                                <label class="form-label">Select School</label>
-                                <select name="school_id" class="form-select" id="schoolSel">
+                                <label class="form-label">Select School <span class="req">*</span></label>
+                                <select name="school_id" class="form-select<?= pcf_inv('school') ?>" id="schoolSel">
                                     <option value="">— Select your child's school —</option>
                                     <?php foreach ($schools as $sc): ?>
                                         <option value="<?= $sc['id'] ?>" <?= ($prefill_school == $sc['id']) ? 'selected' : '' ?>>
@@ -779,6 +1514,7 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                                     <?php endforeach; ?>
                                     <option value="0">Other (type below)</option>
                                 </select>
+                                <?= pcf_err('school') ?>
                             </div>
                             <div id="manualWrap" style="display:none">
                                 <label class="form-label">School Name</label>
@@ -788,8 +1524,9 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                             </div>
                         <?php else: ?>
                             <label class="form-label">School Name <span class="req">*</span></label>
-                            <input type="text" name="school_name_manual" class="form-control" placeholder="Enter school name"
+                            <input type="text" name="school_name_manual" class="form-control<?= pcf_inv('school') ?>" placeholder="Enter school name"
                                 value="<?= htmlspecialchars($_POST['school_name_manual'] ?? '') ?>">
+                            <?= pcf_err('school') ?>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -803,8 +1540,8 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                     <div class="section-body">
                         <div class="row g-3">
                             <div class="col-md-6"><label class="form-label">Full Name <span class="req">*</span></label><input
-                                    type="text" name="parent_name" class="form-control" required placeholder="e.g. Ramesh Kumar"
-                                    value="<?= htmlspecialchars($_POST['parent_name'] ?? '') ?>"></div>
+                                    type="text" name="parent_name" class="form-control<?= pcf_inv('parent_name') ?>" required placeholder="e.g. Ramesh Kumar"
+                                    value="<?= htmlspecialchars($_POST['parent_name'] ?? '') ?>"><?= pcf_err('parent_name') ?></div>
                             <div class="col-md-6"><label class="form-label">Relation</label><select name="relation"
                                     class="form-select"><?php foreach (['Father', 'Mother', 'Guardian', 'Other'] as $r): ?>
                                         <option value="<?= $r ?>" <?= (($_POST['relation'] ?? 'Father') === $r) ? 'selected' : '' ?>>
@@ -812,27 +1549,33 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                                 </select></div>
                             <div class="col-md-6"><label class="form-label">Mobile Number <span
                                         class="req">*</span></label><input type="tel" name="parent_mobile"
-                                    class="form-control" required placeholder="10-digit number" maxlength="10"
-                                    value="<?= htmlspecialchars($_POST['parent_mobile'] ?? '') ?>"></div>
+                                    class="form-control<?= pcf_inv('parent_mobile') ?>" required placeholder="10-digit number" maxlength="10" inputmode="numeric"
+                                    value="<?= htmlspecialchars($_POST['parent_mobile'] ?? '') ?>"><?= pcf_err('parent_mobile') ?></div>
                             <div class="col-md-6"><label class="form-label">Email <span
                                         style="color:#94a3b8;font-weight:400">(optional)</span></label><input type="email"
-                                    name="parent_email" class="form-control" placeholder="you@example.com"
-                                    value="<?= htmlspecialchars($_POST['parent_email'] ?? '') ?>"></div>
+                                    name="parent_email" class="form-control<?= pcf_inv('parent_email') ?>" placeholder="you@example.com"
+                                    value="<?= htmlspecialchars($_POST['parent_email'] ?? '') ?>"><?= pcf_err('parent_email') ?></div>
                             <div class="col-md-6">
                                 <label class="form-label">Aadhaar Last 4 Digits</label>
-                                <input type="text" name="parent_aadhar" class="form-control" placeholder="XXXX"
+                                <input type="text" name="parent_aadhar" class="form-control<?= pcf_inv('parent_aadhar') ?>" placeholder="XXXX"
                                     maxlength="4" inputmode="numeric" value="<?= pcf_old('parent_aadhar') ?>">
                                 <div class="hint"><i class="fas fa-lock me-1"></i>Only last 4 digits stored — full Aadhaar is never saved</div>
+                                <?= pcf_err('parent_aadhar') ?>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Aadhaar-linked Mobile Number</label>
-                                <input type="tel" name="parent_aadhar_mobile" class="form-control" placeholder="10-digit number"
+                                <input type="tel" name="parent_aadhar_mobile" class="form-control<?= pcf_inv('parent_aadhar_mobile') ?>" placeholder="10-digit number"
                                     maxlength="10" inputmode="numeric" value="<?= pcf_old('parent_aadhar_mobile') ?>">
                                 <div class="hint">Mobile number registered with the parent/guardian's Aadhaar.</div>
+                                <?= pcf_err('parent_aadhar_mobile') ?>
                             </div>
                         </div>
                     </div>
                 </div>
+
+                </div><!-- /STEP 1 -->
+
+                <div class="tab-pane" data-step="1"><!-- STEP 2: Student -->
 
                 <!-- 3. Student -->
                 <div class="form-section">
@@ -844,11 +1587,11 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                         <div class="row g-3">
                             <div class="col-md-6"><label class="form-label">Student Full Name <span
                                         class="req">*</span></label><input type="text" name="student_name"
-                                    class="form-control" required placeholder="e.g. Aryan Kumar"
-                                    value="<?= htmlspecialchars($_POST['student_name'] ?? '') ?>"></div>
+                                    class="form-control<?= pcf_inv('student_name') ?>" required placeholder="e.g. Aryan Kumar"
+                                    value="<?= htmlspecialchars($_POST['student_name'] ?? '') ?>"><?= pcf_err('student_name') ?></div>
                             <div class="col-md-6"><label class="form-label">Date of Birth</label><input type="date"
-                                    name="student_dob" class="form-control" max="<?= date('Y-m-d') ?>"
-                                    value="<?= htmlspecialchars($_POST['student_dob'] ?? '') ?>"></div>
+                                    name="student_dob" class="form-control<?= pcf_inv('student_dob') ?>" max="<?= date('Y-m-d') ?>"
+                                    value="<?= htmlspecialchars($_POST['student_dob'] ?? '') ?>"><?= pcf_err('student_dob') ?></div>
                             <div class="col-md-4"><label class="form-label">Gender</label><select name="student_gender"
                                     class="form-select">
                                     <option value="">— Select —</option><?php foreach (['Male', 'Female', 'Other'] as $g): ?>
@@ -879,9 +1622,9 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                                     name="student_state" class="form-control" placeholder="e.g. Uttar Pradesh"
                                     value="<?= htmlspecialchars($_POST['student_state'] ?? '') ?>"></div>
                             <div class="col-md-3"><label class="form-label">PIN Code</label><input type="text"
-                                    name="student_pincode" class="form-control" placeholder="e.g. 226001" maxlength="6"
+                                    name="student_pincode" class="form-control<?= pcf_inv('student_pincode') ?>" placeholder="e.g. 226001" maxlength="6"
                                     inputmode="numeric" pattern="[0-9]{6}"
-                                    value="<?= pcf_old('student_pincode') ?>"></div>
+                                    value="<?= pcf_old('student_pincode') ?>"><?= pcf_err('student_pincode') ?></div>
                             <div class="col-12">
                                 <div class="file-drop">
                                     <label class="q-label mb-1"><i class="fas fa-paperclip me-1" style="color:var(--primary)"></i>Aadhaar Card / Birth Certificate <span style="font-weight:400;color:#94a3b8">(optional — JPG / PNG / PDF, max 6 MB)</span></label>
@@ -907,18 +1650,19 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">ABHA Number</label>
-                                <input type="text" name="student_abha_number" class="form-control"
+                                <input type="text" name="student_abha_number" class="form-control<?= pcf_inv('student_abha') ?>"
                                     placeholder="XX-XXXX-XXXX-XXXX" maxlength="17" inputmode="numeric"
                                     value="<?= pcf_old('student_abha_number') ?>">
                                 <div class="hint">14-digit Ayushman Bharat Health Account number.</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">ABHA Address</label>
-                                <input type="text" name="student_abha_address" class="form-control"
+                                <input type="text" name="student_abha_address" class="form-control<?= pcf_inv('student_abha') ?>"
                                     placeholder="name@abdm"
                                     value="<?= pcf_old('student_abha_address') ?>">
                                 <div class="hint">e.g. <code>aryan.kumar@abdm</code></div>
                             </div>
+                            <div class="col-12"><?= pcf_err('student_abha') ?></div>
                         </div>
                         <div class="abha-note">
                             <i class="fas fa-info-circle me-1"></i>
@@ -927,6 +1671,10 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                         </div>
                     </div>
                 </div>
+
+                </div><!-- /STEP 2 -->
+
+                <div class="tab-pane" data-step="2"><!-- STEP 3: Health Screening -->
 
                 <!-- 5. General Health -->
                 <div class="form-section">
@@ -937,9 +1685,9 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                     <div class="section-body">
                         <div class="row g-3">
                             <div class="col-6 col-md-3"><label class="form-label">Height (cm)</label>
-                                <input type="number" step="0.1" min="0" name="height_cm" id="ht" class="form-control" value="<?= pcf_old('height_cm') ?>"></div>
+                                <input type="number" step="0.1" min="0" name="height_cm" id="ht" class="form-control<?= pcf_inv('height_cm') ?>" value="<?= pcf_old('height_cm') ?>"><?= pcf_err('height_cm') ?></div>
                             <div class="col-6 col-md-3"><label class="form-label">Weight (kg)</label>
-                                <input type="number" step="0.1" min="0" name="weight_kg" id="wt" class="form-control" value="<?= pcf_old('weight_kg') ?>"></div>
+                                <input type="number" step="0.1" min="0" name="weight_kg" id="wt" class="form-control<?= pcf_inv('weight_kg') ?>" value="<?= pcf_old('weight_kg') ?>"><?= pcf_err('weight_kg') ?></div>
                             <div class="col-6 col-md-3"><label class="form-label">BMI</label>
                                 <input type="text" id="bmi" class="form-control" readonly placeholder="auto"></div>
                             <div class="col-6 col-md-3"><label class="form-label">Blood Group</label>
@@ -1036,6 +1784,10 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                     </div>
                 </div>
 
+                </div><!-- /STEP 3 -->
+
+                <div class="tab-pane" data-step="3"><!-- STEP 4: Medical History -->
+
                 <!-- 9. Medical History & Allergies -->
                 <div class="form-section">
                     <div class="section-head">
@@ -1112,6 +1864,32 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                     </div>
                 </div>
 
+                </div><!-- /STEP 4 -->
+
+                <div class="tab-pane" data-step="4"><!-- STEP 5: Consent, Plan & Payment -->
+
+                <?php if ($plans_enabled): ?>
+                <!-- Health plan (auto-selected from the child's age, locked) -->
+                <div class="form-section">
+                    <div class="section-head">
+                        <div class="s-num"><i class="fas fa-credit-card"></i></div>
+                        <h5><i class="fas fa-layer-group me-2" style="color:var(--primary)"></i>Your Health Plan</h5>
+                    </div>
+                    <div class="section-body">
+                        <p style="font-size:.83rem;color:#64748b;margin-bottom:12px">
+                            This plan is selected automatically from your child's age and cannot be changed here.
+                            The fee is per student, per year.
+                        </p>
+                        <div id="planCard" class="plan-card">
+                            <div class="plan-card-empty text-muted" style="font-size:.85rem;">
+                                <i class="fas fa-circle-info me-1"></i>Enter your child's date of birth in step 2 to see your plan.
+                            </div>
+                        </div>
+                        <div class="field-error" id="planErr" style="display:none"></div>
+                    </div>
+                </div>
+                <?php endif; ?>
+
                 <!-- 12. Consent -->
                 <div class="form-section">
                     <div class="section-head">
@@ -1120,7 +1898,8 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                     </div>
                     <div class="section-body">
                         <p style="font-size:.83rem;color:#64748b;margin-bottom:13px">Tick the services you allow for your
-                            child. You may select all or specific ones.</p>
+                            child. Select at least one — you may tick all or specific ones. <span class="req">*</span></p>
+                        <?= pcf_err('consent') ?>
                         <?php
                         $items = [
                             'general_checkup' => ['fas fa-stethoscope', 'General Physical Checkup', 'Overall health assessment by the school doctor.'],
@@ -1170,7 +1949,7 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                             stored securely and used solely for the wellbeing of my child, in compliance with ABDM / ABHA
                             data privacy guidelines.
                         </div>
-                        <label class="consent-item" style="border-color:#f59e0b;background:#fffbeb" id="ci_agree">
+                        <label class="consent-item<?= pcf_inv('i_agree') ?>" style="border-color:#f59e0b;background:#fffbeb" id="ci_agree">
                             <input type="checkbox" name="i_agree" value="1" required
                                 onchange="toggleCI('_agree',this.checked)" <?= isset($_POST['i_agree']) ? 'checked' : '' ?>>
                             <div style="font-size:.87rem;font-weight:600;color:#92400e">
@@ -1179,13 +1958,37 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                                     class="req">*</span>
                             </div>
                         </label>
+                        <?= pcf_err('i_agree') ?>
                         <div class="hint" style="margin-top:8px"><i class="fas fa-lock me-1"></i>Aadhaar last 4 digits
                             only — full number never stored. Submission is secured.</div>
                     </div>
                 </div>
 
-                <button type="submit" class="btn-submit"><i class="fas fa-paper-plane me-2"></i>Submit Consent Form</button>
+                </div><!-- /STEP 5 -->
+
+                <!-- Wizard navigation -->
+                <div class="wizard-nav">
+                    <button type="button" class="btn-wz btn-wz-back" id="btnBack" style="display:none">
+                        <i class="fas fa-arrow-left me-1"></i>Back
+                    </button>
+                    <div class="wz-count" id="wzCount"></div>
+                    <button type="button" class="btn-wz btn-wz-next" id="btnNext">
+                        Next<i class="fas fa-arrow-right ms-1"></i>
+                    </button>
+                    <button type="submit" class="btn-wz btn-wz-submit" id="btnSubmit" style="display:none">
+                        <span class="btn-label"><i class="fas fa-<?= $plans_enabled ? 'lock' : 'paper-plane' ?> me-1"></i><?= $plans_enabled ? 'Proceed to Secure Payment' : 'Submit Consent Form' ?></span>
+                        <span class="btn-spin" hidden><span class="pcf-spinner"></span> Please wait…</span>
+                    </button>
+                </div>
             </form>
+
+            <!-- payment overlay -->
+            <div id="payOverlay" hidden>
+                <div class="pay-overlay-box">
+                    <span class="pcf-spinner pcf-spinner-lg"></span>
+                    <p id="payOverlayMsg">Confirming your payment…</p>
+                </div>
+            </div>
         <?php endif; ?>
     </div>
 
@@ -1194,28 +1997,27 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        const form = document.getElementById('cForm');
+        if (form) { /* skip all form wiring on the success screen */
         const schoolSel = document.getElementById('schoolSel');
         const manualWrap = document.getElementById('manualWrap');
         if (schoolSel) {
-            schoolSel.addEventListener('change', () => { if (manualWrap) manualWrap.style.display = schoolSel.value === '0' ? 'block' : 'none'; });
-            if (schoolSel.value === '0' && manualWrap) manualWrap.style.display = 'block';
+            const syncManual = () => { if (manualWrap) manualWrap.style.display = schoolSel.value === '0' ? 'block' : 'none'; };
+            schoolSel.addEventListener('change', syncManual);
+            syncManual();
         }
-        function toggleCI(key, checked) {
+        window.toggleCI = function (key, checked) {
             const el = document.getElementById('ci' + key);
             if (el) el.classList.toggle('checked', checked);
-        }
-        function selAll(state) {
+        };
+        window.selAll = function (state) {
             document.querySelectorAll('.consent-item input[name^="consent"]').forEach(cb => {
                 cb.checked = state;
                 toggleCI(cb.closest('.consent-item').id.replace('ci', ''), state);
             });
+            if (state) clearError('consent[general_checkup]');
         }
-        function updateProgress() {
-            const req = [...document.querySelectorAll('#cForm input[required]')];
-            const filled = req.filter(i => i.type === 'checkbox' ? i.checked : i.value.trim() !== '').length;
-            const bar = document.getElementById('pgBar');
-            if (bar && req.length) bar.style.width = Math.round((filled / req.length) * 100) + '%';
-        }
+
         // ABHA number auto-format: XX-XXXX-XXXX-XXXX
         const abhaInput = document.querySelector('input[name="student_abha_number"]');
         if (abhaInput) {
@@ -1228,9 +2030,16 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                 abhaInput.value = out;
             });
         }
-        document.querySelectorAll('#cForm input,#cForm select').forEach(el => el.addEventListener('change', updateProgress));
+        // Keep numeric-only fields clean as the parent types
+        document.querySelectorAll('input[inputmode="numeric"], input[name="parent_mobile"]').forEach(el => {
+            el.addEventListener('input', () => {
+                const max = parseInt(el.getAttribute('maxlength') || '0', 10);
+                let v = el.value.replace(/\D/g, '');
+                if (max > 0) v = v.slice(0, max);
+                el.value = v;
+            });
+        });
         document.querySelectorAll('.consent-item input:checked').forEach(cb => toggleCI(cb.closest('.consent-item').id.replace('ci', ''), true));
-        updateProgress();
 
         /* ── BMI auto-calc ── */
         const ht = document.getElementById('ht'), wt = document.getElementById('wt'), bmiEl = document.getElementById('bmi');
@@ -1250,6 +2059,478 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
         }
         document.querySelectorAll('#cForm input[type=radio]').forEach(r => r.addEventListener('change', syncConds));
         syncConds();
+
+        /* ═══════════════════════════════════════════
+           Tab wizard + client-side validation
+        ═══════════════════════════════════════════ */
+        const panes = [...document.querySelectorAll('.tab-pane')];
+        const tabs = [...document.querySelectorAll('.step-tab')];
+        const btnBack = document.getElementById('btnBack');
+        const btnNext = document.getElementById('btnNext');
+        const btnSubmit = document.getElementById('btnSubmit');
+        const wzCount = document.getElementById('wzCount');
+        const pgBar = document.getElementById('pgBar');
+        const TOTAL = panes.length;
+        let step = 0;
+
+        // Field-level error helpers ---------------------------------
+        function fieldEl(name) { return form.querySelector('[name="' + name + '"]'); }
+        function setError(name, msg) {
+            const el = fieldEl(name) || fieldEl(name + '[]');
+            if (!el) return;
+            let anchor = el;
+            if (el.type === 'radio' || el.type === 'checkbox') {
+                anchor = el.closest('.opt-row') || el.closest('.consent-item') || el.closest('.section-body') || el.parentElement;
+                anchor.classList.add('is-invalid');
+            } else {
+                el.classList.add('is-invalid');
+            }
+            const host = anchor.closest('.col-12,.col-md-6,.col-md-5,.col-md-4,.col-md-3,.col-6,.mb-3,.section-body') || anchor.parentElement;
+            if (host && !host.querySelector('.field-error.js-err')) {
+                const d = document.createElement('div');
+                d.className = 'field-error js-err';
+                d.innerHTML = '<i class="fas fa-circle-exclamation"></i> ' + msg;
+                anchor.after(d);
+            }
+        }
+        function clearError(name) {
+            const el = fieldEl(name) || fieldEl(name + '[]');
+            if (el) {
+                el.classList.remove('is-invalid');
+                const r = el.closest('.opt-row'); if (r) r.classList.remove('is-invalid');
+                const host = el.closest('.col-12,.col-md-6,.col-md-5,.col-md-4,.col-md-3,.col-6,.mb-3,.section-body');
+                if (host) host.querySelectorAll('.field-error').forEach(n => n.remove());
+            }
+        }
+        function clearAllErrors(pane) {
+            (pane || document).querySelectorAll('.field-error').forEach(n => n.remove());
+            (pane || document).querySelectorAll('.is-invalid').forEach(n => n.classList.remove('is-invalid'));
+        }
+
+        // Validation rules per step --------------------------------
+        const isMobile = v => /^[6-9]\d{9}$/.test(v.replace(/\D/g, ''));
+
+        function validateStep(s) {
+            const pane = panes[s];
+            clearAllErrors(pane);
+            const errs = [];
+            const add = (name, msg) => { errs.push(name); setError(name, msg); };
+            const val = n => { const e = fieldEl(n); return e ? e.value.trim() : ''; };
+
+            if (s === 0) {
+                if (schoolSel) {
+                    if (!schoolSel.value) add('school_id', 'Please select your child\'s school.');
+                    else if (schoolSel.value === '0' && !val('school_name_manual')) add('school_name_manual', 'Please type the school name.');
+                } else if (!val('school_name_manual')) {
+                    add('school_name_manual', 'Please enter the school name.');
+                }
+                if (val('parent_name').length < 2) add('parent_name', 'Please enter the parent / guardian\'s full name.');
+                if (!isMobile(val('parent_mobile'))) add('parent_mobile', 'Enter a valid 10-digit mobile number (starting 6-9).');
+                const em = val('parent_email');
+                if (em && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) add('parent_email', 'This email address does not look valid.');
+                const a4 = val('parent_aadhar').replace(/\D/g, '');
+                if (a4 && a4.length !== 4) add('parent_aadhar', 'Enter only the last 4 digits of the Aadhaar number.');
+                const am = val('parent_aadhar_mobile');
+                if (am && !isMobile(am)) add('parent_aadhar_mobile', 'Enter a valid 10-digit number, or leave it blank.');
+            }
+
+            if (s === 1) {
+                if (val('student_name').length < 2) add('student_name', 'Please enter the student\'s full name.');
+                const dob = val('student_dob');
+                if (dob) {
+                    const d = new Date(dob), today = new Date(); today.setHours(0, 0, 0, 0);
+                    const min = new Date(); min.setFullYear(min.getFullYear() - 25);
+                    if (isNaN(d)) add('student_dob', 'Enter a valid date of birth.');
+                    else if (d > today) add('student_dob', 'Date of birth cannot be in the future.');
+                    else if (d < min) add('student_dob', 'Please re-check the date of birth.');
+                }
+                const pin = val('student_pincode').replace(/\D/g, '');
+                if (pin && pin.length !== 6) add('student_pincode', 'PIN code must be 6 digits, or leave it blank.');
+                const abha = val('student_abha_number').replace(/\D/g, '');
+                if (abha && abha.length !== 14) add('student_abha_number', 'ABHA number must be exactly 14 digits, or leave it blank.');
+                let aaddr = val('student_abha_address');
+                if (aaddr) {
+                    if (aaddr.indexOf('@') === -1) aaddr += '@abdm';
+                    if (!/^[a-zA-Z0-9._]{3,}@abdm$/.test(aaddr)) add('student_abha_address', 'ABHA address must look like name@abdm.');
+                }
+            }
+
+            if (s === 2) {
+                const h = parseFloat(val('height_cm'));
+                if (val('height_cm') && (isNaN(h) || h < 30 || h > 250)) add('height_cm', 'Enter height in cm (30–250), or leave it blank.');
+                const w = parseFloat(val('weight_kg'));
+                if (val('weight_kg') && (isNaN(w) || w < 5 || w > 200)) add('weight_kg', 'Enter weight in kg (5–200), or leave it blank.');
+            }
+
+            if (s === 4) {
+                const anyConsent = form.querySelectorAll('.consent-item input[name^="consent"]:checked').length > 0;
+                if (!anyConsent) add('consent[general_checkup]', 'Please tick at least one health service you consent to.');
+                if (!fieldEl('i_agree').checked) add('i_agree', 'You must tick the declaration checkbox to submit the form.');
+            }
+
+            tabs[s].classList.toggle('has-error', errs.length > 0);
+            return errs.length === 0 ? null : errs;
+        }
+
+        // Navigation ----------------------------------------------
+        function showStep(s, opts) {
+            opts = opts || {};
+            step = Math.max(0, Math.min(TOTAL - 1, s));
+            panes.forEach((p, i) => p.classList.toggle('active', i === step));
+            tabs.forEach((t, i) => {
+                t.classList.toggle('active', i === step);
+                t.classList.toggle('done', i < step);
+            });
+            btnBack.style.display = step === 0 ? 'none' : '';
+            btnNext.style.display = step === TOTAL - 1 ? 'none' : '';
+            btnSubmit.style.display = step === TOTAL - 1 ? '' : 'none';
+            wzCount.textContent = 'Step ' + (step + 1) + ' of ' + TOTAL;
+            if (pgBar) pgBar.style.width = Math.round(((step + 1) / TOTAL) * 100) + '%';
+            if (!opts.noScroll) window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        btnNext.addEventListener('click', () => {
+            const bad = validateStep(step);
+            if (bad) { focusFirst(bad); return; }
+            showStep(step + 1);
+        });
+        btnBack.addEventListener('click', () => showStep(step - 1));
+
+        tabs.forEach((t, i) => t.addEventListener('click', () => {
+            if (i > step) {                     // moving forward — validate everything in between
+                for (let k = step; k < i; k++) {
+                    const bad = validateStep(k);
+                    if (bad) { showStep(k, { noScroll: true }); focusFirst(bad); return; }
+                }
+            }
+            showStep(i);
+        }));
+
+        function focusFirst(names) {
+            const first = fieldEl(names[0]) || fieldEl(names[0] + '[]');
+            if (first) {
+                const box = first.closest('.field-error') ? first : first;
+                (box.closest('.form-section') || box).scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (first.focus) try { first.focus({ preventScroll: true }); } catch (e) { }
+            }
+        }
+
+        // Clear a field's error as soon as the parent fixes it
+        function clearSchoolError() {
+            const b = form.querySelector('[name="school_id"], [name="school_name_manual"]');
+            const host = b && b.closest('.section-body');
+            if (host) { host.querySelectorAll('.field-error').forEach(n => n.remove()); host.querySelectorAll('.is-invalid').forEach(n => n.classList.remove('is-invalid')); }
+        }
+        form.addEventListener('input', e => {
+            if (!e.target.name) return;
+            clearError(e.target.name.replace('[]', ''));
+            if (e.target.name === 'school_name_manual') clearSchoolError();
+        });
+        form.addEventListener('change', e => {
+            if (!e.target.name) return;
+            clearError(e.target.name.replace('[]', ''));
+            if (e.target.name === 'school_id') clearSchoolError();
+            if (e.target.name.indexOf('consent[') === 0) clearError('consent[general_checkup]');
+        });
+
+        /* ═══════════════════════════════════════════
+           Health plan (age-picked) + Razorpay payment
+        ═══════════════════════════════════════════ */
+        const PLANS = (() => { try { return JSON.parse(form.dataset.plans || '[]'); } catch (e) { return []; } })();
+        const PLANS_ON = form.dataset.plansEnabled === '1';
+        const RESUME_TOKEN = form.dataset.resumeToken || '';
+        const planCardEl = document.getElementById('planCard');
+        const planErrEl = document.getElementById('planErr');
+        const planSummary = document.getElementById('planSummary');
+        const planSummaryName = document.getElementById('planSummaryName');
+        const planSummaryPrice = document.getElementById('planSummaryPrice');
+        const dobEl = fieldEl('student_dob');
+        let currentPlan = null;
+
+        const rupee = n => '₹' + Number(n).toLocaleString('en-IN');
+        function ageFromDob(v) {
+            if (!v) return null;
+            const d = new Date(v), t = new Date();
+            if (isNaN(d) || d > t) return null;
+            let a = t.getFullYear() - d.getFullYear();
+            const m = t.getMonth() - d.getMonth();
+            if (m < 0 || (m === 0 && t.getDate() < d.getDate())) a--;
+            return a;
+        }
+        function planForAge(age) {
+            if (age === null) return null;
+            return PLANS.find(p =>
+                (p.age_min == null || age >= p.age_min) && (p.age_max == null || age <= p.age_max)
+            ) || null;
+        }
+        function renderPlan() {
+            if (!PLANS_ON) return;
+            const age = ageFromDob(dobEl ? dobEl.value : '');
+            currentPlan = planForAge(age);
+            if (!currentPlan) {
+                planCardEl.className = 'plan-card';
+                planCardEl.innerHTML = '<div class="plan-card-empty text-muted" style="font-size:.85rem;">'
+                    + (age === null
+                        ? '<i class="fas fa-circle-info me-1"></i>Enter your child’s date of birth in step 2 to see your plan.'
+                        : '<i class="fas fa-triangle-exclamation me-1 text-warning"></i>No preset plan for age ' + age
+                          + '. Our team will confirm the right plan — please contact the school.')
+                    + '</div>';
+                if (planSummary) planSummary.hidden = true;
+                updateSubmitLabel();
+                return;
+            }
+            const p = currentPlan, ac = p.accent || '#0C74C5';
+            planCardEl.className = 'plan-card filled';
+            planCardEl.style.setProperty('--accent', ac);
+            planCardEl.innerHTML =
+                '<div class="pc-top">'
+                + '<div><div class="pc-name">' + esc(p.name) + '</div>'
+                + (p.tier ? '<div class="pc-tier" style="color:' + ac + '">' + esc(p.tier) + '</div>' : '')
+                + '<div class="pc-age">Auto-selected for age ' + age + '</div></div>'
+                + '<div class="pc-price" style="color:' + ac + '">' + rupee(p.price) + ' <small>/ ' + esc(p.billing || 'year') + '</small></div>'
+                + '</div>'
+                + (p.features && p.features.length ? '<ul>' + p.features.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>' : '')
+                + '<div class="pc-lock"><i class="fas fa-lock me-1"></i>Locked to your child’s age. Payment is required to submit.</div>';
+            if (planSummary) {
+                planSummary.hidden = false;
+                planSummaryName.textContent = p.name;
+                planSummaryPrice.textContent = rupee(p.price);
+            }
+            updateSubmitLabel();
+        }
+        function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+        function updateSubmitLabel() {
+            if (!PLANS_ON) return;
+            const lbl = btnSubmit.querySelector('.btn-label');
+            if (lbl) lbl.innerHTML = currentPlan
+                ? '<i class="fas fa-lock me-1"></i>Proceed to Secure Payment · ' + rupee(currentPlan.price)
+                : '<i class="fas fa-lock me-1"></i>Proceed to Secure Payment';
+        }
+        if (dobEl) dobEl.addEventListener('change', renderPlan);
+        renderPlan();
+
+        function busy(on, msg) {
+            btnSubmit.disabled = on;
+            btnSubmit.querySelector('.btn-label').hidden = on;
+            const spin = btnSubmit.querySelector('.btn-spin');
+            spin.hidden = !on;
+            if (on && msg) spin.lastChild.textContent = ' ' + msg;
+        }
+        function overlay(on, msg) {
+            const o = document.getElementById('payOverlay');
+            if (!o) return;
+            if (msg) document.getElementById('payOverlayMsg').textContent = msg;
+            o.hidden = !on;
+        }
+        function applyServerErrors(errs) {
+            const stepMap = {
+                school: 0, parent_name: 0, parent_mobile: 0, parent_email: 0, parent_aadhar: 0, parent_aadhar_mobile: 0,
+                student_name: 1, student_dob: 1, student_pincode: 1, student_abha: 1,
+                height_cm: 2, weight_kg: 2, consent: 4, i_agree: 4
+            };
+            let firstStep = null;
+            Object.keys(errs).forEach(k => {
+                const name = k === 'consent' ? 'consent[general_checkup]' : (k === 'student_abha' ? 'student_abha_number' : (k === 'school' ? (schoolSel ? 'school_id' : 'school_name_manual') : k));
+                setError(name, errs[k]);
+                const st = stepMap[k];
+                if (st != null && firstStep === null) firstStep = st;
+            });
+            if (firstStep !== null) showStep(firstStep);
+        }
+        function showResumeNote(token) {
+            const url = location.origin + location.pathname + '?resume=' + token;
+            let note = document.getElementById('pcfResumeNote');
+            if (!note) {
+                note = document.createElement('div');
+                note.id = 'pcfResumeNote';
+                note.className = 'pcf-resume-note';
+                document.querySelector('.wizard-nav').after(note);
+            }
+            note.innerHTML = '<i class="fas fa-clock me-1"></i>Payment not completed. Your form is saved — '
+                + 'resume anytime from this link:<br><code>' + esc(url) + '</code> '
+                + '<button type="button" class="btn btn-sm btn-outline-warning mt-2" id="pcfResumeCopy"><i class="fas fa-copy me-1"></i>Copy link</button>';
+            document.getElementById('pcfResumeCopy').addEventListener('click', () => {
+                navigator.clipboard?.writeText(url);
+                document.getElementById('pcfResumeCopy').innerHTML = '<i class="fas fa-check me-1"></i>Copied';
+            });
+        }
+        function showSuccess(ref, plan, amount) {
+            const wrap = document.querySelector('.consent-wrapper');
+            const paid = plan ? ('<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px;font-size:.82rem;color:#166534;margin-top:14px;text-align:left;">'
+                + '<strong>' + esc(plan) + '</strong>' + (amount != null ? ' — ' + rupee(amount) + ' paid' : '') + '<br>Consent + payment recorded. The school health team will schedule the checkup.</div>') : '';
+            wrap.innerHTML =
+                '<div class="success-card">'
+                + '<div class="success-icon"><i class="fas fa-check"></i></div>'
+                + '<h4 style="font-weight:700;color:var(--primary);">All done!</h4>'
+                + '<p style="color:#64748b;font-size:.88rem;">Your consent has been submitted. Save your reference number.</p>'
+                + '<div class="token-chip">' + esc(ref) + '</div>'
+                + '<p style="font-size:.78rem;color:#94a3b8;">Show this to the school health team if asked. A confirmation email is on its way.</p>'
+                + paid
+                + '<a href="parent-consent.php" style="display:inline-block;margin-top:18px;color:var(--primary);font-size:.84rem;"><i class="fas fa-plus me-1"></i>Submit another form</a>'
+                + '</div>';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function openRazorpay(data) {
+            const opts = {
+                key: data.key_id,
+                order_id: data.order_id,
+                amount: data.amount,
+                currency: data.currency || 'INR',
+                name: 'Rejuvenate Digital Health',
+                description: (data.plan_name || 'School Health Plan') + ' — ' + (fieldEl('student_name')?.value || 'Student'),
+                prefill: data.prefill || {},
+                theme: { color: '#0C74C5' },
+                handler: function (resp) {
+                    overlay(true, 'Confirming your payment…');
+                    const fd = new FormData();
+                    fd.append('pcf_action', 'verify_payment');
+                    fd.append('razorpay_order_id', resp.razorpay_order_id);
+                    fd.append('razorpay_payment_id', resp.razorpay_payment_id);
+                    fd.append('razorpay_signature', resp.razorpay_signature);
+                    fd.append('token', data.token);
+                    fetch(location.pathname, { method: 'POST', body: fd })
+                        .then(r => r.json())
+                        .then(v => {
+                            overlay(false);
+                            if (v.success) showSuccess(v.ref, data.plan_name, data.amount / 100);
+                            else { alert(v.message || 'Payment could not be confirmed.'); showResumeNote(data.token); busy(false); }
+                        })
+                        .catch(() => { overlay(false); alert('Network error while confirming payment.'); showResumeNote(data.token); busy(false); });
+                },
+                modal: {
+                    ondismiss: function () { busy(false); showResumeNote(data.token); }
+                }
+            };
+            try {
+                const rz = new Razorpay(opts);
+                rz.on('payment.failed', function (r) {
+                    busy(false);
+                    alert('Payment failed: ' + (r.error && r.error.description ? r.error.description : 'please try again.'));
+                    showResumeNote(data.token);
+                });
+                rz.open();
+            } catch (e) {
+                busy(false);
+                alert('Could not open the payment window. Please try again.');
+            }
+        }
+
+        function submitFlow() {
+            // validate every step
+            for (let s = 0; s < TOTAL; s++) {
+                const bad = validateStep(s);
+                if (bad) { showStep(s); focusFirst(bad); return; }
+            }
+            if (PLANS_ON && !currentPlan) {
+                showStep(TOTAL - 1);
+                if (planErrEl) { planErrEl.style.display = ''; planErrEl.innerHTML = '<i class="fas fa-circle-exclamation"></i> We could not match a plan to your child’s age. Please check the date of birth in step 2 or contact the school.'; }
+                return;
+            }
+            busy(true, PLANS_ON ? 'Creating secure payment…' : 'Submitting…');
+            const fd = new FormData(form);
+            fd.set('pcf_action', 'create_order');
+            if (RESUME_TOKEN) fd.set('resume_token', RESUME_TOKEN);
+            fetch(location.pathname, { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.success) {
+                        busy(false);
+                        if (d.errors) applyServerErrors(d.errors);
+                        else alert(d.message || 'Something went wrong. Please try again.');
+                        return;
+                    }
+                    if (d.free) { showSuccess(d.ref, currentPlan ? currentPlan.name : null, 0); return; }
+                    openRazorpay(d);
+                })
+                .catch(() => { busy(false); alert('Network error. Please check your connection and try again.'); });
+        }
+
+        form.addEventListener('submit', e => { e.preventDefault(); submitFlow(); });
+
+        // "Jump to field" links inside the server-side error summary
+        document.querySelectorAll('.err-jump').forEach(a => a.addEventListener('click', e => {
+            e.preventDefault();
+            const name = a.dataset.field;
+            // map server field keys → the step that contains them
+            const stepOf = {
+                school: 0, parent_name: 0, parent_mobile: 0, parent_email: 0, parent_aadhar: 0, parent_aadhar_mobile: 0,
+                student_name: 1, student_dob: 1, student_pincode: 1, student_abha: 1,
+                height_cm: 2, weight_kg: 2,
+                consent: 4, i_agree: 4
+            };
+            showStep(stepOf[name] ?? 0);
+            const target = form.querySelector('.is-invalid, .field-error');
+            if (target) (target.closest('.form-section') || target).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }));
+
+        // If the server bounced back with errors, open the first step that has one
+        <?php if ($errors):
+            $stepMap = ['school'=>0,'parent_name'=>0,'parent_mobile'=>0,'parent_email'=>0,'parent_aadhar'=>0,'parent_aadhar_mobile'=>0,'student_name'=>1,'student_dob'=>1,'student_pincode'=>1,'student_abha'=>1,'height_cm'=>2,'weight_kg'=>2,'consent'=>4,'i_agree'=>4];
+            $firstBad = 0;
+            foreach (array_keys($errors) as $k) { if (isset($stepMap[$k])) { $firstBad = $stepMap[$k]; break; } }
+        ?>
+        showStep(<?= (int) $firstBad ?>, { noScroll: true });
+        <?php else: ?>
+        showStep(0, { noScroll: true });
+        <?php endif; ?>
+        } /* end if (form) */
+
+        /* ── Resume-payment screen (?resume=<token>) ── */
+        const resumeBtn = document.getElementById('resumePayBtn');
+        if (resumeBtn) {
+            const token = resumeBtn.dataset.token;
+            const oEl = () => document.getElementById('payOverlay');
+            const setOverlay = (on, msg) => { const o = oEl(); if (!o) return; if (msg) document.getElementById('payOverlayMsg').textContent = msg; o.hidden = !on; };
+            const setBusy = on => {
+                resumeBtn.disabled = on;
+                resumeBtn.querySelector('.btn-label').hidden = on;
+                resumeBtn.querySelector('.btn-spin').hidden = !on;
+            };
+            const done = (ref) => {
+                document.querySelector('.consent-wrapper').innerHTML =
+                    '<div class="success-card"><div class="success-icon"><i class="fas fa-check"></i></div>'
+                    + '<h4 style="font-weight:700;color:var(--primary);">Payment complete!</h4>'
+                    + '<p style="color:#64748b;font-size:.88rem;">Your consent form has been submitted. A confirmation email is on its way.</p>'
+                    + '<div class="token-chip">' + ref + '</div>'
+                    + '<a href="parent-consent.php" style="display:inline-block;margin-top:18px;color:var(--primary);font-size:.84rem;"><i class="fas fa-plus me-1"></i>Submit another form</a></div>';
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+            resumeBtn.addEventListener('click', () => {
+                setBusy(true);
+                const fd = new FormData();
+                fd.append('pcf_action', 'resume_pay');
+                fd.append('resume_token', token);
+                fetch(location.pathname, { method: 'POST', body: fd })
+                    .then(r => r.json())
+                    .then(d => {
+                        if (!d.success) { setBusy(false); alert(d.message || 'Could not start the payment.'); return; }
+                        if (d.free) { done(d.ref); return; }
+                        const rz = new Razorpay({
+                            key: d.key_id, order_id: d.order_id, amount: d.amount, currency: d.currency || 'INR',
+                            name: 'Rejuvenate Digital Health', description: d.plan_name || 'School Health Plan',
+                            prefill: d.prefill || {}, theme: { color: '#0C74C5' },
+                            handler: function (resp) {
+                                setOverlay(true, 'Confirming your payment…');
+                                const v = new FormData();
+                                v.append('pcf_action', 'verify_payment');
+                                v.append('razorpay_order_id', resp.razorpay_order_id);
+                                v.append('razorpay_payment_id', resp.razorpay_payment_id);
+                                v.append('razorpay_signature', resp.razorpay_signature);
+                                v.append('token', d.token);
+                                fetch(location.pathname, { method: 'POST', body: v })
+                                    .then(r => r.json())
+                                    .then(x => { setOverlay(false); if (x.success) done(x.ref); else { alert(x.message || 'Payment could not be confirmed.'); setBusy(false); } })
+                                    .catch(() => { setOverlay(false); alert('Network error while confirming payment.'); setBusy(false); });
+                            },
+                            modal: { ondismiss: () => setBusy(false) }
+                        });
+                        rz.on('payment.failed', r => { setBusy(false); alert('Payment failed: ' + (r.error?.description || 'please try again.')); });
+                        rz.open();
+                    })
+                    .catch(() => { setBusy(false); alert('Network error. Please try again.'); });
+            });
+        }
     </script>
 </body>
 

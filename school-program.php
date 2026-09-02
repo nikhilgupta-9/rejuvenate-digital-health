@@ -6,6 +6,25 @@ include_once "util/function.php";
 $testimonials = testimonial();
 $contact = contact_us();
 
+/* ── School health plans (managed in Admin → School Health → Health Plans & Pricing) ── */
+$sp_plans = [];
+$sp_res = $conn->query("SELECT * FROM school_health_plans WHERE is_active = 1 ORDER BY sort_order ASC, price ASC, id ASC");
+if ($sp_res) {
+    while ($r = $sp_res->fetch_assoc()) {
+        $r['feature_list'] = array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', (string) $r['features']))));
+        $sp_plans[] = $r;
+    }
+}
+function sp_age_label($min, $max): string
+{
+    $min = ($min === null || $min === '') ? null : (int) $min;
+    $max = ($max === null || $max === '') ? null : (int) $max;
+    if ($min === null && $max === null) return 'All ages';
+    if ($min !== null && $max !== null) return "Age {$min}–{$max}";
+    if ($min !== null) return "Age {$min}+";
+    return "Up to age {$max}";
+}
+
 /* ── "Partner with us" enquiry → saved to `inquiries` (Admin → New Leads) ── */
 $sp_lead_ok = false;
 $sp_lead_err = '';
@@ -108,37 +127,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
             color: #fff !important;
         }
 
-        /* Pricing plans used ad-hoc orange/purple — fold into the 2-colour brand scheme */
-        .school-program-page [style*="background:#f59e0b"],
-        .school-program-page [style*="background: #f59e0b"] {
-            background: var(--sp-teal) !important;
-        }
-
-        .school-program-page [style*="color:#f59e0b"],
-        .school-program-page [style*="color: #f59e0b"] {
-            color: var(--sp-teal) !important;
-        }
-
-        .school-program-page [style*="solid #f59e0b"] {
-            border-top-color: var(--sp-teal) !important;
-        }
-
-        .school-program-page [style*="background:#7c3aed"],
-        .school-program-page [style*="background: #7c3aed"] {
-            background: var(--sp-blue) !important;
-        }
-
-        .school-program-page [style*="color:#7c3aed"],
-        .school-program-page [style*="color: #7c3aed"] {
-            color: var(--sp-blue) !important;
-        }
-
-        .school-program-page [style*="solid #7c3aed"] {
-            border-top-color: var(--sp-blue) !important;
-        }
-
+        /* Pricing/plan colours now come from the DB (accent_color) per card. */
         .school-program-page [style*="#0C2340"] {
             background: var(--sp-ink) !important;
+        }
+
+        /* Anchor jump for the plans section clears the sticky site header */
+        #plans { scroll-margin-top: 90px; }
+
+        /* Plan cards */
+        .school-program-page .sp-plan-card {
+            transition: transform .18s ease, box-shadow .18s ease;
+            overflow: visible;
+            margin-top: 14px;
+        }
+        .school-program-page .sp-plan-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 30px rgba(12, 116, 197, .15) !important;
+        }
+        .school-program-page .sp-plan-card.sp-plan-match {
+            box-shadow: 0 0 0 2px var(--sp-teal), 0 12px 30px rgba(2, 201, 184, .18) !important;
+        }
+        #spAgeResult:empty {
+            display: none;
         }
 
         /* Enquiry form */
@@ -394,7 +405,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
     </section>
 
     <!-- School Health Plans (Pricing) Section Start -->
-    <section class="py-5">
+    <section class="py-5" id="plans">
         <div class="container">
             <div class="row text-center mb-5">
                 <div class="col-lg-8 mx-auto">
@@ -402,272 +413,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
                         <i class="fas fa-shield-alt me-2"></i>School Health Plans
                     </span>
                     <h2 class="display-6 fw-bold mb-3">Every Child. Every School. Every Future.</h2>
-                    <p class="text-muted">Choose the plan that fits your school's needs — all prices are per student,
-                        per year.</p>
+                    <p class="text-muted">Choose the plan that fits your child — all prices are per student, per year.
+                        When a parent submits the consent form, the plan is picked automatically from the child's age.</p>
                 </div>
             </div>
-            <div class="row g-4 align-items-stretch">
-                <!-- Basic Plan -->
-                <div class="col-lg-4">
-                    <div class="card border-0 shadow-sm h-100">
-                        <div class="card-body p-4 d-flex flex-column">
-                            <span class="badge bg-success mb-3 align-self-start">Basic Health ID Plan</span>
-                            <h4 class="fw-bold mb-0">Basic Plan</h4>
-                            <div class="mb-3">
-                                <span class="display-5 fw-bold text-success">₹49</span>
-                                <span class="text-muted">/ student / year</span>
+
+            <?php if (empty($sp_plans)): ?>
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-layer-group fs-1 opacity-25 d-block mb-2"></i>
+                    Plans will appear here once they are added in the admin panel.
+                </div>
+            <?php else: ?>
+                <!-- Age finder -->
+                <div class="row justify-content-center mb-4">
+                    <div class="col-lg-7">
+                        <div class="p-3 p-md-4 bg-white rounded-4 shadow-sm border">
+                            <label class="fw-semibold mb-2 d-block"><i class="fas fa-wand-magic-sparkles me-2 text-primary"></i>Find your child's plan</label>
+                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                <span class="text-muted small">My child is</span>
+                                <input type="number" id="spAgeInput" class="form-control" min="1" max="25" style="width:90px"
+                                    placeholder="age" inputmode="numeric">
+                                <span class="text-muted small">years old</span>
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="spAgeClear" hidden>
+                                    <i class="fas fa-xmark me-1"></i>Show all
+                                </button>
                             </div>
-                            <ul class="list-unstyled mb-4 flex-grow-1">
-                                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>Digital Health ID
-                                    with Photo</li>
-                                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>Basic Health
-                                    Record (School Entry Profile)</li>
-                                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>Vaccination
-                                    Tracking</li>
-                                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>Deworming
-                                    Certificate</li>
-                                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>Basic Health
-                                    Tips (Hygiene + Nutrition PDF)</li>
-                                <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>Annual Basic
-                                    Health Summary</li>
-                            </ul>
-                            <p class="text-success small fw-semibold mb-3">Perfect start for every child's health
-                                journey.</p>
-                            <a href="#contact" class="btn btn-outline-success mt-auto">Choose Basic</a>
+                            <div id="spAgeResult" class="mt-2 small"></div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Standard Plan -->
-                <div class="col-lg-4">
-                    <div class="card border-0 shadow h-100" style="border-top:4px solid #f59e0b !important;">
-                        <div class="card-body p-4 d-flex flex-column">
-                            <span class="badge mb-3 align-self-start" style="background:#f59e0b;">Health Screening
-                                &amp; Care Plan</span>
-                            <h4 class="fw-bold mb-0">Standard Plan</h4>
-                            <div class="mb-3">
-                                <span class="display-5 fw-bold" style="color:#f59e0b;">₹199</span>
-                                <span class="text-muted">/ student / year</span>
-                            </div>
-                            <ul class="list-unstyled mb-4 flex-grow-1">
-                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Includes
-                                    all features of the ₹49 Plan</li>
-                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Vision
-                                    Screening Report</li>
-                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Dental
-                                    Check-up Report</li>
-                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Height /
-                                    Weight / BMI Tracking</li>
-                                <li class="mb-2"><i class="fas fa-check-circle me-2"
-                                        style="color:#f59e0b;"></i>Hemoglobin
-                                    / Anemia Screening</li>
-                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Parent
-                                    Alert System (Deficiency, Low BMI etc.)</li>
-                                <li class="mb-2"><i class="fas fa-check-circle me-2" style="color:#f59e0b;"></i>Basic
-                                    Teleconsultation (Limited)</li>
-                                <li class="mb-2"><i class="fas fa-check-circle me-2"
-                                        style="color:#f59e0b;"></i>Nutrition
-                                    Guidance Report</li>
-                            </ul>
-                            <p class="small fw-semibold mb-3" style="color:#f59e0b;">Early detection today, healthy
-                                tomorrow.</p>
-                            <a href="#contact" class="btn mt-auto text-white" style="background:#f59e0b;">Choose
-                                Standard</a>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Premium Plan -->
-                <div class="col-lg-4">
-                    <div class="card border-0 shadow h-100" style="border-top:4px solid #7c3aed !important;">
-                        <div class="card-body p-4 d-flex flex-column">
-                            <span class="badge mb-3 align-self-start" style="background:#7c3aed;">Complete Health
-                                &amp; Wellness Plan</span>
-                            <h4 class="fw-bold mb-0">Premium Plan</h4>
-                            <div class="mb-3">
-                                <span class="display-5 fw-bold" style="color:#7c3aed;">₹299</span>
-                                <span class="text-muted">/ student / year</span>
-                            </div>
-                            <p class="small fw-semibold" style="color:#7c3aed;">Includes all features of the ₹199
-                                Plan, plus:</p>
-                            <ul class="list-unstyled mb-3 flex-grow-1" style="font-size:.88rem;">
-                                <li class="fw-bold mt-2 mb-1">1. Mental &amp; Adolescent Health</li>
-                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Stress &amp; Anxiety
-                                    Assessment (Self Score)</li>
-                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Sleep Tracking
-                                    Guidance</li>
-                                <li class="ms-3 mb-2"><i class="fas fa-check text-muted me-2"></i>Screen Time &amp;
-                                    Digital Addiction Report</li>
-
-                                <li class="fw-bold mt-2 mb-1">2. Advanced Medical Support</li>
-                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Unlimited
-                                    Teleconsultation (Basic Doctors)</li>
-                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Priority Doctor
-                                    Response</li>
-                                <li class="ms-3 mb-2"><i class="fas fa-check text-muted me-2"></i>Follow-up
-                                    Reminders</li>
-
-                                <li class="fw-bold mt-2 mb-1">3. Nutrition &amp; Lifestyle Program</li>
-                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Personalized Diet
-                                    Chart (Age-Based)</li>
-                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Anemia Prevention
-                                    Program</li>
-                                <li class="ms-3 mb-2"><i class="fas fa-check text-muted me-2"></i>Fitness &amp;
-                                    Activity Tracking Guidance</li>
-
-                                <li class="fw-bold mt-2 mb-1">4. School Health Intelligence</li>
-                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>School-level Health
-                                    Dashboard</li>
-                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Class-wise Health
-                                    Report Analytics</li>
-                                <li class="ms-3 mb-2"><i class="fas fa-check text-muted me-2"></i>Risk Identification
-                                    (Low BMI, Anemia Risk Group)</li>
-
-                                <li class="fw-bold mt-2 mb-1">5. Career &amp; Wellness Guidance</li>
-                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Stress Handling for
-                                    Exams</li>
-                                <li class="ms-3 mb-1"><i class="fas fa-check text-muted me-2"></i>Study-Life Balance
-                                    Tips</li>
-                                <li class="ms-3"><i class="fas fa-check text-muted me-2"></i>Career Awareness &amp;
-                                    Health Link (Focus + Mental Clarity)</li>
-                            </ul>
-                            <p class="small fw-semibold mb-3" style="color:#7c3aed;">Healthy Body. Healthy Mind.
-                                Bright Future.</p>
-                            <a href="#contact" class="btn mt-auto text-white" style="background:#7c3aed;">Choose
-                                Premium</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Plans for Different Age Groups Section Start -->
-    <section class="py-5 bg-light">
-        <div class="container">
-            <div class="row text-center mb-5">
-                <div class="col-lg-8 mx-auto">
-                    <span class="badge bg-primary bg-opacity-10 text-light mb-3 px-3 py-2 fs-6 fw-semibold">
-                        <i class="fas fa-layer-group me-2"></i>Plans for Different Age Groups
-                    </span>
-                    <h2 class="display-6 fw-bold mb-3">Age-Appropriate Health Focus</h2>
-                </div>
-            </div>
-            <div class="row g-4">
-                <!-- Age 6-8 -->
-                <div class="col-lg-6">
-                    <div class="card border-0 shadow-sm h-100">
-                        <div class="card-body p-4">
-                            <span class="badge bg-success mb-2">AGE GROUP 6-8 YEARS (CLASS 6 TO 8)</span>
-                            <h5 class="fw-bold mb-3">Healthy Growth Plan for Students</h5>
-                            <div class="d-flex flex-wrap gap-3 mb-3">
-                                <?php foreach (['Growth Monitoring', 'Hygiene & Clean Habits', 'Vision & Dental Care', 'Nutrition Support', 'Healthy Habits for a Strong Future'] as $focus): ?>
-                                    <span class="badge bg-success bg-opacity-10 text-light px-3 py-2"><?= $focus ?></span>
-                                <?php endforeach; ?>
-                            </div>
-                            <div class="table-responsive">
-                                <table class="table table-sm align-middle mb-0">
-                                    <thead>
-                                        <tr class="small text-muted">
-                                            <th>Plan Benefits for Age 6-8</th>
-                                            <th class="text-center">₹49<br>Basic</th>
-                                            <th class="text-center">₹199<br>Standard</th>
-                                            <th class="text-center">₹299<br>Premium</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="small">
-                                        <?php
-                                        $age68 = [
-                                            ['Digital Health ID & Records', true, true, true],
-                                            ['Growth Tracking (Height, Weight, BMI)', true, true, true],
-                                            ['Vision & Dental Screening', false, true, true],
-                                            ['Nutrition Guidance', true, true, true],
-                                            ['Anemia Screening', false, true, true],
-                                            ['Parent Alerts', false, true, true],
-                                            ['Mental Wellness & Healthy Habits', false, true, true],
-                                            ['Teleconsultation', false, true, true],
-                                        ];
-                                        foreach ($age68 as $row):
-                                            ?>
-                                            <tr>
-                                                <td><?= $row[0] ?></td>
-                                                <td class="text-center">
-                                                    <?= $row[1] ? '<i class="fas fa-check text-success"></i>' : '' ?>
-                                                </td>
-                                                <td class="text-center">
-                                                    <?= $row[2] ? '<i class="fas fa-check text-success"></i>' : '' ?>
-                                                </td>
-                                                <td class="text-center">
-                                                    <?= $row[3] ? '<i class="fas fa-check text-success"></i>' : '' ?>
-                                                </td>
-                                            </tr>
+                <div class="row g-4 align-items-stretch justify-content-center" id="spPlanGrid">
+                    <?php foreach ($sp_plans as $p):
+                        $accent = preg_match('/^#[0-9a-fA-F]{6}$/', $p['accent_color'] ?? '') ? $p['accent_color'] : '#0C74C5';
+                        ?>
+                        <div class="col-lg-4 col-md-6 sp-plan-col"
+                            data-plan-id="<?= (int) $p['id'] ?>"
+                            data-age-min="<?= $p['age_min'] === null ? '' : (int) $p['age_min'] ?>"
+                            data-age-max="<?= $p['age_max'] === null ? '' : (int) $p['age_max'] ?>">
+                            <div class="card border-0 shadow-sm h-100 sp-plan-card position-relative"
+                                style="border-top:4px solid <?= $accent ?> !important;">
+                                <?php if (!empty($p['is_popular'])): ?>
+                                    <span class="position-absolute top-0 start-50 translate-middle badge rounded-pill px-3 py-2"
+                                        style="background:<?= $accent ?>;">
+                                        <i class="fas fa-star me-1"></i>Most Popular
+                                    </span>
+                                <?php endif; ?>
+                                <div class="card-body p-4 d-flex flex-column">
+                                    <?php if (!empty($p['tier'])): ?>
+                                        <span class="badge mb-3 align-self-start" style="background:<?= $accent ?>1a;color:<?= $accent ?>;">
+                                            <?= htmlspecialchars($p['tier']) ?>
+                                        </span>
+                                    <?php endif; ?>
+                                    <h4 class="fw-bold mb-0"><?= htmlspecialchars($p['name']) ?></h4>
+                                    <div class="mb-1">
+                                        <span class="display-5 fw-bold" style="color:<?= $accent ?>;">&#8377;<?= number_format((float) $p['price']) ?></span>
+                                        <span class="text-muted">/ <?= htmlspecialchars($p['billing_label']) ?></span>
+                                    </div>
+                                    <div class="mb-3">
+                                        <span class="badge bg-light text-dark border"><i class="fas fa-child me-1" style="color:<?= $accent ?>"></i><?= htmlspecialchars(sp_age_label($p['age_min'], $p['age_max'])) ?></span>
+                                    </div>
+                                    <?php if (!empty($p['tagline'])): ?>
+                                        <p class="small fw-semibold mb-3" style="color:<?= $accent ?>;"><?= htmlspecialchars($p['tagline']) ?></p>
+                                    <?php endif; ?>
+                                    <ul class="list-unstyled mb-4 flex-grow-1">
+                                        <?php foreach ($p['feature_list'] as $f): ?>
+                                            <li class="mb-2 d-flex"><i class="fas fa-check-circle me-2 mt-1" style="color:<?= $accent ?>"></i><span><?= htmlspecialchars($f) ?></span></li>
                                         <?php endforeach; ?>
-                                    </tbody>
-                                </table>
+                                    </ul>
+                                    <a href="<?= BASE_URL ?>school/parent-consent.php?plan=<?= (int) $p['id'] ?>"
+                                        class="btn mt-auto text-white fw-semibold" style="background:<?= $accent ?>;">
+                                        Choose <?= htmlspecialchars($p['name']) ?><i class="fas fa-arrow-right ms-2"></i>
+                                    </a>
+                                </div>
                             </div>
-                            <p class="text-success fw-semibold small mt-3 mb-0">Good habits today, strong children
-                                tomorrow.</p>
                         </div>
-                    </div>
+                    <?php endforeach; ?>
                 </div>
 
-                <!-- Age 9-12 -->
-                <div class="col-lg-6">
-                    <div class="card border-0 shadow-sm h-100">
-                        <div class="card-body p-4">
-                            <span class="badge bg-primary mb-2">AGE GROUP 9-12 YEARS (CLASS 9 TO 12)</span>
-                            <h5 class="fw-bold mb-3">Smart Health for Smart Future</h5>
-                            <div class="d-flex flex-wrap gap-3 mb-3">
-                                <?php foreach (['Mental Health Support', 'Anemia & Nutrition Check', 'Stress & Sleep Management', 'Career Pressure Guidance', 'Healthy Lifestyle for Better Performance'] as $focus): ?>
-                                    <span class="badge bg-primary bg-opacity-10 text-light px-3 py-2"><?= $focus ?></span>
-                                <?php endforeach; ?>
-                            </div>
-                            <div class="table-responsive">
-                                <table class="table table-sm align-middle mb-0">
-                                    <thead>
-                                        <tr class="small text-muted">
-                                            <th>Plan Benefits for Age 9-12</th>
-                                            <th class="text-center">₹49<br>Basic</th>
-                                            <th class="text-center">₹199<br>Standard</th>
-                                            <th class="text-center">₹299<br>Premium</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="small">
-                                        <?php
-                                        $age912 = [
-                                            ['Digital Health ID & Records', true, true, true],
-                                            ['Anemia Screening & Nutrition Support', true, true, true],
-                                            ['Mental Health Assessment', false, true, true],
-                                            ['Stress & Sleep Guidance', false, true, true],
-                                            ['Lifestyle & Screen Time Report', false, true, true],
-                                            ['Teleconsultation (Unlimited in Premium)', false, true, true],
-                                            ['Career & Wellness Guidance', false, false, true],
-                                            ['School Health Dashboard & Analytics', false, false, true],
-                                        ];
-                                        foreach ($age912 as $row):
-                                            ?>
-                                            <tr>
-                                                <td><?= $row[0] ?></td>
-                                                <td class="text-center">
-                                                    <?= $row[1] ? '<i class="fas fa-check text-success"></i>' : '' ?>
-                                                </td>
-                                                <td class="text-center">
-                                                    <?= $row[2] ? '<i class="fas fa-check text-success"></i>' : '' ?>
-                                                </td>
-                                                <td class="text-center">
-                                                    <?= $row[3] ? '<i class="fas fa-check text-success"></i>' : '' ?>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                            <p class="text-primary fw-semibold small mt-3 mb-0">Healthy mind. Strong body. Bright
-                                future.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                <p class="text-center text-muted small mt-4 mb-0">
+                    <i class="fas fa-lock me-1"></i>Secure payment via Razorpay &nbsp;·&nbsp; parent &amp; admin get an email confirmation
+                </p>
+            <?php endif; ?>
         </div>
     </section>
 
@@ -1086,6 +913,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
     <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
     <script src="<?= BASE_URL ?>assets/js/swiper-bundle.min.js"></script>
     <script src="<?= BASE_URL ?>assets/js/main.js"></script>
+
+    <script>
+        /* ── Age finder: highlight the plan band matching the child's age ── */
+        (function () {
+            const input = document.getElementById('spAgeInput');
+            if (!input) return;
+            const clearBtn = document.getElementById('spAgeClear');
+            const result = document.getElementById('spAgeResult');
+            const cols = Array.from(document.querySelectorAll('.sp-plan-col'));
+
+            function apply() {
+                const age = parseInt(input.value, 10);
+                if (!input.value || isNaN(age)) { reset(); return; }
+                let matched = 0, matchName = '';
+                cols.forEach(col => {
+                    const min = col.dataset.ageMin === '' ? null : parseInt(col.dataset.ageMin, 10);
+                    const max = col.dataset.ageMax === '' ? null : parseInt(col.dataset.ageMax, 10);
+                    const ok = (min === null || age >= min) && (max === null || age <= max);
+                    col.style.display = ok ? '' : 'none';
+                    col.querySelector('.sp-plan-card')?.classList.toggle('sp-plan-match', ok);
+                    if (ok) { matched++; if (!matchName) matchName = col.querySelector('h4')?.textContent.trim() || ''; }
+                });
+                clearBtn.hidden = false;
+                result.innerHTML = matched
+                    ? '<span class="text-success"><i class="fas fa-circle-check me-1"></i>Recommended for age ' + age + ': <strong>' + matchName + '</strong>' + (matched > 1 ? ' and ' + (matched - 1) + ' more' : '') + '</span>'
+                    : '<span class="text-muted">No preset plan for age ' + age + ' yet — our team will confirm the right plan for you.</span>';
+            }
+            function reset() {
+                cols.forEach(col => { col.style.display = ''; col.querySelector('.sp-plan-card')?.classList.remove('sp-plan-match'); });
+                clearBtn.hidden = true;
+                result.textContent = '';
+            }
+            input.addEventListener('input', apply);
+            clearBtn.addEventListener('click', () => { input.value = ''; reset(); input.focus(); });
+        })();
+    </script>
 </body>
 
 </html>

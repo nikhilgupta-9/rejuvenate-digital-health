@@ -130,6 +130,25 @@ function rowline($label, $val, $cols = 'col-md-6')
                                 ?>
                             </div>
                         </div>
+
+                        <div class="detail-card">
+                            <h5><i class="fas fa-credit-card me-2"></i>Plan &amp; Payment</h5>
+                            <div class="row">
+                                <?php
+                                if (!empty($c['plan_id']) || !empty($c['plan_name'])) {
+                                    $paycol = ['paid' => '#15803d', 'pending' => '#b45309', 'failed' => '#b91c1c'][$c['payment_status']] ?? '#64748b';
+                                    rowline('Plan', $c['plan_name']);
+                                    rowline('Amount', $c['plan_price'] !== null ? '₹' . number_format((float) $c['plan_price']) : '');
+                                    echo '<div class="col-md-6 mb-3"><div class="detail-label">Payment</div><div class="detail-val" style="color:' . $paycol . ';font-weight:600;">' . ucfirst($c['payment_status'] ?: 'pending') . '</div></div>';
+                                    rowline('Paid at', $c['paid_at'] ? date('d M Y, h:i A', strtotime($c['paid_at'])) : '');
+                                    rowline('Razorpay Order', $c['razorpay_order_id']);
+                                    rowline('Razorpay Payment', $c['razorpay_payment_id']);
+                                } else {
+                                    echo '<div class="col-12"><div class="detail-val text-muted">No plan / payment on this record (submitted before online payment, or captured by a doctor).</div></div>';
+                                }
+                                ?>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="col-lg-6">

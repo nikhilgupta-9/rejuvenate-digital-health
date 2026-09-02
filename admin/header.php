@@ -220,6 +220,7 @@ if ($is_admin && isset($conn)) {
                 <li><a href="schools-list.php?status=Active"><i class="fas fa-check-circle me-1 text-success"></i> Active Schools</a></li>
                 <li><a href="add-school.php"><i class="fas fa-plus me-1 text-primary"></i> Add School</a></li>
                 <li><a href="school-members.php">School Members</a></li>
+                <li><a href="school-plans.php"><i class="fas fa-layer-group me-1 text-primary"></i> Health Plans &amp; Pricing</a></li>
                 <li><a href="parent-consents.php"><i class="fas fa-file-signature me-1 text-primary"></i> Parent Consents <?php if (($consent_pending ?? 0) > 0): ?><span class="badge bg-danger ms-1" style="font-size:9px;"><?= $consent_pending ?></span><?php endif; ?></a></li>
             </ul>
         </li>

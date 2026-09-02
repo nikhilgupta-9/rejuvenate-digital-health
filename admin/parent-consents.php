@@ -9,6 +9,13 @@ $conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS source E
 $conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS recorded_by_doctor_id INT DEFAULT NULL");
 $conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS linked_at DATETIME DEFAULT NULL");
 $conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS reviewed_at DATETIME DEFAULT NULL");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS plan_id INT UNSIGNED DEFAULT NULL");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS plan_name VARCHAR(120) DEFAULT NULL");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS plan_price DECIMAL(10,2) DEFAULT NULL");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS payment_status ENUM('pending','paid','failed') NOT NULL DEFAULT 'pending'");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(64) DEFAULT NULL");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS razorpay_payment_id VARCHAR(64) DEFAULT NULL");
+$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS paid_at DATETIME DEFAULT NULL");
 
 /* ── Status update ── */
 if (isset($_GET['set_status'], $_GET['id'])) {
@@ -157,6 +164,7 @@ $qs = http_build_query(array_filter(['school_id' => $school_filter ?: null, 'sta
                                         <th>Student</th>
                                         <th>Parent / Guardian</th>
                                         <th>School</th>
+                                        <th>Plan / Payment</th>
                                         <th>Source</th>
                                         <th>Submitted</th>
                                         <th>Status</th>
@@ -165,12 +173,13 @@ $qs = http_build_query(array_filter(['school_id' => $school_filter ?: null, 'sta
                                 </thead>
                                 <tbody>
                                 <?php if (mysqli_num_rows($rows) === 0): ?>
-                                    <tr class="empty-row"><td colspan="8">
+                                    <tr class="empty-row"><td colspan="9">
                                         <i class="fas fa-file-signature fa-3x mb-3 d-block opacity-25"></i>No consent forms found.
                                     </td></tr>
                                 <?php endif; ?>
                                 <?php
                                 $status_pill = ['pending' => 'pill-warn', 'reviewed' => 'pill-success', 'archived' => 'pill-muted'];
+                                $pay_pill    = ['paid' => 'pill-success', 'pending' => 'pill-warn', 'failed' => 'pill-danger'];
                                 $i = 1;
                                 while ($c = mysqli_fetch_assoc($rows)):
                                 ?>
@@ -185,6 +194,17 @@ $qs = http_build_query(array_filter(['school_id' => $school_filter ?: null, 'sta
                                         <div class="cell-sub"><?= htmlspecialchars($c['parent_mobile']) ?></div>
                                     </td>
                                     <td data-label="School"><span class="cell-title" style="font-weight:500;"><?= $c['school_name'] ? htmlspecialchars($c['school_name']) : htmlspecialchars($c['school_name_manual'] ?: '—') ?></span></td>
+                                    <td data-label="Plan / Payment">
+                                        <?php if (!empty($c['plan_id']) || $c['plan_name']): ?>
+                                            <div class="cell-title" style="font-weight:500;"><?= htmlspecialchars($c['plan_name'] ?: 'Plan') ?></div>
+                                            <div class="cell-sub">
+                                                <span class="pill pill-sq <?= $pay_pill[$c['payment_status']] ?? 'pill-muted' ?>"><?= ucfirst($c['payment_status'] ?: 'pending') ?></span>
+                                                <?php if ($c['plan_price'] !== null): ?> &#8377;<?= number_format((float) $c['plan_price']) ?><?php endif; ?>
+                                            </div>
+                                        <?php else: ?>
+                                            <span class="cell-sub">&mdash;</span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td data-label="Source">
                                         <?php if ($c['source'] === 'doctor'): ?>
                                             <span class="pill pill-sq pill-purple"><i class="fas fa-user-md"></i>Doctor</span>
