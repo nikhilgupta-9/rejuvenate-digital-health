@@ -19,10 +19,15 @@ require_once dirname(__DIR__, 2) . '/lib/JWT.php';
 
 header('Content-Type: application/json');
 
-// A stale/disconnected peer is considered "gone" after this many seconds
-// without a poll reaching us. Must be comfortably more than the client's
-// poll interval (2s) to survive normal network jitter.
-const TELEMED_PRESENCE_TIMEOUT_SECONDS = 6;
+// The peer is shown as "here" in the UI as long as a poll from them reached
+// us within this window. Generous, so a slow poll under load doesn't make a
+// live call look dropped (which used to trigger a full WebRTC re-handshake
+// and flood telemedicine_signals with a fresh ICE-candidate storm).
+const TELEMED_PRESENCE_TIMEOUT_SECONDS = 20;
+
+// Only after the peer has been silent this long do we treat it as a real
+// disconnect and reset `ready_sent`, so a genuine rejoin re-negotiates.
+const TELEMED_RECONNECT_RESET_SECONDS = 45;
 
 $ticket = $_GET['ticket'] ?? $_POST['ticket'] ?? '';
 $since  = (int) ($_GET['since'] ?? 0);
@@ -50,13 +55,22 @@ if (!in_array($role, ['doctor', 'patient'], true)) {
     exit;
 }
 
-// Housekeeping — rooms/signals are never deleted the moment a call ends
-// (the peer still needs one last poll to see the 'call-ended' signal), so
-// sweep anything old on a small random fraction of requests instead of on
-// every single poll or via a cron job.
-if (mt_rand(1, 200) === 1) {
-    $conn->query("DELETE FROM telemedicine_signals WHERE created_at < (NOW() - INTERVAL 2 HOUR)");
-    $conn->query("DELETE FROM telemedicine_rooms WHERE created_at < (NOW() - INTERVAL 2 HOUR)");
+// Per-room sweep — a signal (offer / answer / ICE candidate / chat) is only
+// useful for a few seconds after it is posted; once it is minutes old the
+// call is either connected or dead, and the client never replays it. Pruning
+// aggressively here is what keeps telemedicine_signals from ballooning to
+// hundreds of rows per call under a flaky connection. Runs on ~1 poll in 4.
+if (mt_rand(1, 4) === 1) {
+    $sweep = $conn->prepare("DELETE FROM telemedicine_signals WHERE room = ? AND created_at < (NOW(3) - INTERVAL 3 MINUTE)");
+    $sweep->bind_param('s', $room);
+    $sweep->execute();
+}
+
+// Global sweep for abandoned rooms/signals — rare, since the per-room sweep
+// above does the heavy lifting.
+if (mt_rand(1, 300) === 1) {
+    $conn->query("DELETE FROM telemedicine_signals WHERE created_at < (NOW() - INTERVAL 20 MINUTE)");
+    $conn->query("DELETE FROM telemedicine_rooms   WHERE created_at < (NOW() - INTERVAL 2 HOUR)");
 }
 
 $myCol   = $role === 'doctor' ? 'doctor' : 'patient';
@@ -90,11 +104,13 @@ $stmt->execute();
 $roomRow = $stmt->get_result()->fetch_assoc();
 
 $peerAge = $roomRow["_{$peerCol}_age_s"] ?? null;   // seconds since the peer's last poll, or null if never
-$peerPresent = ($peerAge !== null && (int) $peerAge <= TELEMED_PRESENCE_TIMEOUT_SECONDS);
+$peerPresent  = ($peerAge !== null && (int) $peerAge <= TELEMED_PRESENCE_TIMEOUT_SECONDS);
+$peerLongGone = ($peerAge === null || (int) $peerAge > TELEMED_RECONNECT_RESET_SECONDS);
 
 if ($peerPresent && (int) $roomRow['ready_sent'] === 0) {
-    // Guarded so only one of the two concurrent pollers (doctor's,
-    // patient's) wins the race and actually inserts the 'ready' signal.
+    // First time both sides are here (or a genuine rejoin after a long gap) —
+    // fire the one-time 'ready'. Guarded so only one of the two concurrent
+    // pollers wins the race and actually inserts it.
     $upd = $conn->prepare("UPDATE telemedicine_rooms SET ready_sent = 1 WHERE room = ? AND ready_sent = 0");
     $upd->bind_param('s', $room);
     $upd->execute();
@@ -107,10 +123,10 @@ if ($peerPresent && (int) $roomRow['ready_sent'] === 0) {
         $mark->bind_param('i', $appointmentId);
         $mark->execute();
     }
-} elseif (!$peerPresent && (int) $roomRow['ready_sent'] === 1) {
-    // Peer dropped off — reset so a reconnect re-triggers a fresh
-    // offer/answer exchange (the client tears down its old
-    // RTCPeerConnection whenever peerPresent flips to false).
+} elseif ($peerLongGone && (int) $roomRow['ready_sent'] === 1) {
+    // A REAL disconnect (peer silent for 45s+) — reset so that if they rejoin
+    // the handshake runs again. A short poll delay no longer does this, which
+    // is what stops the repeated ICE-candidate storms.
     $upd = $conn->prepare("UPDATE telemedicine_rooms SET ready_sent = 0 WHERE room = ? AND ready_sent = 1");
     $upd->bind_param('s', $room);
     $upd->execute();
@@ -143,3 +159,5 @@ echo json_encode([
     'lastId'      => $lastId,
     'messages'    => $messages,
 ]);
+
+$conn->close();

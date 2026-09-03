@@ -219,3 +219,4 @@ $sig->execute();
 $sig->close();
 
 echo json_encode(['success' => true, 'rx' => $rx]);
+$conn->close();

@@ -32,7 +32,7 @@ $__telemed_ice = [
     ['urls' => 'stun:stun.l.google.com:19302'],
     ['urls' => 'stun:stun1.l.google.com:19302'],
 ];
-$__telemed_poll = 2000;
+$__telemed_poll = 3000;   // ms between polls — 3s keeps DB load low on shared hosting
 
 if (isset($conn) && $conn instanceof mysqli) {
     try {

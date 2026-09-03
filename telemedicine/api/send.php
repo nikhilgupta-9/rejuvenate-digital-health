@@ -113,12 +113,15 @@ switch ($type) {
         $upd->bind_param('i', $appointmentId);
         $upd->execute();
 
-        telemed_insert_signal($conn, $room, $role, 'call-ended', ['by' => $role]);
+        // Drop the handshake chatter for this room now — keep only the
+        // 'call-ended' we're about to post, which the peer still needs to see.
+        $clean = $conn->prepare("DELETE FROM telemedicine_signals WHERE room = ? AND type IN ('offer','answer','ice-candidate','ready','peer-media')");
+        $clean->bind_param('s', $room);
+        $clean->execute();
 
-        // Deliberately NOT deleting this room's rows here — the peer still
-        // needs to poll and see this exact 'call-ended' signal first.
-        // Old rooms/signals are swept up later by the probabilistic
-        // cleanup in poll.php.
+        telemed_insert_signal($conn, $room, $role, 'call-ended', ['by' => $role]);
         echo json_encode(['success' => true]);
         break;
 }
+
+$conn->close();

@@ -112,7 +112,15 @@
     return pc;
   }
 
+  function pcHealthy() {
+    return pc && ['connecting', 'connected'].includes(pc.connectionState);
+  }
+
   async function makeOffer() {
+    // Don't renegotiate a call that's already up — a duplicate 'ready'
+    // (e.g. after a brief poll delay) would otherwise fire a whole new
+    // ICE-candidate storm into the signaling table.
+    if (pcHealthy()) return;
     if (!pc) createPeerConnection();
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
@@ -214,7 +222,10 @@
     if (peerPresent !== wasPresent) {
       if (peerPresent) {
         waitingOverlay.classList.add('hidden');
-      } else {
+      } else if (!pcHealthy()) {
+        // Peer's heartbeat lapsed AND we don't have a live media connection —
+        // treat it as a real drop. If the call is actually up, a short poll
+        // delay under load must NOT tear it down.
         waitingOverlay.classList.remove('hidden');
         teardownPeerConnection();
         setStatus('waiting', 'Waiting for the other participant…');
@@ -233,6 +244,7 @@
     switch (msg.type) {
       case 'ready':
         // Doctor is always the WebRTC offer initiator, by convention.
+        // makeOffer() itself no-ops if the call is already healthy.
         if (cfg.role === 'doctor') await makeOffer();
         break;
 
@@ -393,7 +405,9 @@
       dirty = true;
       hint.textContent = 'Unsaved changes';
       clearTimeout(autosaveTimer);
-      autosaveTimer = setTimeout(() => { if (dirty) saveRx('draft', true); }, 4000);
+      // Long debounce — the draft only needs to survive an accidental tab
+      // close, not stream every keystroke to the server.
+      autosaveTimer = setTimeout(() => { if (dirty) saveRx('draft', true); }, 15000);
     });
 
     function saveRx(status, silent) {
