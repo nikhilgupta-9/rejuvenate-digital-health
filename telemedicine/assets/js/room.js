@@ -256,6 +256,10 @@
         toast((p.name || 'The other participant') + (p.enabled ? ' turned on' : ' turned off') + ' their ' + p.kind + '.');
         break;
 
+      case 'prescription':
+        onPrescriptionSignal(p);
+        break;
+
       case 'call-ended':
         endCallUi(p.by === cfg.role ? 'You ended the call.' : 'The call has ended.');
         break;
@@ -281,8 +285,27 @@
     send({ type: 'toggle-media', kind: 'video', enabled: camOn });
   });
 
-  chatBtn.addEventListener('click', () => chatPanel.classList.toggle('open'));
-  $('closeChatBtn').addEventListener('click', () => chatPanel.classList.remove('open'));
+  /* ── Side panels (chat / doctor / patient-rx) — one open at a time ── */
+  const panels = () => Array.from(document.querySelectorAll('.side-panel'));
+  function openPanel(id) {
+    panels().forEach((el) => el.classList.toggle('open', el.id === id));
+    document.body.classList.toggle('panel-open', !!id);
+  }
+  function closePanels() { openPanel(null); }
+  document.querySelectorAll('.ctrl-btn[data-panel]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.panel;
+      const isOpen = document.getElementById(id).classList.contains('open');
+      openPanel(isOpen ? null : id);
+      document.querySelectorAll('.ctrl-btn[data-panel]').forEach((b) =>
+        b.classList.toggle('active', b.dataset.panel === id && !isOpen));
+    });
+  });
+  document.querySelectorAll('[data-close-panel]').forEach((b) =>
+    b.addEventListener('click', () => {
+      closePanels();
+      document.querySelectorAll('.ctrl-btn[data-panel]').forEach((x) => x.classList.remove('active'));
+    }));
 
   chatForm.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -324,6 +347,158 @@
       );
     }
   });
+
+  /* ═══════════════════════════════════════════
+     Prescription — doctor writes, patient views live
+  ═══════════════════════════════════════════ */
+  const RX_FIELDS = ['med_name', 'med_dose', 'med_freq', 'med_dur', 'med_instr'];
+
+  function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+  function rxToast(m) { toast(m); }
+
+  /* ---- Doctor side ---- */
+  function initDoctorRx() {
+    const form = $('rxForm');
+    if (!form) return;
+    const medsWrap = $('rxMeds');
+    const pill = $('rxStatusPill');
+    const hint = $('rxSaveHint');
+    let seedMeds = [];
+    try { seedMeds = JSON.parse(($('rxSeed') || {}).textContent || '{}').meds || []; } catch (e) {}
+
+    function medRow(m) {
+      m = m || {};
+      const row = document.createElement('div');
+      row.className = 'rx-med';
+      row.innerHTML =
+        '<input name="med_name"  placeholder="Medicine"     value="' + esc(m.name) + '">' +
+        '<input name="med_dose"  placeholder="Dose"         value="' + esc(m.dose) + '">' +
+        '<input name="med_freq"  placeholder="Frequency"    value="' + esc(m.frequency) + '">' +
+        '<input name="med_dur"   placeholder="Duration"     value="' + esc(m.duration) + '">' +
+        '<input name="med_instr" placeholder="Instructions" value="' + esc(m.instructions) + '">' +
+        '<button type="button" class="rx-med-del" title="Remove"><i class="fas fa-trash"></i></button>';
+      row.querySelector('.rx-med-del').addEventListener('click', () => {
+        row.remove();
+        if (!medsWrap.children.length) medRowAdd();
+      });
+      medsWrap.appendChild(row);
+    }
+    function medRowAdd(m) { medRow(m); }
+
+    (seedMeds.length ? seedMeds : [{}]).forEach(medRow);
+    $('rxAddMed').addEventListener('click', () => medRowAdd());
+
+    let dirty = false, autosaveTimer = null;
+    form.addEventListener('input', () => {
+      dirty = true;
+      hint.textContent = 'Unsaved changes';
+      clearTimeout(autosaveTimer);
+      autosaveTimer = setTimeout(() => { if (dirty) saveRx('draft', true); }, 4000);
+    });
+
+    function saveRx(status, silent) {
+      const fd = new FormData(form);
+      fd.append('ticket', cfg.ticket);
+      fd.append('status', status);
+      const btns = form.querySelectorAll('.rx-btn');
+      btns.forEach((b) => (b.disabled = true));
+      hint.textContent = status === 'final' ? 'Signing…' : 'Saving…';
+      fetch(cfg.rxUrl, { method: 'POST', body: fd })
+        .then((r) => r.json())
+        .then((res) => {
+          btns.forEach((b) => (b.disabled = false));
+          if (!res.success) { hint.textContent = ''; rxToast(res.message || 'Could not save.'); return; }
+          dirty = false;
+          const st = (res.rx && res.rx.status) || status;
+          pill.className = 'rx-pill ' + st;
+          pill.textContent = st.charAt(0).toUpperCase() + st.slice(1);
+          hint.textContent = 'Saved ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          if (!silent) rxToast(status === 'final' ? 'Prescription signed & sent to the patient.' : 'Draft saved.');
+        })
+        .catch(() => { btns.forEach((b) => (b.disabled = false)); hint.textContent = ''; rxToast('Network error while saving.'); });
+    }
+
+    $('rxSaveDraft').addEventListener('click', () => saveRx('draft'));
+    $('rxFinal').addEventListener('click', () => {
+      if (confirm('Sign and send this prescription to the patient? They will see it immediately and it will be saved to their records.')) {
+        saveRx('final');
+      }
+    });
+  }
+
+  /* ---- Patient side ---- */
+  function renderRxView(rx, doctorName) {
+    const box = $('rxView');
+    if (!box) return;
+    if (!rx) { return; }
+    const v = rx.vitals || {};
+    const meds = rx.medications || [];
+    const vitalBits = [
+      v.bp_systolic && v.bp_diastolic ? 'BP ' + esc(v.bp_systolic) + '/' + esc(v.bp_diastolic) : '',
+      v.pulse ? 'Pulse ' + esc(v.pulse) : '',
+      v.temperature ? 'Temp ' + esc(v.temperature) + '°F' : '',
+      v.spo2 ? 'SpO₂ ' + esc(v.spo2) + '%' : '',
+      v.weight_kg ? 'Wt ' + esc(v.weight_kg) + 'kg' : '',
+    ].filter(Boolean).join(' · ');
+
+    box.innerHTML =
+      '<div class="rxv">' +
+      '<div class="rxv-badge ' + esc(rx.status) + '">' + (rx.status === 'final' ? 'Signed prescription' : 'Draft — may still change') + '</div>' +
+      (doctorName ? '<div class="rxv-doc">Dr. ' + esc(doctorName) + '</div>' : '') +
+      (rx.chief_complaints ? '<div class="rxv-sec"><span>Complaints</span>' + esc(rx.chief_complaints) + '</div>' : '') +
+      (rx.diagnosis ? '<div class="rxv-sec"><span>Diagnosis</span>' + esc(rx.diagnosis) + '</div>' : '') +
+      (vitalBits ? '<div class="rxv-sec"><span>Vitals</span>' + vitalBits + '</div>' : '') +
+      (meds.length
+        ? '<div class="rxv-sec"><span>Medicines</span><table class="rxv-meds">' +
+          meds.map((m) =>
+            '<tr><td>' + esc(m.name) + '</td><td>' + esc(m.dose || '') + '</td><td>' + esc(m.frequency || '') +
+            '</td><td>' + esc(m.duration || '') + '</td></tr>' +
+            (m.instructions ? '<tr class="rxv-instr"><td colspan="4">' + esc(m.instructions) + '</td></tr>' : '')
+          ).join('') + '</table></div>'
+        : '') +
+      (rx.advice ? '<div class="rxv-sec"><span>Advice</span>' + esc(rx.advice) + '</div>' : '') +
+      (rx.follow_up_date && rx.follow_up_date !== '0000-00-00'
+        ? '<div class="rxv-sec"><span>Follow-up</span>' + esc(rx.follow_up_date) + '</div>' : '') +
+      (cfg.apptDetailsUrl
+        ? '<a class="rxv-link" href="' + cfg.apptDetailsUrl + '" target="_blank" rel="noopener">Open in my records <i class="fas fa-arrow-up-right-from-square"></i></a>'
+        : '') +
+      '</div>';
+  }
+
+  function fetchRx(then) {
+    fetch(cfg.rxUrl + '?ticket=' + encodeURIComponent(cfg.ticket))
+      .then((r) => r.json())
+      .then((res) => { if (res.success) then(res); })
+      .catch(() => {});
+  }
+
+  function onPrescriptionSignal(p) {
+    // Patient only — the doctor renders from their own save response.
+    if (cfg.role === 'doctor') return;
+    const btn = $('rxBtn');
+    fetchRx((res) => {
+      renderRxView(res.rx, (res.doctor && res.doctor.name) || (p && p.doctor_name));
+      if (btn) {
+        btn.style.display = '';
+        btn.classList.add('has-rx');
+      }
+      openPanel('rxPanel');
+      rxToast((p && p.status === 'final' ? 'Prescription received from ' : 'Draft prescription from ')
+        + ((p && p.doctor_name) ? 'Dr. ' + p.doctor_name : 'your doctor'));
+    });
+  }
+
+  initDoctorRx();
+  // Patient: if a prescription already exists (e.g. page reload mid-call), show the button.
+  if (cfg.role === 'patient') {
+    fetchRx((res) => {
+      if (res.rx) {
+        renderRxView(res.rx, res.doctor && res.doctor.name);
+        const btn = $('rxBtn');
+        if (btn) { btn.style.display = ''; btn.classList.add('has-rx'); }
+      }
+    });
+  }
 
   /* ── Boot ── */
   (async function boot() {

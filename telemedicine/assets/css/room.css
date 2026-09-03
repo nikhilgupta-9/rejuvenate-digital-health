@@ -37,6 +37,7 @@ html, body {
 .room-stage {
   position: relative;
   height: calc(100vh - 60px - 84px);
+  height: calc(100dvh - 60px - 84px);
   background: #000;
 }
 
@@ -83,13 +84,95 @@ html, body {
   background: rgba(0,0,0,.55); padding: 2px 8px; border-radius: 6px; font-size: .64rem; font-weight: 600;
 }
 
-/* ── Chat panel ── */
-.chat-panel {
-  position: absolute; right: 0; top: 0; bottom: 0; width: 320px; max-width: 88vw;
+/* ── Side panels (chat / doctor / patient-rx) ── */
+.side-panel {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 360px; max-width: 92vw;
   background: #111827; border-left: 1px solid #1f2937;
   display: none; flex-direction: column; z-index: 20;
 }
-.chat-panel.open { display: flex; }
+.side-panel.open { display: flex; }
+.chat-panel { width: 320px; }
+
+.sp-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px 8px 14px; border-bottom: 1px solid #1f2937; gap: 8px;
+  font-size: .9rem; font-weight: 700;
+}
+.sp-tabs { display: flex; gap: 4px; }
+.sp-tab {
+  background: #1f2937; border: none; color: #9ca3af; cursor: pointer;
+  padding: 7px 12px; border-radius: 8px; font-size: .78rem; font-weight: 600;
+}
+.sp-tab.active { background: #0C74C5; color: #fff; }
+.sp-body { flex: 1; overflow-y: auto; padding: 14px; font-size: .84rem; -webkit-overflow-scrolling: touch; }
+.sp-pane { display: none; }
+.sp-pane.active { display: block; }
+
+/* Patient snapshot */
+.pi-name { font-size: 1rem; font-weight: 700; }
+.pi-meta { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 12px; color: #9ca3af; font-size: .8rem; }
+.pi-blood { color: #f87171; }
+.pi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-bottom: 12px; }
+.pi-grid > div { font-size: .82rem; word-break: break-word; }
+.pi-grid span { display: block; color: #6b7280; font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; }
+.pi-block { border-top: 1px solid #1f2937; padding-top: 10px; margin-top: 10px; }
+.pi-block > span { display: block; color: #6b7280; font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+.pi-block p { margin: 0; white-space: pre-wrap; }
+.pi-doc { display: block; color: #38bdf8; text-decoration: none; font-size: .8rem; padding: 3px 0; }
+.pi-past { list-style: none; padding: 0; margin: 0; font-size: .8rem; }
+.pi-past li { padding: 5px 0; border-bottom: 1px solid #1f2937; }
+.pi-tag { font-style: normal; font-size: .66rem; padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
+.pi-tag.final { background: #0f3a2a; color: #34d399; }
+.pi-tag.draft { background: #3f2f10; color: #fbbf24; }
+.pi-empty { color: #9ca3af; font-size: .82rem; line-height: 1.5; }
+
+/* Prescription form (doctor) */
+.rx-form label { display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: #9ca3af; margin: 12px 0 4px; }
+.rx-form textarea, .rx-form input {
+  width: 100%; background: #1f2937; border: 1px solid #374151; border-radius: 8px;
+  padding: 8px 10px; color: #fff; font-size: 16px; outline: none; font-family: inherit;
+}
+.rx-form textarea:focus, .rx-form input:focus { border-color: #02c9b8; }
+.rx-status-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rx-pill { font-size: .68rem; font-weight: 700; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; }
+.rx-pill.none { background: #1f2937; color: #9ca3af; }
+.rx-pill.draft { background: #3f2f10; color: #fbbf24; }
+.rx-pill.final { background: #0f3a2a; color: #34d399; }
+.rx-hint { font-size: .7rem; color: #6b7280; }
+.rx-vitals { margin-top: 12px; }
+.rx-vitals summary { font-size: .74rem; color: #9ca3af; cursor: pointer; }
+.rx-vitals-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.rx-vitals-grid label { display: flex; flex-direction: column; gap: 3px; margin: 0; }
+.rx-med { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr 1.4fr auto; gap: 6px; margin-bottom: 6px; }
+.rx-med input { padding: 6px 8px; font-size: 14px; }
+.rx-med-del { background: #1f2937; border: none; color: #f87171; border-radius: 6px; cursor: pointer; padding: 0 8px; }
+.rx-add {
+  background: none; border: 1px dashed #374151; color: #9ca3af; border-radius: 8px;
+  padding: 7px; width: 100%; cursor: pointer; font-size: .78rem; margin-top: 4px;
+}
+.rx-actions { display: flex; gap: 8px; margin-top: 16px; }
+.rx-btn { flex: 1; border: none; border-radius: 8px; padding: 11px; font-size: .82rem; font-weight: 700; cursor: pointer; }
+.rx-btn.draft { background: #1f2937; color: #e5e7eb; }
+.rx-btn.final { background: #059669; color: #fff; }
+.rx-btn:disabled { opacity: .6; cursor: progress; }
+.rx-note { font-size: .68rem; color: #6b7280; margin: 8px 0 0; text-align: center; }
+
+/* Prescription view (patient) */
+.ctrl-btn.has-rx::after {
+  content: ''; position: absolute; top: 8px; right: 8px; width: 9px; height: 9px;
+  background: #34d399; border-radius: 50%; border: 2px solid #111827;
+}
+.ctrl-btn { position: relative; }
+.rxv-badge { display: inline-block; font-size: .68rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; text-transform: uppercase; }
+.rxv-badge.final { background: #0f3a2a; color: #34d399; }
+.rxv-badge.draft { background: #3f2f10; color: #fbbf24; }
+.rxv-doc { font-weight: 700; margin: 8px 0 4px; }
+.rxv-sec { border-top: 1px solid #1f2937; padding-top: 8px; margin-top: 8px; font-size: .84rem; line-height: 1.5; }
+.rxv-sec > span { display: block; color: #6b7280; font-size: .66rem; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; }
+.rxv-meds { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.rxv-meds td { padding: 4px 6px; border-bottom: 1px solid #1f2937; }
+.rxv-instr td { color: #9ca3af; font-size: .74rem; padding-top: 0; }
+.rxv-link { display: inline-block; margin-top: 12px; color: #38bdf8; text-decoration: none; font-size: .8rem; }
 .chat-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 16px; font-size: .85rem; font-weight: 700; border-bottom: 1px solid #1f2937;
@@ -140,9 +223,37 @@ html, body {
 .rt-toast.show { opacity: 1; }
 
 @media (max-width: 640px) {
-  .local-pip { width: 100px; height: 74px; }
-  .chat-panel { width: 100%; max-width: 100%; }
-  .room-controls { gap: 10px; }
-  .ctrl-btn { width: 48px; height: 48px; font-size: 1rem; }
+  .room-topbar { height: 54px; padding: 0 12px; }
   .rt-sub { display: none; }
+  .rt-name { font-size: .85rem; }
+
+  .local-pip { width: 92px; height: 122px; right: 10px; top: 10px; border-radius: 10px; }
+  .remote-label { left: 10px; bottom: 10px; font-size: .72rem; }
+
+  /* Panels slide up as a bottom sheet, not a side drawer */
+  .side-panel {
+    top: auto; left: 0; right: 0; bottom: 0; width: 100%; max-width: 100%;
+    height: 82dvh; border-left: none; border-top: 1px solid #1f2937;
+    border-radius: 16px 16px 0 0; transform: translateY(100%); transition: transform .22s ease;
+    display: flex; visibility: hidden;
+  }
+  .side-panel.open { transform: translateY(0); visibility: visible; }
+
+  .room-controls {
+    height: auto; gap: 8px; padding: 10px 8px calc(10px + env(safe-area-inset-bottom));
+    flex-wrap: wrap;
+  }
+  .room-stage { height: calc(100dvh - 54px - 76px); }
+  .ctrl-btn { width: 50px; height: 50px; font-size: 1.05rem; }
+  .ctrl-btn.end { width: 58px; }
+
+  .rx-med { grid-template-columns: 1fr 1fr; }
+  .rx-med input[name="med_instr"] { grid-column: 1 / -1; }
+  .rx-med-del { grid-column: 1 / -1; padding: 6px; }
+  .pi-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) and (orientation: landscape) {
+  .side-panel { height: 100dvh; border-radius: 0; }
+  .local-pip { width: 110px; height: 74px; }
 }
