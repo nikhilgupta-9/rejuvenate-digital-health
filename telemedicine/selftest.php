@@ -78,11 +78,20 @@ $checks[] = [
 ];
 
 $dbTime = @$conn->query("SELECT NOW() n")->fetch_assoc()['n'] ?? '';
+// The presence check in api/poll.php compares heartbeats entirely inside SQL,
+// so a PHP/MySQL timezone gap no longer breaks calls — but a gap still means
+// something is misconfigured, so flag it loudly.
+$clockSkew = $dbTime ? abs(time() - strtotime($dbTime)) : null;
+$clockOk   = $clockSkew !== null && $clockSkew <= 120;
 $checks[] = [
-    'label' => 'Server clock',
-    'ok'    => true,
-    'value' => 'PHP ' . date('Y-m-d H:i:s') . '  ·  MySQL ' . $dbTime,
-    'hint'  => 'PHP and MySQL times should match and be roughly correct — presence timeout is 6s.',
+    'label' => 'PHP ↔ MySQL clock',
+    'ok'    => $clockOk,
+    'value' => 'PHP ' . date('Y-m-d H:i:s') . '  ·  MySQL ' . $dbTime
+             . ($clockSkew !== null ? '  ·  skew ' . $clockSkew . 's' : ''),
+    'hint'  => $clockOk
+        ? ''
+        : 'PHP and MySQL disagree on the wall clock by ' . ($clockSkew ?? '?') . 's — usually a timezone mismatch on shared hosting. '
+          . 'Calls will still connect (presence is computed in SQL), but fix it: set date.timezone in php.ini and the DB time_zone to the same zone.',
 ];
 
 $openAppt = @$conn->query("SELECT a.id, a.appointment_date, a.appointment_time, a.status, d.name dn, u.name un

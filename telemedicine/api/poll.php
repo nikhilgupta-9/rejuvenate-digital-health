@@ -74,16 +74,23 @@ $stmt = $conn->prepare("
 $stmt->bind_param('siis', $room, $appointmentId, $entityId, $name);
 $stmt->execute();
 
-$stmt = $conn->prepare("SELECT * FROM telemedicine_rooms WHERE room = ? LIMIT 1");
+// Compute how stale each side's heartbeat is *inside SQL* so this never
+// depends on PHP's timezone matching MySQL's — NOW(3) and *_last_seen are
+// both in MySQL's session zone, so their difference is always correct even
+// when php.ini and the DB server disagree about the local timezone (which
+// they routinely do on shared hosting → the peer looked permanently gone).
+$stmt = $conn->prepare("
+    SELECT *,
+           TIMESTAMPDIFF(SECOND, `doctor_last_seen`,  NOW(3)) AS _doctor_age_s,
+           TIMESTAMPDIFF(SECOND, `patient_last_seen`, NOW(3)) AS _patient_age_s
+    FROM telemedicine_rooms WHERE room = ? LIMIT 1
+");
 $stmt->bind_param('s', $room);
 $stmt->execute();
 $roomRow = $stmt->get_result()->fetch_assoc();
 
-$peerLastSeen = $roomRow["{$peerCol}_last_seen"] ?? null;
-$peerPresent = false;
-if ($peerLastSeen) {
-    $peerPresent = (strtotime($peerLastSeen) >= time() - TELEMED_PRESENCE_TIMEOUT_SECONDS);
-}
+$peerAge = $roomRow["_{$peerCol}_age_s"] ?? null;   // seconds since the peer's last poll, or null if never
+$peerPresent = ($peerAge !== null && (int) $peerAge <= TELEMED_PRESENCE_TIMEOUT_SECONDS);
 
 if ($peerPresent && (int) $roomRow['ready_sent'] === 0) {
     // Guarded so only one of the two concurrent pollers (doctor's,
