@@ -55,22 +55,21 @@ if (!in_array($role, ['doctor', 'patient'], true)) {
     exit;
 }
 
-// Per-room sweep — a signal (offer / answer / ICE candidate / chat) is only
-// useful for a few seconds after it is posted; once it is minutes old the
-// call is either connected or dead, and the client never replays it. Pruning
-// aggressively here is what keeps telemedicine_signals from ballooning to
-// hundreds of rows per call under a flaky connection. Runs on ~1 poll in 4.
-if (mt_rand(1, 4) === 1) {
-    $sweep = $conn->prepare("DELETE FROM telemedicine_signals WHERE room = ? AND created_at < (NOW(3) - INTERVAL 3 MINUTE)");
-    $sweep->bind_param('s', $room);
-    $sweep->execute();
-}
-
-// Global sweep for abandoned rooms/signals — rare, since the per-room sweep
-// above does the heavy lifting.
-if (mt_rand(1, 300) === 1) {
-    $conn->query("DELETE FROM telemedicine_signals WHERE created_at < (NOW() - INTERVAL 20 MINUTE)");
-    $conn->query("DELETE FROM telemedicine_rooms   WHERE created_at < (NOW() - INTERVAL 2 HOUR)");
+// Housekeeping — keep telemedicine_signals from ballooning under a flaky
+// connection, but only touch rows old enough that no live handshake could
+// still need them (5 min), and never let a cleanup hiccup break the poll.
+try {
+    if (mt_rand(1, 20) === 1) {
+        $sweep = $conn->prepare("DELETE FROM telemedicine_signals WHERE room = ? AND created_at < (NOW() - INTERVAL 5 MINUTE)");
+        $sweep->bind_param('s', $room);
+        $sweep->execute();
+    }
+    if (mt_rand(1, 400) === 1) {
+        $conn->query("DELETE FROM telemedicine_signals WHERE created_at < (NOW() - INTERVAL 30 MINUTE)");
+        $conn->query("DELETE FROM telemedicine_rooms   WHERE created_at < (NOW() - INTERVAL 2 HOUR)");
+    }
+} catch (Throwable $e) {
+    error_log('[telemed poll] sweep: ' . $e->getMessage());
 }
 
 $myCol   = $role === 'doctor' ? 'doctor' : 'patient';

@@ -80,92 +80,170 @@ $abdm_on = ABDM_CONFIGURED;
   <style>
     :root {
       --primary: #0C74C5;
+      --primary-dark: #0a5fa3;
       --accent: #02c9b8;
       --ab: #00875a;
+      --ink: #1c1e21;
+      --muted: #65676b;
+      --line: #dddfe2;
+      --field-bg: #f5f6f7;
     }
 
+    /* keep the auth page from inheriting any horizontal scroll from the
+       global header/footer markup on small screens */
+    html,
     body {
-      background: #f0f4f8;
+      overflow-x: hidden;
+    }
+
+    /* ── Page shell ── */
+    .rjv-auth {
+      background: #f0f2f5;
+      min-height: 100vh;
+      width: 100%;
+      overflow-x: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
     }
 
     .login-wrap {
-      min-height: 100vh;
+      max-width: 400px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 22px 16px 24px;
       display: flex;
-      align-items: center;
+      flex-direction: column;
       justify-content: center;
-      padding: 40px 16px;
     }
 
+    /* ── Brand ── */
+    .login-brand {
+      text-align: center;
+      margin-bottom: 14px;
+    }
+
+    .login-brand h1 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--ink);
+      margin: 0;
+      line-height: 1.3;
+    }
+
+    .login-brand p {
+      font-size: .84rem;
+      color: var(--muted);
+      margin: 2px 0 0;
+    }
+
+    /* ── Card ── */
     .login-card {
       background: #fff;
-      border-radius: 20px;
-      box-shadow: 0 4px 30px rgba(0, 0, 0, .1);
+      border-radius: 12px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, .1), 0 2px 12px rgba(0, 0, 0, .08);
       width: 100%;
-      max-width: 535px;
       overflow: hidden;
     }
 
-    .login-header {
-      background: var(--primary);
-      color: #fff;
-      padding: 28px 32px 22px;
-      text-align: center;
-    }
-
-    .login-header img {
-      height: 50px;
-      margin-bottom: 12px;
-      object-fit: contain;
-    }
-
-    .login-header h2 {
-      font-size: 1.25rem;
-      font-weight: 700;
-      margin: 0 0 4px;
-    }
-
-    .login-header p {
-      font-size: .8rem;
-      opacity: .85;
-      margin: 0;
-    }
-
     .login-body {
-      padding: 28px 32px 32px;
+      padding: 18px 18px 20px;
     }
 
-    /* Method tabs */
+    /* tighten Bootstrap spacing utilities inside the card */
+    .login-body .mb-3 {
+      margin-bottom: .7rem !important;
+    }
+
+    .login-body .mb-4 {
+      margin-bottom: .55rem !important;
+    }
+
+    /* ── Fields ── */
+    .login-body .form-label {
+      font-size: .82rem !important;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 4px;
+    }
+
+    .login-body .form-control,
+    .login-body .form-select,
+    .login-body .input-group-text {
+      font-size: 1rem;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--field-bg);
+    }
+
+    .login-body .form-control:focus,
+    .login-body .form-select:focus {
+      background: #fff;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(12, 116, 197, .15);
+    }
+
+    .login-body .input-group-text {
+      background: #eef0f2;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .login-body small.text-muted {
+      font-size: .74rem;
+      color: var(--muted) !important;
+    }
+
+    /* ── Primary buttons ── */
+    .login-body .btn {
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .login-body .btn-primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      padding: 10px 16px;
+    }
+
+    .login-body .btn-primary:hover,
+    .login-body .btn-primary:focus {
+      background: var(--primary-dark);
+      border-color: var(--primary-dark);
+    }
+
+    /* ── Method tabs ── */
     .method-tabs {
       display: flex;
       gap: 6px;
-      margin-bottom: 22px;
+      margin-bottom: 14px;
     }
 
     .method-tab {
       flex: 1;
-      padding: 9px 6px;
-      border: 1.5px solid #e5e7eb;
-      border-radius: 10px;
-      background: #f9fafb;
-      font-size: .75rem;
+      padding: 7px 4px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      font-size: .7rem;
       font-weight: 600;
-      color: #6b7280;
+      color: var(--muted);
       cursor: pointer;
       transition: .15s;
       text-align: center;
-      line-height: 1.4;
+      line-height: 1.3;
+      white-space: nowrap;
     }
 
     .method-tab i {
       display: block;
-      font-size: 1.1rem;
+      font-size: 1.05rem;
       margin-bottom: 3px;
     }
 
     .method-tab:hover {
-      border-color: var(--primary);
-      color: var(--primary);
-      background: #eff6ff;
+      background: #f0f2f5;
     }
 
     .method-tab.active {
@@ -192,11 +270,11 @@ $abdm_on = ABDM_CONFIGURED;
 
     /* OTP input */
     .otp-big {
-      letter-spacing: .35em;
-      font-size: 1.3rem;
+      letter-spacing: .3em;
+      font-size: 1.35rem !important;
       font-weight: 700;
       text-align: center;
-      font-family: monospace;
+      font-family: inherit;
     }
 
     /* Password toggle */
@@ -206,31 +284,20 @@ $abdm_on = ABDM_CONFIGURED;
 
     .pw-toggle {
       position: absolute;
-      right: 12px;
-      top: 50%;
+      right: 8px;
+      top: 21px;
       transform: translateY(-50%);
       background: none;
       border: none;
       color: #9ca3af;
       cursor: pointer;
-      padding: 0;
+      padding: 6px;
+      line-height: 1;
+      z-index: 5;
     }
 
-    /* Divider */
-    .or-divider {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      color: #9ca3af;
-      font-size: .78rem;
-      margin: 18px 0;
-    }
-
-    .or-divider::before,
-    .or-divider::after {
-      content: '';
-      flex: 1;
-      border-top: 1px solid #e5e7eb;
+    .pw-wrap .form-control {
+      padding-right: 42px;
     }
 
     /* Role hint chips */
@@ -238,7 +305,7 @@ $abdm_on = ABDM_CONFIGURED;
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
-      margin-bottom: 14px;
+      margin-bottom: 16px;
     }
 
     .role-chip {
@@ -246,9 +313,9 @@ $abdm_on = ABDM_CONFIGURED;
       border-radius: 20px;
       font-size: .7rem;
       font-weight: 600;
-      border: 1px solid #e5e7eb;
-      background: #f9fafb;
-      color: #6b7280;
+      border: 1px solid var(--line);
+      background: #f5f6f7;
+      color: var(--muted);
     }
 
     .role-chip i {
@@ -256,44 +323,183 @@ $abdm_on = ABDM_CONFIGURED;
     }
 
     /* Alert */
-    .alert {
-      border-radius: 10px;
+    .login-body .alert {
+      border-radius: 8px;
       font-size: .85rem;
+      padding: 10px 12px;
     }
 
-    /* Help text */
+    /* Divider + footer links */
+    .login-sep {
+      border: 0;
+      border-top: 1px solid var(--line);
+      margin: 14px 0 12px;
+    }
+
     .login-footer-links {
       text-align: center;
-      font-size: .8rem;
-      color: #6b7280;
-      margin-top: 18px;
+      font-size: .82rem;
+      color: var(--muted);
+      margin-top: 12px;
+      line-height: 1.6;
     }
 
     .login-footer-links a {
       color: var(--primary);
       text-decoration: none;
+      font-weight: 600;
     }
 
     .login-footer-links a:hover {
       text-decoration: underline;
     }
+
+    .login-create {
+      text-align: center;
+    }
+
+    .login-create a {
+      display: inline-block;
+      background: #42b72a;
+      color: #fff;
+      font-weight: 700;
+      font-size: .92rem;
+      padding: 9px 18px;
+      border-radius: 8px;
+      text-decoration: none;
+    }
+
+    .login-create a:hover {
+      background: #369a20;
+      color: #fff;
+    }
+
+    /* ── Standalone shell: topbar + legal footer ── */
+    .rjv-auth {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .auth-topbar {
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      padding: 8px 16px;
+      flex-shrink: 0;
+    }
+
+    .auth-topbar-inner {
+      max-width: 980px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .auth-topbar img {
+      height: 30px;
+      object-fit: contain;
+    }
+
+    .auth-topbar a.auth-help {
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    .login-wrap {
+      flex: 1 0 auto;
+    }
+
+    .auth-legal {
+      flex-shrink: 0;
+      background: #fff;
+      border-top: 1px solid var(--line);
+      padding: 12px 16px 14px;
+      font-size: .75rem;
+      color: var(--muted);
+    }
+
+    .auth-legal-inner {
+      max-width: 980px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .auth-legal a {
+      color: var(--muted);
+      text-decoration: none;
+      margin: 0 7px;
+      white-space: nowrap;
+    }
+
+    .auth-legal a:hover {
+      text-decoration: underline;
+    }
+
+    .auth-legal .auth-legal-links {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 2px 0;
+      margin-bottom: 5px;
+    }
+
+    @media (max-width: 480px) {
+      .login-wrap {
+        padding: 16px 12px 18px;
+      }
+
+      .login-body {
+        padding: 16px 14px 18px;
+      }
+
+      .method-tab {
+        font-size: .68rem;
+      }
+
+      .auth-topbar img {
+        height: 26px;
+      }
+    }
+
+    /* very short viewports: keep it inside the screen */
+    @media (max-height: 720px) {
+      .login-brand {
+        margin-bottom: 10px;
+      }
+
+      .login-brand p {
+        display: none;
+      }
+
+      .login-body .mb-3 {
+        margin-bottom: .55rem !important;
+      }
+    }
   </style>
 </head>
 
 <body>
-  <?php include("header.php") ?>
+  <section class="rjv-auth">
 
-  <section class="contact-appointment-section section-padding fix">
+    <!-- Minimal top bar -->
+    <div class="auth-topbar">
+      <div class="auth-topbar-inner">
+        <a href="<?= BASE_URL ?>"><img src="<?= BASE_URL . $logo ?>" alt="REJUVENATE Digital Health"></a>
+        <a href="<?= BASE_URL ?>contact-us.php" class="auth-help">Need help?</a>
+      </div>
+    </div>
+
     <div class="login-wrap">
+
+      <!-- Brand -->
+      <div class="login-brand">
+        <h1>Log in to REJUVENATE</h1>
+        <p>Access your Digital Health account</p>
+      </div>
+
       <div class="login-card">
-
-        <!-- Header -->
-        <div class="login-header">
-          <img src="<?= BASE_URL . $logo ?>" alt="Logo">
-          <h2>Welcome Back</h2>
-          <p>Sign in to your REJUVENATE Digital Health account</p>
-        </div>
-
         <div class="login-body">
 
           <!-- Alerts -->
@@ -310,15 +516,6 @@ $abdm_on = ABDM_CONFIGURED;
             </div>
           <?php endif; ?>
           <div id="ajaxAlert" class="alert" style="display:none;"></div>
-
-          <!-- Who can log in here -->
-          <div class="role-chips">
-            <span class="role-chip"><i class="fas fa-user text-primary"></i>Patient</span>
-            <span class="role-chip"><i class="fas fa-user-graduate text-success"></i>Student</span>
-            <span class="role-chip"><i class="fas fa-chalkboard-teacher text-warning"></i>Teacher</span>
-            <span class="role-chip"><i class="fas fa-school text-info"></i>School Admin</span>
-            <!-- <span class="role-chip"><i class="fas fa-user-md text-danger"></i>Doctor</span> -->
-          </div>
 
           <!-- Method tabs -->
           <div class="method-tabs">
@@ -349,7 +546,6 @@ $abdm_on = ABDM_CONFIGURED;
                 <?php if (!empty($errors['identifier'])): ?>
                   <div class="invalid-feedback"><?= htmlspecialchars($errors['identifier']) ?></div>
                 <?php endif; ?>
-                <small class="text-muted">Works for patients, school members, and doctors</small>
               </div>
 
               <div class="mb-3">
@@ -527,26 +723,37 @@ $abdm_on = ABDM_CONFIGURED;
             </div>
           <?php endif; ?>
 
-          <!-- Footer links -->
-          <div class="login-footer-links">
-            New patient? <a href="<?= BASE_URL ?>signup.php">Create account</a>
-            &nbsp;|&nbsp;
-            Register school: <a href="<?= BASE_URL ?>school-register.php">School Sign Up</a>
-          </div>
-          <div class="login-footer-links mt-2">
-            Student? <a href="<?= BASE_URL ?>student-register.php">Register here</a>
-            &nbsp;|&nbsp;
-            Teacher? <a href="<?= BASE_URL ?>teacher-register.php">Register here</a>
-          </div>
-          <div class="login-footer-links">
-            Student Request for password link: <a href="<?=BASE_URL?>school/request-password-link.php">Request Password Link</a>
+          <!-- Create account -->
+          <hr class="login-sep">
+          <div class="login-create">
+            <a href="<?= BASE_URL ?>signup.php">Create new patient account</a>
           </div>
 
         </div><!-- /login-body -->
       </div><!-- /login-card -->
-    </div>
+    </div><!-- /login-wrap -->
+
+    <!-- Minimal legal footer -->
+    <footer class="auth-legal">
+      <div class="auth-legal-inner">
+        <div class="auth-legal-links">
+          <a href="<?= BASE_URL ?>school-register.php">Register School</a>
+          <a href="<?= BASE_URL ?>student-register.php">Student</a>
+          <a href="<?= BASE_URL ?>teacher-register.php">Teacher</a>
+          <a href="<?= BASE_URL ?>school/request-password-link.php">Student password link</a>
+          <a href="<?= BASE_URL ?>doctor-login/">Doctor Login</a>
+        </div>
+        <div class="auth-legal-links">
+          <a href="<?= BASE_URL ?>privacy-policy.php">Privacy Policy</a>
+          <a href="<?= BASE_URL ?>terms-and-condition.php">Terms</a>
+          <a href="<?= BASE_URL ?>legal-compliance.php">Legal &amp; Compliance</a>
+          <a href="<?= BASE_URL ?>contact-us.php">Contact</a>
+        </div>
+        &copy; <?= date('Y') ?> REJUVENATE Digital Health. All rights reserved.
+      </div>
+    </footer>
+
   </section>
-  <?php include("footer.php") ?>
   <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
   <script>
     const BASE = '<?= BASE_URL ?>';

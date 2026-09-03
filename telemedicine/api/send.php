@@ -109,19 +109,26 @@ switch ($type) {
         break;
 
     case 'end-call':
+        // Post the 'call-ended' the peer is waiting for FIRST — nothing below
+        // is allowed to prevent it reaching them.
+        telemed_insert_signal($conn, $room, $role, 'call-ended', ['by' => $role]);
+
         $upd = $conn->prepare("UPDATE appointments SET meeting_status='completed', meeting_completed_at=NOW() WHERE id=? AND meeting_status != 'completed'");
         $upd->bind_param('i', $appointmentId);
         $upd->execute();
 
-        // Drop the handshake chatter for this room now — keep only the
-        // 'call-ended' we're about to post, which the peer still needs to see.
-        $clean = $conn->prepare("DELETE FROM telemedicine_signals WHERE room = ? AND type IN ('offer','answer','ice-candidate','ready','peer-media')");
-        $clean->bind_param('s', $room);
-        $clean->execute();
+        // Best-effort cleanup of this room's handshake chatter (keeps
+        // 'call-ended' + 'chat'). Wrapped so a hiccup can't 500 the response.
+        try {
+            $clean = $conn->prepare("DELETE FROM telemedicine_signals WHERE room = ? AND type IN ('offer','answer','ice-candidate','ready','peer-media')");
+            $clean->bind_param('s', $room);
+            $clean->execute();
+        } catch (Throwable $e) {
+            error_log('[telemed send] end-call cleanup: ' . $e->getMessage());
+        }
 
-        telemed_insert_signal($conn, $room, $role, 'call-ended', ['by' => $role]);
         echo json_encode(['success' => true]);
         break;
 }
 
-$conn->close();
+@$conn->close();

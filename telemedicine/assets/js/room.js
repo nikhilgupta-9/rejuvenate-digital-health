@@ -23,6 +23,13 @@
   let micOn = true;
   let camOn = true;
 
+  // ── Reconnect ──
+  let iceRetries = 0;
+  let iceRetryTimer = null;
+  let peerGoneSince = 0;
+  let peerEverPresent = false;
+  const MAX_ICE_RETRIES = 4;
+
   // ── Polling state ──
   let lastId = 0;
   let pollTimer = null;
@@ -104,8 +111,25 @@
 
     pc.onconnectionstatechange = () => {
       if (!pc) return;
-      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-        toast('Connection interrupted — trying to recover…');
+      const s = pc.connectionState;
+      if (s === 'connected') { iceRetries = 0; return; }
+      if (s === 'failed' || s === 'disconnected') {
+        setStatus('waiting', 'Reconnecting…');
+        waitingOverlay.classList.remove('hidden');
+      }
+      if (s === 'failed') {
+        // The doctor drives recovery (re-offers). Capped so a genuinely
+        // un-connectable network (needs TURN) doesn't loop forever flooding
+        // signals. The patient just waits for the fresh offer.
+        if (cfg.role === 'doctor' && iceRetries < MAX_ICE_RETRIES) {
+          iceRetries++;
+          toast('Reconnecting… (' + iceRetries + ')');
+          clearTimeout(iceRetryTimer);
+          iceRetryTimer = setTimeout(() => { if (peerPresent) makeOffer(); }, 2000);
+        } else if (cfg.role === 'doctor') {
+          setStatus('ended', 'Could not connect — check your network');
+          toast('Unable to establish video. A stable network or a TURN server is needed.');
+        }
       }
     };
 
@@ -116,19 +140,19 @@
     return pc && ['connecting', 'connected'].includes(pc.connectionState);
   }
 
+  // A 'ready' now only arrives on the first connect or a real (45s+) reconnect
+  // — see api/poll.php — so both sides always (re)negotiate from a clean slate.
   async function makeOffer() {
-    // Don't renegotiate a call that's already up — a duplicate 'ready'
-    // (e.g. after a brief poll delay) would otherwise fire a whole new
-    // ICE-candidate storm into the signaling table.
-    if (pcHealthy()) return;
-    if (!pc) createPeerConnection();
+    if (pc) teardownPeerConnection();
+    createPeerConnection();
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     send({ type: 'offer', sdp: offer });
   }
 
   async function handleOffer(sdp) {
-    if (!pc) createPeerConnection();
+    if (pc) teardownPeerConnection();
+    createPeerConnection();
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
     await flushPendingCandidates();
     const answer = await pc.createAnswer();
@@ -219,16 +243,26 @@
 
     const wasPresent = peerPresent;
     peerPresent = !!res.peerPresent;
-    if (peerPresent !== wasPresent) {
-      if (peerPresent) {
-        waitingOverlay.classList.add('hidden');
-      } else if (!pcHealthy()) {
-        // Peer's heartbeat lapsed AND we don't have a live media connection —
-        // treat it as a real drop. If the call is actually up, a short poll
-        // delay under load must NOT tear it down.
+
+    if (peerPresent) {
+      peerGoneSince = 0;
+      peerEverPresent = true;
+      if (wasPresent !== true) waitingOverlay.classList.add('hidden');
+    } else {
+      if (!peerGoneSince) peerGoneSince = Date.now();
+      const goneMs = Date.now() - peerGoneSince;
+
+      if (wasPresent === true && !pcHealthy()) {
+        // Heartbeat lapsed and no live media connection — show the wait state.
+        // A healthy call is left alone; a brief poll delay must not kill it.
         waitingOverlay.classList.remove('hidden');
         teardownPeerConnection();
         setStatus('waiting', 'Waiting for the other participant…');
+      }
+      // Was here, then gone 40s+ straight — really left (tab closed, missed
+      // beacon). Don't sit forever.
+      if (peerEverPresent && goneMs > 40000 && !callEnded) {
+        endCallUi('The other participant left the call.');
       }
     }
 
@@ -331,8 +365,26 @@
     });
   });
 
+  function signalEndCall(attempt) {
+    attempt = attempt || 1;
+    send({ type: 'end-call' }).then((res) => {
+      // Retry a couple of times if the POST didn't land — otherwise the
+      // other side never gets the 'call-ended' and sits there.
+      if ((!res || res.success === false) && attempt < 3) {
+        setTimeout(() => signalEndCall(attempt + 1), 800);
+      }
+    });
+    // Belt-and-braces: the beacon endpoint also posts 'call-ended'.
+    if (navigator.sendBeacon) {
+      try {
+        navigator.sendBeacon(cfg.endSessionUrl,
+          new Blob([JSON.stringify({ ticket: cfg.ticket })], { type: 'application/json' }));
+      } catch (e) {}
+    }
+  }
+
   endBtn.addEventListener('click', () => {
-    send({ type: 'end-call' });
+    signalEndCall();
     endCallUi('You ended the call.');
   });
 
