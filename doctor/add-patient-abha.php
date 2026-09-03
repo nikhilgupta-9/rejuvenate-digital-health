@@ -783,8 +783,25 @@ require_once __DIR__ . '/inc/sidebar.php';
     }
 
     // ── Init ──
-    // Set initial focus
-    document.querySelector('.method-tab.active').click();
+    // Deep link from a patient profile: ?abha=<digits> → open on the ABHA Number
+    // method with the number pre-filled, ready to send OTP.
+    (function () {
+      const pre = new URLSearchParams(location.search).get('abha');
+      const digits = (pre || '').replace(/\D/g, '').slice(0, 14);
+      if (digits.length === 14) {
+        const numberTab = [...document.querySelectorAll('.method-tab')]
+          .find(b => /setMethod\('number'/.test(b.getAttribute('onclick') || ''));
+        if (numberTab) {
+          setMethod('number', numberTab);
+          const input = document.getElementById('mainInput');
+          input.value = digits.replace(/(\d{2})(\d{4})(\d{4})(\d{4})/, '$1-$2-$3-$4');
+          input.focus();
+          return;
+        }
+      }
+      // Default: set initial focus on the first (Aadhaar) method
+      document.querySelector('.method-tab.active').click();
+    })();
   </script>
 </body>
 

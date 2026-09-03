@@ -45,6 +45,12 @@ if (!$no_email && $email && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
 }
 if ($no_email) $email = null;
 
+// $real_email is the address we can actually reach the patient at (null when
+// none was given). users.email is NOT NULL + UNIQUE, so when there's no email
+// we still store a unique, obviously-synthetic placeholder to keep the row
+// valid — and skip the welcome email for that patient.
+$real_email = ($email !== null && $email !== '') ? $email : null;
+
 $middle_name      = $post['middle_name']      ?? '';
 $name             = trim($first_name . ' ' . $middle_name . ' ' . $last_name);
 $gender           = $post['gender']           ?? '';
@@ -116,25 +122,41 @@ if (!otp_consume_token('patient', $mobile, $post['mobile_verify_token'] ?? ($raw
     echo json_encode(['success'=>false,'error'=>'Patient mobile not verified. Send an OTP to the patient and enter the code before creating the record.']); exit;
 }
 
-// Generate a temporary password (patient can reset via OTP)
-$temp_pass = bin2hex(random_bytes(8));
-$hash      = password_hash($temp_pass, PASSWORD_BCRYPT, ['cost'=>12]);
+// Generate a temporary password — sent to the patient over WhatsApp + email
+// below so they can sign in and then change it. Keep it short and free of
+// look-alike characters (0/O, 1/l/I) since the patient types it by hand.
+$_pw_alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+$temp_pass = '';
+for ($i = 0; $i < 8; $i++) {
+    $temp_pass .= $_pw_alphabet[random_int(0, strlen($_pw_alphabet) - 1)];
+}
+$hash = password_hash($temp_pass, PASSWORD_BCRYPT, ['cost'=>12]);
+
+// No real email? store a unique synthetic placeholder (users.email is NOT NULL
+// + UNIQUE). The patient signs in with their mobile number instead.
+$email = $real_email ?? ('noemail.' . $mobile . '@patients.rejuvenatedigitalhealth.com');
+
+// The doctor created this account on the patient's behalf and already verified
+// the mobile by OTP, so mark it usable straight away — otherwise process-login
+// bounces the patient into an email-OTP loop on first sign-in (and a no-email
+// patient, who signs in by mobile, could never clear that loop at all).
+$email_verified = 1;
 
 // Insert new user
 $ins = $conn->prepare("
     INSERT INTO users
       (name, email, mobile, password, gender, dob, blood_group,
        abha_id, abha_address, abha_linked, abha_verified,
-       zip_code, city, state, address, mobile_verified, mobile_verified_at, created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,NOW(),NOW())
+       zip_code, city, state, address, mobile_verified, mobile_verified_at, email_verified, created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,NOW(),?,NOW())
 ");
 
 $abha_linked = ($abha_number || $abha_address) ? 1 : 0;
-$ins->bind_param('ssssssssssiisss',
+$ins->bind_param('ssssssssssiisssi',
     $name, $email, $mobile, $hash,
     $gender, $dob, $blood_group,
     $abha_number, $abha_address, $abha_linked, $abha_verified,
-    $pincode, $city, $state, $address
+    $pincode, $city, $state, $address, $email_verified
 );
 
 if (!$ins->execute()) {
@@ -160,4 +182,33 @@ $link = $conn->prepare("INSERT IGNORE INTO doctor_patients (doctor_id,patient_id
 $link->bind_param('iis', $doctor_id, $patient_id, $mode);
 $link->execute();
 
-echo json_encode(['success'=>true,'patient_id'=>$patient_id,'message'=>'Patient created and added to your list']);
+// ── Send the patient their login details — WhatsApp + email, best effort ──
+$login_url = rtrim(BASE_URL, '/') . '/login.php';
+$notify    = ['whatsapp' => false, 'email' => false];
+
+$dn = $conn->prepare("SELECT name FROM doctors WHERE id=? LIMIT 1");
+$dn->bind_param('i', $doctor_id);
+$dn->execute();
+$doctor_name = (string)($dn->get_result()->fetch_assoc()['name'] ?? '');
+
+try {
+    $wa = wa_send_account_credentials($mobile, $name ?: 'Patient', $login_url, $real_email ?: $mobile, $temp_pass);
+    $notify['whatsapp'] = !empty($wa['ok']);
+} catch (\Throwable $e) {
+    error_log('[create-patient-submit] WhatsApp welcome failed: ' . $e->getMessage());
+}
+
+if ($real_email) {
+    try {
+        $notify['email'] = send_patient_account_email($real_email, $name ?: 'Patient', $mobile, $temp_pass, $doctor_name);
+    } catch (\Throwable $e) {
+        error_log('[create-patient-submit] welcome email failed: ' . $e->getMessage());
+    }
+}
+
+echo json_encode([
+    'success'    => true,
+    'patient_id' => $patient_id,
+    'message'    => 'Patient created and added to your list',
+    'notify'     => $notify,
+]);

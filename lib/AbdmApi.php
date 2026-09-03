@@ -771,15 +771,33 @@ class AbdmApi
      */
     public static function extractError(array $res, string $fallback = 'ABDM API error'): string
     {
+        // Gateway session endpoint suspended (ABDM sandbox infra) — code 303001.
+        if (($res['code'] ?? '') === '303001' || stripos((string)($res['description'] ?? ''), 'SUSPENDED') !== false) {
+            return 'The ABDM gateway is temporarily unavailable (endpoint suspended). Try again in a few minutes.';
+        }
+
         // ABDM wraps errors in various structures — try each shape in order
         $msg = null;
         if (is_string($res['details'][0]['message'] ?? null))   $msg = $res['details'][0]['message'];
         elseif (is_string($res['details'][0]['attribute'] ?? null)) $msg = $res['details'][0]['attribute'];
-        elseif (is_string($res['message'] ?? null))             $msg = $res['message'];
         elseif (is_string($res['error']['message'] ?? null))    $msg = $res['error']['message'];  // {"error":{"code":"...","message":"..."}}
         elseif (is_string($res['error']['code'] ?? null))       $msg = $res['error']['code'];
         elseif (is_string($res['errors'][0]['message'] ?? null)) $msg = $res['errors'][0]['message'];
-        elseif (is_string($res['code'] ?? null))                $msg = $res['code'];
+
+        // ABDM v3 field-error shape: {"mobile":"Invalid Mobile Number","txnId":"Invalid Transaction Id","timestamp":"..."}
+        if (!$msg) {
+            $fieldErrs = [];
+            foreach ($res as $k => $v) {
+                if (in_array($k, ['_http', '_raw', 'timestamp', 'code', 'type'], true)) continue;
+                if (is_string($v) && $v !== '' && stripos($v, 'invalid') !== false && $k !== 'txnId') {
+                    $fieldErrs[] = $v;
+                }
+            }
+            if ($fieldErrs) $msg = implode('; ', array_unique($fieldErrs));
+        }
+
+        if (!$msg && is_string($res['message'] ?? null))        $msg = $res['message'];
+        if (!$msg && is_string($res['code'] ?? null))           $msg = $res['code'];
 
         if ($msg) return $msg;
 
@@ -806,6 +824,22 @@ class AbdmApi
     {
         $http = $res['_http'] ?? 200;
         return $http >= 200 && $http < 300;
+    }
+
+    /**
+     * True only when an OTP-request response is a genuine success.
+     *
+     * ABDM v3 returns HTTP 400 with { "txnId": "Invalid Transaction Id", ... }
+     * on error — a non-empty txnId — so a bare `empty($res['txnId'])` check
+     * reads that as success. A real txnId is a UUID with no whitespace.
+     */
+    public static function txnOk(array $res): bool
+    {
+        $txn = (string)($res['txnId'] ?? '');
+        return self::wasSuccessful($res)
+            && $txn !== ''
+            && !preg_match('/\s/', $txn)
+            && stripos($txn, 'invalid') === false;
     }
 
     /* ═══════════════════════════════════════════════════════════════

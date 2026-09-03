@@ -569,6 +569,59 @@ class Mailer
     }
 
     /* ══════════════════════════════════════════
+       7b. Patient Account Created (by a doctor, on the patient's behalf)
+       Carries the temporary login credentials + sign-in link.
+    ══════════════════════════════════════════ */
+    public function sendPatientAccountCreated(string $toEmail, string $toName, string $mobile, string $tempPassword, string $doctorName = ''): bool
+    {
+        $firstName = explode(' ', trim($toName))[0] ?: 'there';
+        $loginUrl  = APP_SITE_URL . 'login.php';
+
+        $intro = $doctorName
+            ? "<p>Dr. " . htmlspecialchars($doctorName) . " has created a REJUVENATE Digital Health account for you so you can view your visits, prescriptions and reports online.</p>"
+            : "<p>A REJUVENATE Digital Health patient account has been created for you so you can view your visits, prescriptions and reports online.</p>";
+
+        $html = $this->layout(
+            'Your Patient Account is Ready',
+            'Sign in to view your health records',
+            "
+            <p>Hello <strong>{$firstName}</strong>,</p>
+            {$intro}
+
+            <div style='background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin:20px 0;font-size:14px;line-height:2;'>
+              <strong>Login Email:</strong> " . htmlspecialchars($toEmail) . "<br>
+              <strong>Registered Mobile:</strong> " . htmlspecialchars($mobile) . "<br>
+              <strong>Temporary Password:</strong>
+              <code style='background:#fff;padding:2px 8px;border-radius:4px;font-size:14px;border:1px solid #d1d5db;'>" . htmlspecialchars($tempPassword) . "</code>
+            </div>
+
+            <div style='text-align:center;margin:24px 0;'>
+              <a href='{$loginUrl}' style='background:#0C74C5;color:#fff;text-decoration:none;
+                 padding:13px 32px;border-radius:10px;font-weight:700;font-size:15px;display:inline-block;'>
+                Sign In Now
+              </a>
+            </div>
+
+            <div style='background:#fff8e1;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:6px;margin:20px 0;font-size:13px;'>
+              For your security, please change this temporary password right after your first sign-in.
+              You can sign in with either your email or your mobile number.
+            </div>
+
+            <p style='color:#6b7280;font-size:13px;'>If you were not expecting this, please
+            <a href='mailto:" . MAIL_REPLY_TO . "' style='color:#0C74C5;'>contact support</a>.</p>
+            ",
+            "Your REJUVENATE Digital Health account is ready.\nSign in: {$loginUrl}\nLogin email: {$toEmail}\nTemporary password: {$tempPassword}\nPlease change your password after signing in."
+        );
+
+        return $this->send(
+            $toEmail, $toName,
+            'Your Patient Account — REJUVENATE Digital Health',
+            $html,
+            "Your account is ready. Sign in at {$loginUrl} with {$toEmail} and temporary password {$tempPassword}. Please change it after signing in."
+        );
+    }
+
+    /* ══════════════════════════════════════════
        8. General / Custom Email
        Use this when none of the above fit.
     ══════════════════════════════════════════ */
@@ -692,6 +745,12 @@ function send_appointment_confirmed_email(string $email, string $name, array $ap
 function send_school_account_email(string $email, string $name, string $role, string $schoolName, string $uid, string $tempPassword = ''): bool
 {
     return (new Mailer())->sendSchoolAccountCreated($email, $name, $role, $schoolName, $uid, $tempPassword);
+}
+
+/** Patient account created by a doctor — carries the temporary login credentials. */
+function send_patient_account_email(string $email, string $name, string $mobile, string $tempPassword, string $doctorName = ''): bool
+{
+    return (new Mailer())->sendPatientAccountCreated($email, $name, $mobile, $tempPassword, $doctorName);
 }
 
 /**

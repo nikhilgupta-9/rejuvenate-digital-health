@@ -131,8 +131,9 @@ try {
                     fail($e->getMessage());
                 }
                 $res = $abdm->generateAadhaarOtp($clean['aadhaar']);
-                if (empty($res['txnId'])) {
-                    fail(AbdmApi::extractError($res, 'Failed to send OTP'));
+                if (!AbdmApi::txnOk($res)) {
+                    $logger->logAbhaAuth($doctorId, 'doctor', 'AADHAAR_OTP', '', 'FAILURE');
+                    fail(AbdmApi::extractError($res, 'ABDM did not send an OTP for this Aadhaar.'));
                 }
                 $_SESSION['doc_abdm_txn_id']   = $res['txnId'];
                 $_SESSION['doc_abdm_flow']     = 'create_aadhaar';
@@ -153,8 +154,9 @@ try {
             $loginId = ($type === 'number') ? AbdmApi::formatAbhaNumber(Validator::digitsOnly($input)) : $input;
 
             $res = $abdm->initAuth($loginId, $loginHint, $otpSystem, $scopes);
-            if (empty($res['txnId'])) {
-                fail(AbdmApi::extractError($res, 'Failed to send OTP'));
+            if (!AbdmApi::txnOk($res)) {
+                $logger->logAbhaAuth($doctorId, 'doctor', strtoupper($type) . '_OTP', '', 'FAILURE');
+                fail(AbdmApi::extractError($res, 'ABDM did not send an OTP. On the sandbox, only ABDM test identities work.'));
             }
 
             $_SESSION['doc_abdm_txn_id']    = $res['txnId'];

@@ -5,6 +5,7 @@ $payload = doctor_jwt_guard();
 $doctor_id = (int) ($payload['doctor_id'] ?? $payload['sub'] ?? 0);
 $patient_id = (int) ($_GET['id'] ?? 0);
 $just_added = isset($_GET['new']);
+$welcomed   = isset($_GET['welcomed']);
 
 if (!$patient_id) {
   header('Location: ' . BASE_URL . 'doctor/my-patients.php');
@@ -300,7 +301,13 @@ require_once __DIR__ . '/inc/sidebar.php';
     <?php if ($just_added): ?>
       <div class="success-banner">
         <i class="fa fa-check-circle fa-lg" style="color:#16a34a;"></i>
-        <div><strong>Patient added successfully!</strong> Their profile is now in your panel.</div>
+        <div>
+          <strong>Patient added successfully!</strong> Their profile is now in your panel.
+          <?php if ($welcomed): ?>
+            <br><span style="font-size:.85rem;">A temporary password and sign-in link were sent to the patient on
+              WhatsApp and email — they can log in and change the password.</span>
+          <?php endif; ?>
+        </div>
       </div>
     <?php endif; ?>
 
@@ -334,7 +341,15 @@ require_once __DIR__ . '/inc/sidebar.php';
         <div class="d-flex flex-wrap" style="gap:6px;">
           <?php if (empty($p['abha_id'])): ?>
             <a href="<?= BASE_URL ?>doctor/add-patient-abha.php" class="btn btn-sm btn-outline-primary">
-              <i class="fa fa-link mr-1"></i> Link ABHA
+              <i class="fa fa-link mr-1"></i> Verify Existing ABHA
+            </a>
+            <a href="<?= BASE_URL ?>doctor/add-patient-new-abha.php" class="btn btn-sm btn-outline-primary">
+              <i class="fa fa-plus mr-1"></i> Create ABHA
+            </a>
+          <?php elseif (empty($p['abha_verified'])): ?>
+            <a href="<?= BASE_URL ?>doctor/add-patient-abha.php?abha=<?= urlencode(preg_replace('/\D/', '', $p['abha_id'])) ?>"
+              class="btn btn-sm btn-outline-primary">
+              <i class="fa fa-shield mr-1"></i> Verify with ABDM
             </a>
           <?php endif; ?>
           <a href="<?= BASE_URL ?>doctor/my-patients.php" class="btn btn-sm btn-outline-secondary">

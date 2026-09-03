@@ -44,9 +44,9 @@ require_once __DIR__ . '/inc/sidebar.php';
 
         <div class="ptype mb-3">
           <i class="fa fa-info-circle mr-1" style="color:#0C74C5;"></i>
-          Two kinds of patient: <b>with an ABHA</b> and <b>without an ABHA</b>. Both register the same way &mdash;
-          verified by <b>WhatsApp OTP</b>. If the patient has an ABHA number, add it in the form; live ABDM
-          verification will switch on once the integration is ready.
+          Two kinds of patient: <b>with an ABHA</b> and <b>without an ABHA</b>. Register anyone with a
+          <b>WhatsApp OTP</b>, or go through <b>ABDM</b> below to verify an existing ABHA or create a new one
+          against the patient's Aadhaar.
         </div>
 
         <!-- Primary: register with WhatsApp OTP -->
@@ -80,24 +80,38 @@ require_once __DIR__ . '/inc/sidebar.php';
           <div class="m-chevron"><i class="fa fa-chevron-right"></i></div>
         </a>
 
-        <div class="ap-divider">ABHA verification</div>
+        <div class="ap-divider">ABHA via ABDM</div>
 
-        <!-- Coming soon: live ABDM verification -->
-        <div class="method-card disabled mb-3" style="--c:#02c9b8;">
+        <!-- Verify an existing ABHA -->
+        <a href="<?= BASE_URL ?>doctor/add-patient-abha.php" class="method-card mb-3" style="--c:#02c9b8;">
           <div class="m-icon"><i class="fa fa-id-card"></i></div>
           <div class="m-body">
-            <div class="m-badge soon">COMING SOON</div>
-            <div class="m-title">Verify / Create ABHA via ABDM</div>
-            <div class="m-desc">Live Aadhaar-OTP and mobile-OTP ABHA verification, and new ABHA creation,
-              through the ABDM gateway. Being integrated &mdash; for now, record the ABHA number
-              directly on the registration form.</div>
+            <div class="m-title">Verify an Existing ABHA</div>
+            <div class="m-desc">Patient already has an ABHA? Verify it live with ABDM by Aadhaar OTP,
+              mobile OTP, ABHA number or ABHA address. Pulls their verified profile and links them to your panel.</div>
             <div class="m-tags">
               <span><i class="fa fa-clock-o"></i> Aadhaar OTP</span>
               <span>Mobile OTP</span>
-              <span>Create new ABHA</span>
+              <span>ABHA number / address</span>
             </div>
           </div>
-        </div>
+          <div class="m-chevron"><i class="fa fa-chevron-right"></i></div>
+        </a>
+
+        <!-- Create a new ABHA -->
+        <a href="<?= BASE_URL ?>doctor/add-patient-new-abha.php" class="method-card mb-3" style="--c:#02c9b8;">
+          <div class="m-icon"><i class="fa fa-plus-circle"></i></div>
+          <div class="m-body">
+            <div class="m-title">Create a New ABHA</div>
+            <div class="m-desc">No ABHA yet? Create one through ABDM against the patient's Aadhaar (OTP to the
+              Aadhaar-linked mobile). If that Aadhaar already has an ABHA, ABDM returns the existing one.</div>
+            <div class="m-tags">
+              <span><i class="fa fa-clock-o"></i> Aadhaar OTP</span>
+              <span>Patient consent required</span>
+            </div>
+          </div>
+          <div class="m-chevron"><i class="fa fa-chevron-right"></i></div>
+        </a>
 
       </div>
 
@@ -110,10 +124,11 @@ require_once __DIR__ . '/inc/sidebar.php';
                 <strong>WhatsApp OTP</strong> sent to their mobile (and email)</span></div>
             <div class="info-item"><i class="fa fa-check-circle"></i> <span>The OTP goes to the patient &mdash;
                 they read the code back to you</span></div>
-            <div class="info-item"><i class="fa fa-check-circle"></i> <span><strong>Has ABHA:</strong> enter the
-                14-digit number on the form (stored now, verified later)</span></div>
-            <div class="info-item"><i class="fa fa-check-circle"></i> <span><strong>No ABHA:</strong> just register
-                &mdash; ABHA can be linked any time</span></div>
+            <div class="info-item"><i class="fa fa-check-circle"></i> <span><strong>Has ABHA:</strong> use
+                <strong>Verify an Existing ABHA</strong> for a live ABDM check, or type the number on the
+                registration form to record it now and verify later</span></div>
+            <div class="info-item"><i class="fa fa-check-circle"></i> <span><strong>No ABHA:</strong> register
+                without one, or use <strong>Create a New ABHA</strong> to make one via Aadhaar</span></div>
             <div class="info-item"><i class="fa fa-check-circle"></i> <span>Already on the portal? Use
                 <strong>Search by Mobile</strong> &mdash; no OTP needed</span></div>
             <div class="info-footer">
