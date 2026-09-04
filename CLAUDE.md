@@ -24,7 +24,7 @@ The project must comply with **ABDM / ABHA guidelines** as mandated by NHA India
 /
 ├── config/           connect.php (DB + APP_ENV), abdm.php, payment.php, whatsapp.php  (all read .env)
 ├── util/             auth-helper.php, function.php, appointment-handler.php, otp-service.php, mail_config.php
-├── lib/              AbdmApi.php, Abha.php, AbhaPatientResolver.php, AuditLogger.php, JWT.php, Security.php, Validator.php, DoctorAccess.php, WhatsAppOtp.php
+├── lib/              AbdmApi.php, HprApi.php, Abha.php, AbhaPatientResolver.php, HprVerification.php, AuditLogger.php, JWT.php, Security.php, Validator.php, DoctorAccess.php, WhatsAppOtp.php
 ├── doctor/           Doctor panel (JWT — doctor/auth/guard.php)
 ├── user/             Patient panel (session — $_SESSION['logged_in'])
 ├── admin/            Admin panel (JWT — admin/auth/bootstrap.php; RBAC)
@@ -87,7 +87,8 @@ The project must comply with **ABDM / ABHA guidelines** as mandated by NHA India
 - `schools`, `school_users`, `school_members`, `member_health_profiles`, `school_member_prescriptions/certificates/documents`
 - `parent_consent_forms` — school parent-consent submissions (+ `school_health_plans`)
 - `user_abha_requests`, `abha_link_requests` — manual ABHA-link approval workflow
-- `hpr_verification_requests` — **manual** HPR review queue (no ABDM HPR API)
+- `hpr_verification_requests` — manual HPR review queue (fallback path)
+- `hpr_verification_txns` — Aadhaar-flow HPR-ID verification transactions (`lib/HprApi.php`)
 - `telemedicine_rooms / signals / chat_messages / settings` — WebRTC (HTTP-polling)
 - `schema_migrations` — migration tracking (see `database/run-migrations.php`)
 
@@ -103,9 +104,21 @@ ABHA = Ayushman Bharat Health Account (14-digit Health ID).
 ABDM = Ayushman Bharat Digital Mission (NHA India).  
 Every patient and doctor must have an ABHA for digital health record exchange.
 
-### Doctor Compliance (HPR) — **partially built**
-Fields exist on `doctors` (`hpr_id`, `hfr_id`, `nmc_reg_number`, `council_name`, `year_of_registration`, `qualification_year`, `hpr_verified*`).
-**Current state:** a doctor types their HPR ID on `doctor/my-contact.php` (no verification); `hpr_verified` is set only by an **admin** via `admin/hpr-verification.php` after reviewing `hpr_verification_requests`. There is **no ABDM HPR API integration** in `lib/AbdmApi.php` — the target ("verify via ABDM Aadhaar OTP") is not implemented.
+### Doctor Compliance (HPR) — **Aadhaar-flow verification implemented**
+Fields on `doctors`: `hpr_id`, `hfr_id`, `nmc_reg_number`, `council_name`, `year_of_registration`, `qualification_year`, `hpr_verified`, `hpr_verified_at`, `hpr_verification_source` (`aadhaar_hpr_api` | `admin_review`), `hpr_txn_id`, `hpr_requested_at`.
+
+**Primary path — ABDM HPR API** (`lib/HprApi.php` + `lib/HprVerification.php` + `doctor/api/hpr-verify.php`, wired into `doctor/my-contact.php`):
+
+1. doctor saves their claimed `hpr_id`, clicks **Verify HPR ID with Aadhaar**
+2. `generateAadhaarLink()` → 5-min NHA link opens in a new tab; txn saved in `hpr_verification_txns` (`pending`)
+3. browser polls `checkAadhaarAuthStatus()` (~3.5 s) → `authenticated` once the doctor completes Aadhaar OTP on the NHA page
+4. `verifyOTP()` (demographics **transient** — never stored/logged) → `checkHpIdAccountExist()`
+5. **fail-closed match**: the `hprIdNumber` linked to that Aadhaar must `hash_equals` the doctor's saved `hpr_id` (separator-insensitive). `"new": true` from HPR → `hpr_account_not_found` (doctor must register on the HPR portal first). Only on an exact match → `hpr_verified = 1`, `hpr_verification_source = 'aadhaar_hpr_api'`.
+   Every attempt (success + fail) logged via `AuditLogger::logAbhaAuth(…, 'HPR_AADHAAR', …)`.
+
+**Fallback path — manual review:** doctor submits HPR/NMC details → `hpr_verification_requests` → an admin approves in `admin/hpr-verification.php`.
+
+Needs `.env` `ABDM_HPR_CLIENT_ID` / `ABDM_HPR_CLIENT_SECRET` (separate HPR app registration; blank ⇒ the Aadhaar button is hidden, only the manual path shows).
 
 ### Patient Compliance (ABHA)
 - `abha_number` — 14-digit, format `XX-XXXX-XXXX-XXXX` — stored in **`abha_accounts.abha_number`**
@@ -119,12 +132,19 @@ Fields exist on `doctors` (`hpr_id`, `hfr_id`, `nmc_reg_number`, `council_name`,
 - **Patient / School:** still `$_SESSION` (`process-login.php` → `util/auth-helper.php::setRoleSession()`). ABHA/Aadhaar login via `ajax/login-abdm.php` (CSRF + rate-limit + fail-closed identity check).
 - JWT secret: **`.env` `JWT_SECRET`** (exposed as `JWT_SECRET` constant by `config/connect.php`).
 
-### ABDM API Integration (`lib/AbdmApi.php`)
+### ABDM ABHA API (`lib/AbdmApi.php`)
 - OAuth gateway: `https://dev.abdm.gov.in/api/hiecm/gateway/v3/sessions`; ABHA v3 sandbox `https://abhasbx.abdm.gov.in/abha/api/v3`
 - Credentials from **`.env`** (`ABDM_CLIENT_ID` / `ABDM_CLIENT_SECRET` / `ABDM_ENV`) via `config/abdm.php`
 - **Working (sandbox):** OAuth token, RSA cert, ABHA create (Aadhaar OTP), existing-ABHA login (number/mobile/aadhaar)
 - **Coded, lightly tested:** DL enrolment, mobile-verify, ABHA address, profile fetch, ABHA card
 - Dispatchers: `ajax/abdm-api.php` (patient), `doctor/api/abdm-api.php` (doctor), `ajax/login-abdm.php` (login)
+
+### ABDM HPR API (`lib/HprApi.php`)
+- Gateway session `https://dev.abdm.gov.in/api/hiecm/gateway/v3/sessions`; HPR sandbox `https://apihspsbx.abdm.gov.in/v4/int`
+- Credentials from **`.env`** (`ABDM_HPR_CLIENT_ID` / `ABDM_HPR_CLIENT_SECRET` — separate app) via `config/abdm.php`; `ABDM_HPR_CONFIGURED` gates the feature
+- Same conventions as `AbdmApi` (session token cache in `$_SESSION['hpr_*']`, UUID `REQUEST-ID`, ISO-8601 `TIMESTAMP`, `X-CM-ID`), but returns `['success','data','error','code']` and logs **PII-safe** (txnId + status only — never demographics)
+- Methods: `generateSession`, `getPublicCertificate` (future-proofing, unused by the flow), `generateAadhaarLink`, `checkAadhaarAuthStatus` (raw-boolean response), `verifyOTP` (transient demographics), `checkHpIdAccountExist` (primary — `"new": true` ⇒ no account)
+- Scope: verify an **existing** HPR ID only. Dispatcher: `doctor/api/hpr-verify.php` (`start` / `poll` / `finish`). DB: `lib/HprVerification.php` + `hpr_verification_txns`.
 
 ---
 
@@ -132,7 +152,7 @@ Fields exist on `doctors` (`hpr_id`, `hfr_id`, `nmc_reg_number`, `council_name`,
 
 **See `PROJECT_STATUS.md` §9 for the live prioritised plan.** Summary of where things stand:
 
-- **Phase 1 — Doctor Panel:** JWT auth ✅, HPR fields ✅ (manual review, no ABDM API), dashboard/patients ✅. Care-context registration ❌ not built.
+- **Phase 1 — Doctor Panel:** JWT auth ✅, HPR verification ✅ (ABDM HPR Aadhaar flow + manual fallback), dashboard/patients ✅. Care-context registration ❌ not built.
 - **Phase 2 — Patient Panel:** ABHA create/link (sandbox) ✅, session auth (JWT not migrated). Consent-management UI ❌.
 - **Phase 3 — Admin Panel:** ABHA-request approval ✅, HPR review queue ✅, audit-log viewer ❌.
 - **Cross-cutting done (2026-09):** P0 security fixes, `abha_accounts` normalisation, migrations + runner, 30 FKs, `utf8mb4`.
