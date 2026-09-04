@@ -23,9 +23,11 @@ function routeSelect($selected, $name) {
 }
 
 include_once(__DIR__ . "/../config/connect.php");
+include_once(__DIR__ . "/../config/abdm.php");
 include_once(__DIR__ . "/../util/function.php");
 require_once(__DIR__ . "/../lib/Settlement.php");
 require_once(__DIR__ . "/../lib/Abha.php");
+require_once(__DIR__ . "/../lib/HipLinking.php");   // ABDM care-context linking (async — worker: scripts/abdm-hip-worker.php)
 require_once(__DIR__ . "/../util/prescription-render.php"); // shared read-only "parcha" — same as user/admin/video-call
 require_once(__DIR__ . "/auth/guard.php");
 
@@ -274,6 +276,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
     if ($rx_status === 'final') {
         $conn->query("UPDATE appointments SET status='completed' WHERE id={$appt_id} AND doctor_id={$doctor_id}");
         create_settlement_if_needed($conn, (int) $appt_id);
+
+        /* ── ABDM HIP-initiated care-context linking ──────────────────
+           Only a queue-and-forget here: drop a 'pending' row in
+           abdm_care_context_links. scripts/abdm-hip-worker.php (cron)
+           does the actual generate-token / link/carecontext / notify
+           calls and the webhook (telemedicine/api/abdm-webhook.php)
+           records the async result. Never blocks the save. */
+        $rxRow      = $existing_rx ?: [];
+        $rxId       = (int) ($rxRow['id'] ?? 0);
+        $abhaAddr   = trim((string) ($patient['abha_address'] ?? ''));
+        if (
+            $rxId > 0
+            && $abhaAddr !== ''
+            && defined('ABDM_HIP_CONFIGURED') && ABDM_HIP_CONFIGURED
+        ) {
+            try {
+                $existingLink = HipLinking::careContextLinkFor($conn, $rxId);
+                if (!$existingLink || $existingLink['status'] === 'failed') {
+                    HipLinking::startCareContextLink(
+                        $conn,
+                        $rxId,
+                        'PATIENT-' . (int) $pid,
+                        (string) ($rxRow['care_context_ref'] ?? $care_ref),
+                        'Prescription',
+                        HipLinking::newRequestId()
+                    );
+                }
+            } catch (Throwable $e) {
+                error_log('[patient-form] care-context queue failed: ' . $e->getMessage());
+            }
+        }
     }
 }
 

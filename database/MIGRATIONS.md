@@ -79,6 +79,7 @@ dump / phpMyAdmin: `doctors`, `users`, `admin_user`, `appointments`,
 | 18 | `migration_abha_module.sql` | `user_abha_requests`, `abha_link_requests` |
 | 19 | `migration_abha_accounts.sql` | **`abha_accounts`** — normalised ABHA identity |
 | 20 | `migration_abha_deprecate_legacy_columns.sql` | COMMENT-only; run **after** the data migration (below) |
+| 20b | `migration_abdm_hip_linking.sql` | `abdm_link_tokens`, `abdm_care_context_links` (FKs → users / prescriptions), `abdm_webhook_log` — backs `lib/HipApi.php` + `telemedicine/api/abdm-webhook.php` (HIP-initiated care-context linking, M3) |
 
 ## 7. Admin
 

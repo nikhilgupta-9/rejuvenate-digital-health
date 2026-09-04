@@ -24,7 +24,7 @@ The project must comply with **ABDM / ABHA guidelines** as mandated by NHA India
 /
 ├── config/           connect.php (DB + APP_ENV), abdm.php, payment.php, whatsapp.php  (all read .env)
 ├── util/             auth-helper.php, function.php, appointment-handler.php, otp-service.php, mail_config.php
-├── lib/              AbdmApi.php, HprApi.php, Abha.php, AbhaPatientResolver.php, HprVerification.php, AuditLogger.php, JWT.php, Security.php, Validator.php, DoctorAccess.php, WhatsAppOtp.php
+├── lib/              AbdmApi.php, HprApi.php, HipApi.php, Abha.php, AbhaPatientResolver.php, HprVerification.php, HipLinking.php, AuditLogger.php, JWT.php, Security.php, Validator.php, DoctorAccess.php, WhatsAppOtp.php
 ├── doctor/           Doctor panel (JWT — doctor/auth/guard.php)
 ├── user/             Patient panel (session — $_SESSION['logged_in'])
 ├── admin/            Admin panel (JWT — admin/auth/bootstrap.php; RBAC)
@@ -65,7 +65,7 @@ The project must comply with **ABDM / ABHA guidelines** as mandated by NHA India
 - `abha_number` — per-visit ABHA **snapshot** (kept by design), not identity
 - `meeting_*` columns — telemedicine room record
 - FK: `user_id → users` / `doctor_id → doctors` (ON DELETE RESTRICT)
-- **Not implemented:** ABDM care-context registration (`prescriptions.care_context_ref` is a local `CC-<id>` string, never pushed to ABDM)
+- `care_context_ref` (`CC-<appt>-<date>`) is our visit identifier; on a **finalised** prescription for an ABHA-linked patient it is queued for ABDM HIP-initiated linking (`lib/HipApi.php` + `scripts/abdm-hip-worker.php` + `telemedicine/api/abdm-webhook.php`) — see the HIP section below
 
 ### `prescriptions` — saved consultation / e-prescription
 - `id`, `appointment_id` (UNIQUE), `doctor_id`, `patient_id`, `care_context_ref`, `visit_date`
@@ -124,7 +124,8 @@ Needs `.env` `ABDM_HPR_CLIENT_ID` / `ABDM_HPR_CLIENT_SECRET` (separate HPR app r
 - `abha_number` — 14-digit, format `XX-XXXX-XXXX-XXXX` — stored in **`abha_accounts.abha_number`**
 - `abha_address` — `@abdm` / `@sbx` handle
 - `verified` must be 1 before accessing health records
-- **Not built:** ABDM HI consent artefacts, care-context registration, HIP/HIU data exchange. `abdm_audit_logs` logging covers only ~9 call sites today.
+- **Built:** ABDM **HIP-initiated care-context linking** (M3, async — see the HIP section).
+- **Not built:** ABDM HI **consent artefacts** and the **HIU / data-request-fulfilment** side (responding to a CM's data request). `abdm_audit_logs` coverage is still thin (~9 + the HPR/HIP call sites).
 
 ### Auth — status
 - **Doctor:** JWT done. `doctor/auth/login-api.php` → access (15 min) + refresh (7 d, hashed, rotated) in `HttpOnly; Secure; SameSite=Strict` cookies (`rdh_doctor_token` / `rdh_doctor_refresh`). Guard: `doctor/auth/guard.php::doctor_jwt_guard()`. Activation gate in `lib/DoctorAccess.php`.
@@ -146,17 +147,28 @@ Needs `.env` `ABDM_HPR_CLIENT_ID` / `ABDM_HPR_CLIENT_SECRET` (separate HPR app r
 - Methods: `generateSession`, `getPublicCertificate` (future-proofing, unused by the flow), `generateAadhaarLink`, `checkAadhaarAuthStatus` (raw-boolean response), `verifyOTP` (transient demographics), `checkHpIdAccountExist` (primary — `"new": true` ⇒ no account)
 - Scope: verify an **existing** HPR ID only. Dispatcher: `doctor/api/hpr-verify.php` (`start` / `poll` / `finish`). DB: `lib/HprVerification.php` + `hpr_verification_txns`.
 
+### ABDM HIP-Initiated Linking (`lib/HipApi.php`) — M3, HIECM V3, async
+
+Links a patient's finalised prescription (care context) to their ABHA so a CM/HIU can later request it. The V3 flow is asynchronous — each call returns a `requestId`, ABDM replies to our webhook.
+
+- Base `https://dev.abdm.gov.in/api/hiecm`; reuses the ABHA gateway session token (`ABDM_CLIENT_ID/SECRET`). `X-HIP-ID` from `.env` `ABDM_HIP_ID`; `ABDM_HIP_CONFIGURED` gates the feature (blank ⇒ care contexts stay local).
+- Same conventions as `AbdmApi`; returns `['success','data','error','code']`; **PII-safe** logging (requestId + HTTP code only).
+- Methods: `generateLinkToken` → `POST /v3/token/generate-token`; `linkCareContext` → `POST /hip/v3/link/carecontext` (`X-LINK-TOKEN`); `notifyCareContext` → `POST /hip/v3/link/context/notify`. Each accepts an optional caller-supplied `requestId`.
+- **Flow:** `doctor/patient-form.php` (on `status='final'` + ABHA patient) drops a `pending` row in `abdm_care_context_links` → **`scripts/abdm-hip-worker.php`** (cron ~5 min) ensures a link token (`abdm_link_tokens`), then calls `linkCareContext` + `notifyCareContext` → **`telemedicine/api/abdm-webhook.php`** (public, no login) records the async result.
+- **Webhook security:** the real gate is the `requestId` — a server-generated UUID v4 never exposed to any client, matched against a `pending` row we created. Plus: raw body saved *before* parsing (`abdm_webhook_log`), 256 KB cap, per-IP rate limit, optional `?k=<ABDM_WEBHOOK_SECRET>` + IP allowlist, idempotency check, always 200.
+- DB: `lib/HipLinking.php` + `abdm_link_tokens` / `abdm_care_context_links` / `abdm_webhook_log` (`migration_abdm_hip_linking.sql`).
+
 ---
 
 ## Development Priority
 
 **See `PROJECT_STATUS.md` §9 for the live prioritised plan.** Summary of where things stand:
 
-- **Phase 1 — Doctor Panel:** JWT auth ✅, HPR verification ✅ (ABDM HPR Aadhaar flow + manual fallback), dashboard/patients ✅. Care-context registration ❌ not built.
+- **Phase 1 — Doctor Panel:** JWT auth ✅, HPR verification ✅ (ABDM HPR Aadhaar flow + manual fallback), dashboard/patients ✅, care-context linking ✅ (HIP M3, async).
 - **Phase 2 — Patient Panel:** ABHA create/link (sandbox) ✅, session auth (JWT not migrated). Consent-management UI ❌.
 - **Phase 3 — Admin Panel:** ABHA-request approval ✅, HPR review queue ✅, audit-log viewer ❌.
-- **Cross-cutting done (2026-09):** P0 security fixes, `abha_accounts` normalisation, migrations + runner, 30 FKs, `utf8mb4`.
-- **Biggest gap for NHA compliance:** HI **consent artefacts** + **care-context / HIP data-exchange** have no API layer at all.
+- **Cross-cutting done (2026-09):** P0 security fixes, `abha_accounts` normalisation, migrations + runner, 30 FKs, `utf8mb4`, HPR verification, HIP-initiated care-context linking.
+- **Biggest gap for NHA compliance:** HI **consent artefacts** and the **HIU / data-request side** (fulfilling a CM's data request) have no API layer yet.
 
 ---
 

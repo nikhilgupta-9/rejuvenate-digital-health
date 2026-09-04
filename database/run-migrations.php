@@ -52,6 +52,7 @@ $ORDER = [
     'migration_abha_module.sql',
     'migration_abha_accounts.sql',
     'migration_abha_deprecate_legacy_columns.sql',
+    'migration_abdm_hip_linking.sql',
     'migration_admin_jwt_security.sql',
     'migration_admin_rbac.sql',
     'migration_admin_medical_records.sql',

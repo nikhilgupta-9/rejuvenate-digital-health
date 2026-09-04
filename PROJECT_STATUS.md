@@ -18,7 +18,7 @@
 | Doctor panel (`doctor/`) | 🟢 Mostly complete | JWT auth done & consistent; HPR verification (ABDM Aadhaar flow) done; ABHA patient-onboarding partial |
 | Admin panel (`admin/`) | 🟡 Working, mixed auth | JWT guard on ~50 pages; legacy/unguarded pages remain |
 | School module (`school/`) | 🟡 Working, session-based | Own guard (`school/auth/auth.php`); not JWT |
-| ABHA / ABDM integration | 🟠 Partial | Create + existing-ABHA login work on sandbox; **consent + data-exchange (HIP/HIU/care-context) not implemented** |
+| ABHA / ABDM integration | 🟠 Partial | Create + existing-ABHA login + HPR verification + HIP-initiated care-context linking work on sandbox; **HI consent artefacts + HIU data-request side not implemented** |
 | HPR (doctor registry) | 🟢 Implemented | ABDM HPR v4 Aadhaar flow (`lib/HprApi.php` + `doctor/api/hpr-verify.php`); fail-closed `hpr_id` match; manual review kept as fallback. Needs `.env` HPR creds to go live. |
 | Telemedicine / WebRTC | 🟢 Working | HTTP-polling signalling, signed tickets; WS server deprecated |
 | Security posture | 🟠 Improving | P0 items 1/2/4/5/6 fixed in code (2026-09-04); residual: git-history purge, secret rotation, GET-CSRF (§6) |
@@ -43,7 +43,7 @@
 | "Auth currently: PHP sessions — migrating to JWT" | Doctor + Admin **are on JWT**; Patient + School still sessions | Migration is ~60% done, undocumented |
 | `users.abha_number` (14-digit) is a "missing field" | Code stores the 14-digit number in **`users.abha_id`**; `appointments` uses a separate **`abha_number`** column | Naming drift (see §5) |
 | "HPR verification via ABDM Aadhaar OTP flow" | ✅ Now built — `lib/HprApi.php` (HPR v4) + `lib/HprVerification.php` + `doctor/api/hpr-verify.php` + `doctor/my-contact.php` button. Manual `hpr_verification_requests` path kept as fallback. | Resolved (needs live HPR creds) |
-| "Each appointment creates a care context entry" / "Data linked via care contexts" | `prescriptions.care_context_ref` is just `'CC-'.$appointment_id`; **nothing is pushed to ABDM** | No real HIP/link-record/consent flow |
+| "Each appointment creates a care context entry" / "Data linked via care contexts" | `prescriptions.care_context_ref` is `'CC-'.$appointment_id`; on a **finalised** prescription for an ABHA patient it is now queued for ABDM HIP-initiated linking (`lib/HipApi.php`) | HIP link/notify built; HI **consent** flow still missing |
 | "JWT secret stored in `config/connect.php` as `JWT_SECRET`" | Defined there **from `.env`** (`JWT_SECRET` env var) — OK, but also re-`define()`d in `admin/auth/guard.php` | Minor duplication |
 | "Refresh token stored in DB table `jwt_refresh_tokens`" | ✅ Implemented and rotated correctly for doctor + admin | Matches |
 | Coding rule: "Always use prepared statements" | Mostly followed; `admin/functions.php` and a few legacy admin pages still use `mysqli_real_escape_string` (31 files) | Legacy debt, low active risk |
@@ -86,8 +86,8 @@
 **Incomplete / half-implemented**
 - `doctor/add-patient-new-abha.php` **and** `doctor/add-patient-abha.php` **and** `doctor/add-patient.php` **and** `doctor/add-patient-mobile.php` **and** `doctor/add-patient-manual.php` — five overlapping "add patient" screens. Unclear which is canonical.
 - ✅ `my-contact.php` now has **"Verify HPR ID with Aadhaar"** — `doctor/api/hpr-verify.php` (`start`/`poll`/`finish`, JWT + CSRF + rate-limit + `AuditLogger`) drives `lib/HprApi.php`. `finish` does a fail-closed `hash_equals` of the Aadhaar-linked `hprIdNumber` vs `doctors.hpr_id` before setting `hpr_verified` / `hpr_verified_at` / `hpr_verification_source='aadhaar_hpr_api'`. Admin can still set `hpr_verified` via the manual queue.
-- `doctor/patient-form.php` **creates the `prescriptions` table at runtime** (`CREATE TABLE IF NOT EXISTS` at line 36) — no migration file exists for the single most important clinical table.
-- `care_context_ref` is generated locally, never registered with ABDM (no HIP link / notify).
+- ✅ `doctor/patient-form.php` no longer creates the `prescriptions` table at runtime — `database/migration_prescriptions.sql` now owns that schema (via the migration runner).
+- ✅ `care_context_ref` is now registered with ABDM on a finalised prescription — `doctor/patient-form.php` queues a row in `abdm_care_context_links`, `scripts/abdm-hip-worker.php` (cron) calls `lib/HipApi.php` `generateLinkToken` → `linkCareContext` → `notifyCareContext`, and `telemedicine/api/abdm-webhook.php` records the async result. Needs a live `ABDM_HIP_ID`.
 - `pending-uploads.php` ("ABHA Compliance" nav section) — a queue with no backend push target yet.
 
 **Not guarded**
@@ -166,11 +166,11 @@
 | ABHA card (PNG/PDF) | `/profile/account/getAbhaCard` | 🟡 Coded | |
 | Search by ABHA number / address / mobile | `/search/*`, `/profile/account/abha/search` | 🟠 "not available to this credential" (per code comments) | |
 | **Consent request / grant (HI consent)** | — | 🔴 Not implemented | No consent-manager calls anywhere |
-| **Care-context linking (HIP)** | — | 🔴 Not implemented | `care_context_ref` is local-only |
-| **Health data push / fetch (HIP/HIU)** | — | 🔴 Not implemented | |
+| **Care-context linking (HIP)** | HIECM V3: `/v3/token/generate-token`, `/hip/v3/link/carecontext`, `/hip/v3/link/context/notify` | 🟢 Built (`lib/HipApi.php`) | async/webhook; finalised prescription → `abdm_care_context_links`; needs live `ABDM_HIP_ID` |
+| **Health data push / fetch (HIP/HIU)** | — | 🔴 Not implemented | HIU / data-request-fulfilment side |
 | **HPR (doctor registry)** | HPR v4: `/aadhaar/generateLink`, `/aadhaar/isAuthenticated`, `/v2/registration/aadhaar/verifyOTP`, `/v1/registration/aadhaar/checkHpIdAccountExist` | 🟢 Built (`lib/HprApi.php`) | existing-HPR-ID verification only; needs live HPR creds |
 
-**Where it's stuck:** the remaining NHA compliance surface — HI **consent artefacts** and **care-context / HIP data-exchange** — has no API layer. HPR verification and the ABHA *account* lifecycle (create + authenticate) are built, largely validated against the sandbox.
+**Where it's stuck:** the remaining NHA compliance surface — HI **consent artefacts** and the **HIU / data-request-fulfilment** side — has no API layer. HPR verification, HIP-initiated care-context linking (`lib/HipApi.php`), and the ABHA *account* lifecycle (create + authenticate) are built, largely validated against the sandbox.
 
 ### 3.6b HPR verification — 🟢 implemented
 
@@ -312,12 +312,12 @@ Also fixed: 6 `INT UNSIGNED → INT(11)` type mismatches that blocked FK creatio
 
 ### 5.3 ABHA tables — normalization
 - ABHA identity is **denormalized onto 3 tables** (`users`, `school_members`, `appointments`) with copies of number/address/linked/verified flags, plus 2 request tables (`user_abha_requests`, `abha_link_requests`) that are structurally identical but split by entity. A single `abha_accounts` (entity_type, entity_id, abha_number, abha_address, verified_at, linked_at, source) + one `abha_link_requests` would remove the drift.
-- No table for ABDM **consent artefacts** or **care contexts** (required for HI compliance).
+- ✅ Care-context linking has tables now (`abdm_link_tokens`, `abdm_care_context_links`, `abdm_webhook_log` — `migration_abdm_hip_linking.sql`). Still no table for ABDM **HI consent artefacts** (required for the HIU / data-request side).
 - No storage of the ABDM **transaction/X-token audit** beyond `abdm_audit_logs` free-form `extra_data` JSON.
 - `abdm_audit_logs` is a wide "all events" table (30+ nullable columns for 6 event shapes) — works, but hard to query/verify for compliance reporting.
 
 ### 5.4 Schema created at runtime (no migration)
-`CREATE TABLE IF NOT EXISTS` executed from PHP in: `doctor/patient-form.php` (**`prescriptions`**), `doctor/my-patients.php`, `doctor/change-password.php`, `doctor/api/create-patient-submit.php`, `lib/AbhaPatientResolver.php` (`doctor_patients`), `school/parent-consent.php` (**`parent_consent_forms`**), `admin/permissions.php`, `admin/user-roles.php`, `admin/school-plans.php`, `admin/telemedicine-settings.php`. → Prod schema depends on code execution order; fresh DB + first request races.
+✅ The clinical tables are now migration-owned (`prescriptions`, `doctor_patients`, `parent_consent_forms`, …) via `database/run-migrations.php`. `CREATE TABLE IF NOT EXISTS` from PHP may still remain in a few admin utility pages (`admin/permissions.php`, `admin/user-roles.php`, `admin/school-plans.php`, `admin/telemedicine-settings.php`) — low-risk config tables, but worth folding in.
 
 ### 5.5 Other
 - ✅ **FIXED** — `set_charset("utf8")` (3-byte) → `utf8mb4` in `config/connect.php`, `admin/db-conn.php`, `telemedicine/SignalingServer.php`. All 81 tables + every column were already `utf8mb4` (DB default too), so only the client connection was wrong; no table conversion needed. 4-byte round-trip verified.
@@ -365,7 +365,7 @@ Also fixed: 6 `INT UNSIGNED → INT(11)` type mismatches that blocked FK creatio
 - `telemedicine_signals` cleanup is opportunistic; a stuck/looping client can still bloat it between cleanups.
 - `TELEMED_SECRET` weak-default fallback (see §6 #10).
 - Deprecated Ratchet WS path still shipped (dead dep).
-- `prescription.php` re-declares the `prescriptions` schema assumption (inserts `care_context_ref`) — coupled to `doctor/patient-form.php` creating the table.
+- `prescription.php` inserts `care_context_ref` directly; the schema is now owned by `database/migration_prescriptions.sql` (no longer coupled to runtime `CREATE TABLE`).
 - 6-hour ticket + 90-day guest token: generous; acceptable, but guest token has no revocation.
 
 ---
@@ -396,7 +396,7 @@ Also fixed: 6 `INT UNSIGNED → INT(11)` type mismatches that blocked FK creatio
 5. ✅ ~~Env-gate `display_errors`; stop echoing `$conn->error`~~ — done in `config/connect.php` + `admin/db-conn.php` + 12 leak-site files.
 
 ### P1 — compliance & data model
-6. Build the real ABDM **consent** + **care-context (HIP link/notify)** layer in `lib/AbdmApi.php` and new tables (`abha_consents`, `abha_care_contexts`). This is the actual NHA blocker.
+6. ✅ ~~Build the ABDM **care-context (HIP link/notify)** layer~~ — `lib/HipApi.php` + `lib/HipLinking.php` + `scripts/abdm-hip-worker.php` + `telemedicine/api/abdm-webhook.php` + `migration_abdm_hip_linking.sql` (async/webhook, HIECM V3). Needs a live `ABDM_HIP_ID` + the webhook URL registered with ABDM. Still open: the **HI consent artefacts** + **HIU / data-request-fulfilment** layer (`abha_consents` table) — the remaining NHA blocker.
 7. ✅ ~~Decide HPR: integrate the ABDM HPR API or document it as manual-review-only~~ — ABDM HPR v4 Aadhaar flow built (`lib/HprApi.php`); manual queue kept as fallback. Add live `.env` `ABDM_HPR_CLIENT_ID`/`SECRET` + confirm the production HPR base URL.
 8. Normalize ABHA storage → one `abha_accounts` table; unify `abha_id`/`abha_number` naming; fix CLAUDE.md to match.
 9. ✅ ~~Add FKs to core tables; move all runtime `CREATE TABLE` into migrations; add a migration runner + `schema_migrations` table~~ — done: `database/MIGRATIONS.md` (34-file ordered manifest), `database/run-migrations.php` (tracked runner), 8 new migration files, `migration_core_foreign_keys.sql` (30 FKs). ABHA data migration (`migrate-abha-data.php --commit`) still pending manual run.

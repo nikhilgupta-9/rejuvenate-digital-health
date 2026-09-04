@@ -62,4 +62,16 @@ if (!defined('ABDM_ENV')) {
     define('ABDM_HPR_CLIENT_ID',     trim((string)($_ENV['ABDM_HPR_CLIENT_ID']     ?? '')));
     define('ABDM_HPR_CLIENT_SECRET', trim((string)($_ENV['ABDM_HPR_CLIENT_SECRET'] ?? '')));
     define('ABDM_HPR_CONFIGURED', ABDM_HPR_CLIENT_ID !== '' && ABDM_HPR_CLIENT_SECRET !== '');
+
+    /* ── HIP-Initiated Linking (M3, HIECM V3) ── */
+    // Uses the same ABHA gateway session token (ABDM_CLIENT_ID/SECRET); the
+    // HIP identity goes in the X-HIP-ID header.
+    define('ABDM_HIECM_BASE_URL', 'https://dev.abdm.gov.in/api/hiecm');
+    define('ABDM_HIP_ID',   trim((string)($_ENV['ABDM_HIP_ID']   ?? '')));
+    define('ABDM_HIP_NAME', trim((string)($_ENV['ABDM_HIP_NAME'] ?? 'Rejuvenate Digital Health')));
+    define('ABDM_HIP_CONFIGURED', ABDM_CONFIGURED && ABDM_HIP_ID !== '');
+
+    // Webhook (telemedicine/api/abdm-webhook.php) — optional hardening.
+    define('ABDM_WEBHOOK_SECRET',      trim((string)($_ENV['ABDM_WEBHOOK_SECRET']      ?? '')));
+    define('ABDM_WEBHOOK_ALLOWED_IPS', trim((string)($_ENV['ABDM_WEBHOOK_ALLOWED_IPS'] ?? '')));
 }
