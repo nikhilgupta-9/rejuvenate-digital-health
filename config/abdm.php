@@ -8,11 +8,13 @@
 // it is included on its own.
 //
 // Required .env keys:
-//   ABDM_CLIENT_ID       — ABDM application client id
-//   ABDM_CLIENT_SECRET   — ABDM application client secret
+//   ABDM_CLIENT_ID       — ABDM (ABHA) application client id
+//   ABDM_CLIENT_SECRET   — ABDM (ABHA) application client secret
 // Optional:
 //   ABDM_ENV             — "sandbox" (default) | "production"
 //   ABDM_SSL_VERIFY      — "true" (default) | "false"
+//   ABDM_HPR_CLIENT_ID     — HPR application client id  (may differ from the ABHA one)
+//   ABDM_HPR_CLIENT_SECRET — HPR application client secret
 
 if (class_exists(\Dotenv\Dotenv::class) && !isset($_ENV['ABDM_CLIENT_ID'])) {
     \Dotenv\Dotenv::createImmutable(dirname(__DIR__))->safeLoad();
@@ -46,4 +48,18 @@ if (!defined('ABDM_ENV')) {
 
     // Flag — true only when both credentials are present.
     define('ABDM_CONFIGURED', ABDM_CLIENT_ID !== '' && ABDM_CLIENT_SECRET !== '');
+
+    /* ── HPR (Health Professional Registry) — doctor HPR ID verification ── */
+    // Gateway session endpoint is shared across ABDM services; the HPR service
+    // itself sits on a different host.
+    define('ABDM_HPR_GATEWAY_URL', 'https://dev.abdm.gov.in/api/hiecm/gateway');
+    if (ABDM_ENV === 'sandbox') {
+        define('ABDM_HPR_BASE_URL', 'https://apihspsbx.abdm.gov.in/v4/int');
+    } else {
+        // Production HPR host — confirm against the NHA docs before go-live.
+        define('ABDM_HPR_BASE_URL', 'https://apihsp.abdm.gov.in/v4/int');
+    }
+    define('ABDM_HPR_CLIENT_ID',     trim((string)($_ENV['ABDM_HPR_CLIENT_ID']     ?? '')));
+    define('ABDM_HPR_CLIENT_SECRET', trim((string)($_ENV['ABDM_HPR_CLIENT_SECRET'] ?? '')));
+    define('ABDM_HPR_CONFIGURED', ABDM_HPR_CLIENT_ID !== '' && ABDM_HPR_CLIENT_SECRET !== '');
 }

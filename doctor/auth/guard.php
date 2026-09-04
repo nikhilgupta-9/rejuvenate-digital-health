@@ -26,6 +26,7 @@ const DOCTOR_GATE_ALLOWLIST = [
     'change-password.php',
     'account-settings.php',
     'my-contact.php',
+    'hpr-verify.php',        // doctor/api/hpr-verify.php — HPR-ID verification (part of getting verified)
     'delete-account.php',
 ];
 

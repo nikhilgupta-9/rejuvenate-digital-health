@@ -35,6 +35,7 @@ $ORDER = [
     'abdm_security.sql',
     'migration_doctor_abha.sql',
     'migration_doctor_profile_hpr.sql',
+    'migration_hpr_verification.sql',
     'migration_doctor_activation_gate.sql',
     'migration_doctor_subscription_referral.sql',
     'migration_doctor_plans_marketing.sql',

@@ -1,11 +1,17 @@
 <?php
 include_once(__DIR__ . "/../config/connect.php");
+include_once(__DIR__ . "/../config/abdm.php");
 include_once(__DIR__ . "/../util/function.php");
 require_once(__DIR__ . "/auth/guard.php");
+require_once(__DIR__ . "/../lib/Security.php");
 
 $jwt_doctor  = doctor_jwt_guard();
 $doctor_id   = (int)$jwt_doctor['sub'];
 $doctor_name = $jwt_doctor['name'] ?? 'Doctor';
+
+// CSRF token for the HPR Aadhaar-verify AJAX flow (doctor/api/hpr-verify.php)
+$hpr_csrf     = Security::csrfToken();
+$hpr_api_ready = defined('ABDM_HPR_CONFIGURED') && ABDM_HPR_CONFIGURED;
 $success_message = '';
 $error_message   = '';
 $info_message    = '';
@@ -418,12 +424,39 @@ require_once __DIR__ . '/inc/sidebar.php';
                     Aadhaar number — only your HPR / NMC identifiers and a consent record.
                     <?php if (!$doctor['hpr_verified'] && !$hpr_pending): ?>
                         <div class="mt-2">
-                            <button type="submit" name="submit_hpr_request" value="1" class="btn btn-sm btn-primary" style="background:#0C74C5;border-color:#0C74C5;">
-                                <i class="fa fa-shield mr-1"></i> Save &amp; Submit for HPR Verification
+                            <button type="submit" name="submit_hpr_request" value="1" class="btn btn-sm btn-outline-secondary">
+                                <i class="fa fa-file-text-o mr-1"></i> Save &amp; request manual review
                             </button>
                         </div>
                     <?php endif; ?>
                 </div>
+
+                <?php if ($hpr_api_ready && !$doctor['hpr_verified']): ?>
+                <div class="mp-note" id="hprVerifyBox" style="border:1px solid #cfe3f5;background:#f2f8fd;">
+                    <div style="font-weight:600;color:#0C74C5;margin-bottom:4px;">
+                        <i class="fa fa-shield mr-1"></i> Verify your HPR ID instantly (Aadhaar)
+                    </div>
+                    <div style="font-size:.8rem;color:#334155;">
+                        We open the National Health Authority page in a new tab. Authenticate there with your
+                        Aadhaar OTP, then return here — we confirm the HPR ID linked to your Aadhaar matches the
+                        one on this profile. Nothing about your Aadhaar is stored.
+                    </div>
+
+                    <div class="mt-2">
+                        <button type="button" id="hprVerifyBtn"
+                                class="btn btn-sm btn-primary"
+                                style="background:#0C74C5;border-color:#0C74C5;"
+                                data-hpr-id="<?= htmlspecialchars($doctor['hpr_id'] ?? '') ?>">
+                            <i class="fa fa-shield mr-1"></i> Verify HPR ID with Aadhaar
+                        </button>
+                        <span id="hprVerifyHint" class="text-muted ms-2" style="font-size:.74rem;">
+                            <?php if (empty($doctor['hpr_id'])): ?>Enter your HPR ID above and click <em>Save Changes</em> first.<?php endif; ?>
+                        </span>
+                    </div>
+
+                    <div id="hprVerifyStatus" class="mt-2" style="display:none;font-size:.82rem;"></div>
+                </div>
+                <?php endif; ?>
             </div>
 
             <!-- ── Bio ── -->
@@ -554,6 +587,123 @@ document.getElementById('mpForm').addEventListener('submit', function (e) {
 });
 
 // DOB -> nothing to compute visibly (age stored server-side)
+
+/* ──────────────────────────────────────────────────────────────
+   HPR ID verification — Aadhaar flow (doctor/api/hpr-verify.php)
+   Polling pattern mirrors telemedicine/assets/js/room.js.
+   ────────────────────────────────────────────────────────────── */
+(function () {
+    const btn = document.getElementById('hprVerifyBtn');
+    if (!btn) return;
+
+    const API   = '<?= BASE_URL ?>doctor/api/hpr-verify.php';
+    const CSRF  = '<?= htmlspecialchars($hpr_csrf, ENT_QUOTES) ?>';
+    const box   = document.getElementById('hprVerifyStatus');
+    const hint  = document.getElementById('hprVerifyHint');
+    const POLL_MS = 3500;
+
+    let txnId = null;
+    let pollTimer = null;
+    let pollInFlight = false;
+
+    function show(html, kind) {
+        box.style.display = 'block';
+        box.className = 'mt-2 alert py-2 px-3 ' + ({
+            info: 'alert-info', ok: 'alert-success', err: 'alert-danger', warn: 'alert-warning'
+        }[kind] || 'alert-info');
+        box.innerHTML = html;
+    }
+
+    function stopPolling() {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = null;
+    }
+
+    function setBusy(busy) {
+        btn.disabled = busy;
+        btn.innerHTML = busy
+            ? '<i class="fa fa-spinner fa-spin mr-1"></i> Verifying…'
+            : '<i class="fa fa-shield mr-1"></i> Verify HPR ID with Aadhaar';
+    }
+
+    function post(action, extra) {
+        return fetch(API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(Object.assign({ action: action, _csrf: CSRF }, extra || {}))
+        }).then(r => r.json());
+    }
+
+    btn.addEventListener('click', function () {
+        if (!btn.dataset.hprId || !btn.dataset.hprId.trim()) {
+            show('Enter your HPR ID above, click <strong>Save Changes</strong>, then come back to verify.', 'warn');
+            return;
+        }
+        if (hint) hint.textContent = '';
+        setBusy(true);
+        show('Starting verification…', 'info');
+
+        post('start').then(res => {
+            if (!res.success) { setBusy(false); show(esc(res.message || 'Could not start verification.'), 'err'); return; }
+            if (res.alreadyVerified || res.state === 'verified') { onVerified(res); return; }
+
+            txnId = res.txnId;
+            const w = window.open(res.url, '_blank', 'noopener');
+            if (!w) {
+                show('Pop-up blocked. <a href="' + esc(res.url) + '" target="_blank" rel="noopener">Open the Aadhaar page</a> in a new tab, authenticate, then keep this tab open.', 'warn');
+            } else {
+                show('A new tab opened for Aadhaar authentication. Complete it there, then return here — this can take up to ' + Math.round((res.expiresIn || 300) / 60) + ' minutes. <strong>Waiting…</strong>', 'info');
+            }
+            pollTimer = setInterval(pollOnce, POLL_MS);
+        }).catch(() => { setBusy(false); show('Network error. Please try again.', 'err'); });
+    });
+
+    function pollOnce() {
+        if (pollInFlight || !txnId) return;
+        pollInFlight = true;
+        post('poll', { txnId: txnId })
+            .then(res => {
+                if (!res || !res.success) return; // transient — next tick retries
+                if (res.state === 'authenticated' || res.ready) {
+                    stopPolling();
+                    show('Aadhaar authenticated. Confirming your HPR ID…', 'info');
+                    finish();
+                } else if (res.state === 'expired') {
+                    stopPolling(); setBusy(false);
+                    show('The verification link expired. Click the button to try again.', 'warn');
+                } else if (res.state === 'failed') {
+                    stopPolling(); setBusy(false);
+                    show('Verification could not be completed. Please try again.', 'err');
+                }
+                // state 'pending' → keep waiting
+            })
+            .catch(() => { /* transient */ })
+            .finally(() => { pollInFlight = false; });
+    }
+
+    function finish() {
+        post('finish', { txnId: txnId })
+            .then(res => {
+                setBusy(false);
+                if (res.success && res.state === 'verified') { onVerified(res); return; }
+                show(esc(res.message || 'HPR verification failed.'), 'err');
+            })
+            .catch(() => { setBusy(false); show('Network error while confirming. Please try again.', 'err'); });
+    }
+
+    function onVerified(res) {
+        stopPolling();
+        const who = res && res.name ? (' as <strong>Dr. ' + esc(res.name) + '</strong>') : '';
+        show('<i class="fa fa-check-circle mr-1"></i> HPR ID verified' + who + '. Refreshing…', 'ok');
+        setTimeout(() => window.location.reload(), 1400);
+    }
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+})();
 </script>
 </body>
 </html>

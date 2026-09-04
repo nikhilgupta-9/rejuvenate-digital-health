@@ -41,7 +41,8 @@ dump / phpMyAdmin: `doctors`, `users`, `admin_user`, `appointments`,
 | # | File | Notes |
 |---|------|-------|
 | 3 | `migration_doctor_abha.sql` | HPR cols on `doctors`; `jwt_refresh_tokens`; **`doctor_patients`** |
-| 4 | `migration_doctor_profile_hpr.sql` | `hfr_id`, notify prefs; `hpr_verification_requests` |
+| 4 | `migration_doctor_profile_hpr.sql` | `hfr_id`, notify prefs; `hpr_verification_requests` (manual admin review) |
+| 4b | `migration_hpr_verification.sql` | `hpr_verification_txns` (FK → doctors CASCADE) + `doctors.hpr_verification_source` — backs `lib/HprApi.php` Aadhaar-link HPR-ID verification |
 | 5 | `migration_doctor_activation_gate.sql` | `grace_period_until` etc. on `doctors` |
 | 6 | `migration_doctor_subscription_referral.sql` | `doctor_plans`, `doctor_subscriptions`, `doctor_referral_earnings` (FKs) |
 | 7 | `migration_doctor_plans_marketing.sql` | marketing cols on `doctor_plans` — **after #6** |
