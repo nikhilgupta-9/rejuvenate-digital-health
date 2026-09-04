@@ -67,7 +67,8 @@ $upd = $conn->prepare("
 $upd->bind_param('sssssi', $name, $gender, $bloodGroup, $email, $mobile, $patient_id);
 
 if (!$upd->execute()) {
-    echo json_encode(['success' => false, 'error' => 'DB error: ' . $conn->error]); exit;
+    error_log('[patient-demographics-save] DB error: ' . $conn->error);
+    echo json_encode(['success' => false, 'error' => 'Could not save the profile. Please try again.']); exit;
 }
 
 echo json_encode(['success' => true, 'message' => 'Profile saved']);

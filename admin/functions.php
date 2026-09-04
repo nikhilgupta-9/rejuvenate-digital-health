@@ -1,7 +1,6 @@
 <?php
 
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
 
 include_once "db-conn.php";
 use PHPMailer\PHPMailer\PHPMailer;
@@ -192,7 +191,8 @@ if (isset($_POST["add-sub-categories"])) {
         </script>
         <?php
     } else {
-        echo "Error inserting record: " . mysqli_error($conn);
+        error_log('[admin/functions add-sub-category] DB error: ' . mysqli_error($conn));
+        echo "Could not add the sub category. Please try again.";
     }
 }
 
@@ -879,10 +879,12 @@ function handleTestimonialSubmission($conn) {
                 'testimonial_id' => $is_edit ? $testimonial_id : $stmt->insert_id
             ];
         } else {
-            return ['status' => 'error', 'message' => 'Database error: ' . $stmt->error];
+            error_log('[admin/functions testimonial] DB error: ' . $stmt->error);
+            return ['status' => 'error', 'message' => 'Could not save the testimonial. Please try again.'];
         }
     } catch (Exception $e) {
-        return ['status' => 'error', 'message' => 'Error: ' . $e->getMessage()];
+        error_log('[admin/functions testimonial] ' . $e->getMessage());
+        return ['status' => 'error', 'message' => 'Could not save the testimonial. Please try again.'];
     }
 }
 

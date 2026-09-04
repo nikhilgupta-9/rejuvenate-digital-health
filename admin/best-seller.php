@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/auth/bootstrap.php';
 session_start();
 include('db-conn.php'); // Include your database connection
 

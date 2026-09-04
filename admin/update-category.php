@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/auth/bootstrap.php';
 // Include database connection
 include 'db-conn.php';
 
@@ -53,7 +54,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_category'])) {
     if ($stmt->execute()) {
         echo "<script>alert('Category updated successfully!'); window.location.href='view-categories.php';</script>";
     } else {
-        echo "Error updating category: " . $stmt->error;
+        error_log('[admin/update-category] DB error: ' . $stmt->error);
+        echo "Could not update the category. Please try again.";
     }
 
     $stmt->close();

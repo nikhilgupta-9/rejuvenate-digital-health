@@ -31,7 +31,8 @@ $del = $conn->prepare("DELETE FROM patient_documents WHERE id=? AND doctor_id=?"
 $del->bind_param('ii', $doc_id, $doctor_id);
 
 if (!$del->execute()) {
-    echo json_encode(['success' => false, 'error' => 'DB error: ' . $conn->error]); exit;
+    error_log('[patient-document-delete] DB error: ' . $conn->error);
+    echo json_encode(['success' => false, 'error' => 'Could not delete the document. Please try again.']); exit;
 }
 
 if (!empty($doc['file_path'])) {

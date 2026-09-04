@@ -1,8 +1,9 @@
 <?php
 include_once(__DIR__ . "/../config/connect.php");
-// session_start();
+require_once __DIR__ . "/auth/guard.php";
 
-if (!isset($_SESSION['doctor_logged_in'])) {
+if (!doctor_jwt_guard(true)) {
+    http_response_code(401);
     die("Unauthorized access.");
 }
 

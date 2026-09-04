@@ -61,13 +61,17 @@ function fail(string $msg): void {
     echo json_encode(['success' => false, 'message' => $msg, 'error' => $msg]); exit;
 }
 
-/** Map a send_otp "type" to ABDM loginHint/otpSystem/scopes for initAuth(). */
+/**
+ * Map a send_otp "type" to ABDM [loginHint, otpSystem, scopes] for
+ * initAuth() / confirmAuth(). Existing-ABHA login always pairs abha-login
+ * with a verify scope — a bare ["abha-login"] is rejected as "Invalid Scope".
+ */
 function loginHintFor(string $type): array {
     return match ($type) {
-        'mobile'  => ['mobile', 'abdm', ['abha-login', 'mobile-verify']],
-        'number'  => ['abha-number', 'abdm', ['abha-login']],
-        'address' => ['abha-address', 'abdm', ['abha-login']],
-        default   => ['abha-number', 'abdm', ['abha-login']],
+        'mobile'  => ['mobile',      'abdm', ['abha-login', 'mobile-verify']],
+        'number'  => ['abha-number', 'abdm', ['abha-login', 'mobile-verify']],
+        'aadhaar' => ['aadhaar',     'aadhaar', ['abha-login', 'aadhaar-verify']],
+        default   => ['abha-number', 'abdm', ['abha-login', 'mobile-verify']],
     };
 }
 
@@ -146,8 +150,11 @@ try {
             if ($type === 'number' && !Validator::isValidAbhaNumber($input)) {
                 fail('Please enter a valid 14-digit ABHA number');
             }
-            if ($type === 'address' && !Validator::isValidAbhaAddress($input)) {
-                fail('Please enter a valid ABHA address (e.g. username@abdm)');
+            if ($type === 'address') {
+                // ABDM v3 /profile/login/request/otp rejects loginHint "abha-address"
+                // and the /search endpoints are not available to this credential —
+                // no working address→OTP path yet. Route the doctor to a method that works.
+                fail('ABHA-address sign-in is not available yet. Use the ABHA Number or Mobile OTP method instead.');
             }
 
             [$loginHint, $otpSystem, $scopes] = loginHintFor($type);
@@ -187,7 +194,7 @@ try {
                     fail(AbdmApi::extractError($res, 'OTP verification failed'));
                 }
 
-                $xToken = $res['tokens']['token'] ?? ($res['token'] ?? '');
+                $xToken = $res['tokens']['id_token'] ?? $res['tokens']['token'] ?? $res['token'] ?? '';
                 unset($_SESSION['doc_abdm_txn_id'], $_SESSION['doc_abdm_flow']);
                 Security::clearRateLimit(Security::rlKey('doc_abdm_otp', Security::clientIp(), (string)$doctorId));
 
@@ -215,31 +222,50 @@ try {
                 ]);
             }
 
-            // Existing-ABHA login (mobile / abha-number / abha-address)
+            // Existing-ABHA login (mobile / abha-number)
             $loginType = $_SESSION['doc_abdm_login_type'] ?? 'number';
             [, , $scopes] = loginHintFor($loginType);
             $res = $abdm->confirmAuth($otp, $txnId, $scopes);
 
-            $accounts = $res['accounts'] ?? [];
+            $verifyTxn   = $res['txnId'] ?? $txnId;
+            $transferTok = $res['token'] ?? $res['tokens']['id_token'] ?? $res['tokens']['token'] ?? '';
+            $accounts    = $res['accounts'] ?? [];
+            $mobileFallback = ($loginType === 'mobile') ? Validator::digitsOnly($_SESSION['doc_abdm_login_id'] ?? '') : '';
+
+            if (!$transferTok) {
+                $logger->logAbhaAuth($doctorId, 'doctor', strtoupper($loginType) . '_OTP', $verifyTxn, 'FAILURE');
+                fail(AbdmApi::extractError($res, 'OTP verification failed'));
+            }
+
+            // /profile/login/verify returns a "Transfer" T-token + the ABHAs on
+            // this mobile. It must be exchanged for the real X-token via
+            // /profile/login/verify/user — even for a single ABHA. More than one
+            // → let the doctor pick.
             if (count($accounts) > 1) {
-                $tToken = $res['token'] ?? ($res['tokens']['token'] ?? '');
                 $cleaned = array_map(fn($acc) => [
                     'ABHANumber'           => $acc['ABHANumber'] ?? '',
                     'name'                 => trim(($acc['firstName'] ?? '') . ' ' . ($acc['lastName'] ?? '')),
                     'preferredAbhaAddress' => $acc['preferredAbhaAddress'] ?? '',
                 ], $accounts);
-                ok(['needs_select' => true, 'txnId' => $res['txnId'] ?? $txnId, 't_token' => $tToken, 'accounts' => $cleaned]);
+                ok(['needs_select' => true, 'txnId' => $verifyTxn, 't_token' => $transferTok, 'accounts' => $cleaned]);
             }
 
-            $xToken = $res['token'] ?? ($res['tokens']['token'] ?? '');
-            if (!$xToken) {
-                $logger->logAbhaAuth($doctorId, 'doctor', 'MOBILE_OTP', $txnId, 'FAILURE');
-                fail(AbdmApi::extractError($res, 'OTP verification failed'));
-            }
-
-            $mobileFallback = ($loginType === 'mobile') ? Validator::digitsOnly($_SESSION['doc_abdm_login_id'] ?? '') : '';
             unset($_SESSION['doc_abdm_txn_id'], $_SESSION['doc_abdm_flow'], $_SESSION['doc_abdm_login_type'], $_SESSION['doc_abdm_login_id']);
-            finishFromXToken($abdm, $conn, $logger, $doctorId, 'MOBILE_OTP', $res['txnId'] ?? $txnId, $xToken, $mobileFallback);
+
+            if ($accounts) {
+                // exactly one ABHA — auto-select it
+                $onlyAbha = $accounts[0]['ABHANumber'] ?? '';
+                $sel = $abdm->verifyUserLogin($verifyTxn, AbdmApi::formatAbhaNumber($onlyAbha), $transferTok);
+                if (!AbdmApi::wasSuccessful($sel)) {
+                    $logger->logAbhaAuth($doctorId, 'doctor', strtoupper($loginType) . '_OTP', $verifyTxn, 'FAILURE');
+                    fail(AbdmApi::extractError($sel, 'Could not open the ABHA account'));
+                }
+                $xToken = $sel['token'] ?? $sel['tokens']['id_token'] ?? $sel['tokens']['token'] ?? '';
+                finishFromXToken($abdm, $conn, $logger, $doctorId, strtoupper($loginType) . '_OTP', $verifyTxn, $xToken, $mobileFallback);
+            }
+
+            // No accounts key — treat the returned token as the X-token directly
+            finishFromXToken($abdm, $conn, $logger, $doctorId, strtoupper($loginType) . '_OTP', $verifyTxn, $transferTok, $mobileFallback);
 
         /* ── Select one ABHA when a mobile has more than one linked ── */
         case 'select_user':
@@ -249,7 +275,7 @@ try {
             if (!$txnId || !$tToken || !$abhaNumber) fail('txnId, t_token and abha_number are required');
 
             $res = $abdm->verifyUserLogin($txnId, AbdmApi::formatAbhaNumber($abhaNumber), $tToken);
-            $xToken = $res['token'] ?? ($res['tokens']['token'] ?? '');
+            $xToken = $res['token'] ?? $res['tokens']['id_token'] ?? $res['tokens']['token'] ?? '';
             if (!$xToken) {
                 $logger->logAbhaAuth($doctorId, 'doctor', 'MOBILE_OTP', $txnId, 'FAILURE');
                 fail(AbdmApi::extractError($res, 'Could not select ABHA account'));

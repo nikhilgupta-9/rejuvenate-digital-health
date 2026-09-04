@@ -83,9 +83,7 @@ require_once __DIR__ . '/inc/sidebar.php';
               <button class="method-tab" onclick="setMethod('number', this)">
                 <i class="fa fa-barcode"></i> ABHA Number
               </button>
-              <button class="method-tab" onclick="setMethod('address', this)">
-                <i class="fa fa-at"></i> ABHA Address
-              </button>
+              <!-- ABHA Address sign-in: no working ABDM v3 path on this credential yet — hidden until implemented (roadmap Phase 2) -->
             </div>
           </div>
 

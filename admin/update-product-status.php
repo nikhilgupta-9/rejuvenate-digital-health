@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/auth/bootstrap.php';
 include 'db_connection.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

@@ -1,11 +1,7 @@
 <?php
 include_once(__DIR__ . "/../config/connect.php");
-session_start();
-
-if (!isset($_SESSION['doctor_logged_in'])) {
-    header("Location: " . BASE_URL . "doctor-login.php");
-    exit();
-}
+require_once __DIR__ . "/auth/guard.php";
+doctor_jwt_guard();
 
 $doctor_id = $_SESSION['doctor_id'];
 $doc_id = intval($_GET['id']);

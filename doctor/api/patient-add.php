@@ -96,7 +96,8 @@ if ($mode === 'abha' && $abha_input !== '') {
     $ins->bind_param('sssss', $placeholder_name, $placeholder_email, $placeholder_pass, $abha_address, $abha_number);
 
     if (!$ins->execute()) {
-        echo json_encode(['success' => false, 'error' => 'Failed to create patient: ' . $conn->error]);
+        error_log('[patient-add] DB error: ' . $conn->error);
+        echo json_encode(['success' => false, 'error' => 'Could not create the patient record. Please try again.']);
         exit;
     }
 

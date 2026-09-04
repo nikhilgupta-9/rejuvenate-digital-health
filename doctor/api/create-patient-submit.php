@@ -160,7 +160,8 @@ $ins->bind_param('ssssssssssiisssi',
 );
 
 if (!$ins->execute()) {
-    echo json_encode(['success'=>false,'error'=>'DB error: '.$conn->error]); exit;
+    error_log('[create-patient-submit] DB error: ' . $conn->error);
+    echo json_encode(['success'=>false,'error'=>'Could not create the patient record. Please try again.']); exit;
 }
 
 $patient_id = (int)$conn->insert_id;

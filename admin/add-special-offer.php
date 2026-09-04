@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/auth/bootstrap.php';
 session_start();
 include "db-conn.php"; // Database Connection
 
@@ -33,7 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if ($stmt->execute()) {
             echo "Special Offer updated successfully!";
         } else {
-            echo "Error updating offer: " . $stmt->error;
+            error_log('[admin/add-special-offer update] DB error: ' . $stmt->error);
+            echo "Could not update the offer. Please try again.";
         }
 
     } else {
@@ -52,7 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if ($stmt->execute()) {
                 echo "Special Offer added successfully!";
             } else {
-                echo "Error inserting offer: " . $stmt->error;
+                error_log('[admin/add-special-offer insert] DB error: ' . $stmt->error);
+                echo "Could not add the offer. Please try again.";
             }
         } else {
             die("Failed to upload image or no image provided!");
@@ -83,7 +86,8 @@ if (isset($_GET['delete'])) {
     if ($stmt->execute()) {
         echo "Offer deleted successfully!";
     } else {
-        echo "Failed to delete offer: " . $stmt->error;
+        error_log('[admin/add-special-offer delete] DB error: ' . $stmt->error);
+        echo "Could not delete the offer. Please try again.";
     }
 }
 

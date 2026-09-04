@@ -233,8 +233,9 @@ class AbdmApi
             $otpBlock['mobile'] = $mobile;
         }
 
-        // Spec: no top-level txnId or scope — txnId lives inside authData.otp
-        return $this->post('/enrollment/enrol/byAadhaar', [
+        // Spec: no top-level txnId or scope — txnId lives inside authData.otp,
+        // and the transaction is carried forward in the T-token header.
+        return $this->rawPost($this->base . '/enrollment/enrol/byAadhaar', [
             'authData' => [
                 'authMethods' => ['otp'],
                 'otp'         => $otpBlock,
@@ -243,7 +244,7 @@ class AbdmApi
                 'code'    => 'abha-enrollment',
                 'version' => '1.4',
             ],
-        ], $token);
+        ], $token, true, ['T-token' => $txnId]);
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -394,47 +395,52 @@ class AbdmApi
     ═══════════════════════════════════════════════════════════════ */
 
     /**
-     * Step 1 — Request OTP to verify / link an existing ABHA.
+     * Step 1 — Request OTP to log into / verify an existing ABHA.
      *
-     * Endpoint routing:
-     *   scope=["abha-login"]  → POST /profile/login/request/otp  (production M5+; also tried in sandbox)
-     *   scope=["abha-enrol"]  → POST /enrollment/request/otp     (M1 sandbox enrollment only)
+     * Existing-ABHA login goes through POST /profile/login/request/otp (NOT the
+     * enrollment endpoint — that one rejects `abha-login` with 400
+     * "Invalid Transaction Id"). Verified structurally against the v3 sandbox:
      *
-     * $loginHint : 'abha-number' | 'mobile' | 'aadhaar'
-     * $otpSystem : 'abdm' (OTP to registered mobile) | 'aadhaar'
-     * $scopes    : ['abha-login'] for linking an existing ABHA
+     *   mobile       scope ["abha-login","mobile-verify"]  otpSystem "abdm"
+     *   abha-number  scope ["abha-login","mobile-verify"]  otpSystem "abdm"     (OTP to the ABHA's registered mobile)
+     *                scope ["abha-login","aadhaar-verify"] otpSystem "aadhaar"  (OTP to the Aadhaar-linked mobile)
+     *   aadhaar      scope ["abha-login","aadhaar-verify"] otpSystem "aadhaar"
+     *
+     * A bare ["abha-login"] scope is always rejected as "Invalid Scope" — it
+     * must be paired with mobile-verify or aadhaar-verify.
+     *
+     * @param string $loginHint  'mobile' | 'abha-number' | 'aadhaar'
+     * @param string $otpSystem  'abdm' (SMS to registered mobile) | 'aadhaar'
      */
     public function initAuth(string $loginId, string $loginHint = 'abha-number', string $otpSystem = 'abdm', array $scopes = ['abha-login']): array
     {
         $token = $this->getAccessToken();
 
-        // Build the request body
+        // Pair the bare abha-login scope with the verify scope ABDM expects
+        // for this method, and pin the matching otpSystem.
+        if ($loginHint === 'aadhaar' || $otpSystem === 'aadhaar') {
+            $scopes    = ['abha-login', 'aadhaar-verify'];
+            $otpSystem = 'aadhaar';
+        } else {
+            // mobile + abha-number both use the SMS ("abdm") OTP path
+            $scopes    = ['abha-login', 'mobile-verify'];
+            $otpSystem = 'abdm';
+        }
+
         $body = [
-            'txnId' => '',
-            'scope' => $scopes,
+            'txnId'     => '',
+            'scope'     => $scopes,
             'loginHint' => $loginHint,
-            'loginId' => $this->rsaEncrypt($loginId),
+            'loginId'   => $this->rsaEncrypt($loginId),
             'otpSystem' => $otpSystem,
         ];
 
-        // For mobile login, the scope should be ['abha-login', 'mobile-verify']
-        if ($loginHint === 'mobile') {
-            $body['scope'] = ['abha-login', 'mobile-verify'];
-            $body['otpSystem'] = 'abdm';
-        }
-
-        // For Aadhaar login
-        if ($loginHint === 'aadhaar') {
-            $body['scope'] = ['abha-login', 'aadhaar-verify'];
-            $body['otpSystem'] = 'aadhaar';
-        }
-
         error_log("ABDM initAuth Request: " . json_encode([
-            'url' => $this->base . '/enrollment/request/otp',
-            'body' => $body
+            'url'  => $this->base . '/profile/login/request/otp',
+            'body' => array_merge($body, ['loginId' => '<rsa>']),
         ]));
 
-        return $this->post('/enrollment/request/otp', $body, $token);
+        return $this->post('/profile/login/request/otp', $body, $token);
     }
 
     /**
@@ -449,7 +455,15 @@ class AbdmApi
         $token = $this->getAccessToken();
 
         if (in_array('abha-login', $scopes, true)) {
-            return $this->post('/profile/login/verify', [
+            // Pair a bare ["abha-login"] with the verify scope ABDM expects —
+            // it is rejected as "Invalid Scope" on its own.
+            if (count($scopes) === 1) {
+                $scopes = ['abha-login', 'mobile-verify'];
+            }
+            // Postman/spec: /profile/login/verify carries the transaction in the
+            // T-token header; body is authData only (no top-level scope). Sending
+            // it in the body was what left us with a token ABDM treated as expired.
+            $vres = $this->rawPost($this->base . '/profile/login/verify', [
                 'scope'    => $scopes,
                 'authData' => [
                     'authMethods' => ['otp'],
@@ -458,7 +472,15 @@ class AbdmApi
                         'otpValue' => $this->rsaEncrypt($otp),
                     ],
                 ],
-            ], $token);
+            ], $token, true, ['T-token' => $txnId]);
+            // --- TEMP DIAGNOSTIC (X-token expired bug) ---
+            $acc = $vres['accounts'] ?? null;
+            error_log('[ABDM login/verify] http=' . ($vres['_http'] ?? '?')
+                . ' keys=' . json_encode(array_keys($vres))
+                . ' accountsCount=' . (is_array($acc) ? count($acc) : 'none')
+                . ' accounts=' . json_encode($acc)
+                . ' token.claims=' . json_encode(self::peekJwt((string)($vres['token'] ?? ''))));
+            return $vres;
         }
 
         // Enrollment verify
@@ -476,32 +498,38 @@ class AbdmApi
     }
 
     /**
-     * Step 3 (mobile login) — Select ABHA when multiple ABHAs are linked to one mobile.
+     * Step 3 (mobile / abha-number login) — exchange the "Transfer" T-token from
+     * /profile/login/verify for the real X-token by naming the ABHA to log into.
+     *
+     * ABDM v3 mobile login ALWAYS returns a `typ:"Transfer"` token + an `accounts`
+     * list from /profile/login/verify — even for a single ABHA — so this step is
+     * mandatory, not just for the multi-account case. Passing the Transfer token
+     * straight to /profile/account gets HTTP 401 "X-token expired" (ABDM-1094).
+     *
      * POST /profile/login/verify/user
-     * $tToken : T-token (jwtToken) returned by /profile/login/verify (Step 2)
-     * Returns { token } — X-token for getProfile calls
+     *   header  T-token: <the Transfer token>
+     *   body    { ABHANumber, txnId }
+     *   → { token: <X-token> }
      */
     public function verifyUserLogin(string $txnId, string $abhaNumber, string $tToken = ''): array
     {
         $token = $this->getAccessToken();
-        $extraHeaders = $tToken ? ['T-Token' => 'Bearer ' . $tToken] : [];
+        $extraHeaders = $tToken ? ['T-token' => $tToken] : [];
 
-        // Use correct endpoint for sandbox
-        return $this->rawPost(
-            $this->base . '/enrollment/auth/byAbdm',
+        $res = $this->rawPost(
+            $this->base . '/profile/login/verify/user',
             [
-                'txnId' => $txnId,
-                'scope' => ['abha-login', 'mobile-verify'],
                 'ABHANumber' => $abhaNumber,
-                'authData' => [
-                    'authMethods' => ['abha-number'],
-                    'abhaNumber' => $abhaNumber
-                ]
+                'txnId'      => $txnId,
             ],
             $token,
             true,
             $extraHeaders
         );
+        error_log('[ABDM verify/user] http=' . ($res['_http'] ?? '?')
+            . ' keys=' . json_encode(array_keys($res))
+            . ' token.claims=' . json_encode(self::peekJwt((string)($res['token'] ?? ''))));
+        return $res;
     }
 
     /* ── Backward-compat aliases ── */
@@ -529,11 +557,29 @@ class AbdmApi
     public function getProfile(string $xToken): array
     {
         $gToken = $this->getAccessToken();
-        return $this->rawGet(
+
+        // --- TEMP DIAGNOSTIC (X-token expired bug) ---
+        $claims = self::peekJwt($xToken);
+        error_log('[ABDM getProfile] xToken claims=' . json_encode($claims)
+            . ' now=' . time() . ' skew(exp-now)=' . (isset($claims['exp']) ? ($claims['exp'] - time()) : 'n/a'));
+
+        $res = $this->rawGet(
             $this->base . '/profile/account',
             $gToken,
             ['X-token' => 'Bearer ' . $xToken]
         );
+        error_log('[ABDM getProfile] http=' . ($res['_http'] ?? '?') . ' body=' . json_encode($res));
+        return $res;
+    }
+
+    /** Best-effort decode of a JWT payload for diagnostics (no signature check). */
+    public static function peekJwt(string $jwt): array
+    {
+        $parts = explode('.', $jwt);
+        if (count($parts) < 2) return [];
+        $p = strtr($parts[1], '-_', '+/');
+        $p .= str_repeat('=', (4 - strlen($p) % 4) % 4);
+        return json_decode(base64_decode($p), true) ?: [];
     }
 
     /**

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/auth/bootstrap.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -15,7 +16,8 @@ if (isset($_GET['delete_id'])) {
         // header("Location: reviews_list.php");
         // exit;
     } else {
-        echo "Error deleting review: " . mysqli_error($conn);
+        error_log('[admin/show-products-review] DB error: ' . mysqli_error($conn));
+        echo "Could not delete the review. Please try again.";
     }
 }
 

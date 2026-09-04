@@ -2,11 +2,8 @@
 include_once(__DIR__ . "/../config/connect.php");
 include_once(__DIR__ . "/../util/function.php");
 
-// session_start();
-if (!isset($_SESSION['doctor_logged_in']) || $_SESSION['doctor_logged_in'] !== true) {
-    header("Location: " . BASE_URL . "doctor-login.php");
-    exit();
-}
+require_once __DIR__ . "/auth/guard.php";
+doctor_jwt_guard();
 
 $doctor_id = $_SESSION['doctor_id'];
 $doctor_name = $_SESSION['doctor_name'] ?? 'Doctor';

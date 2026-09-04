@@ -52,7 +52,8 @@ $upd = $conn->prepare("
 $upd->bind_param('ssssi', $allergies, $existingCondition, $currentMedication, $medicalHistory, $patient_id);
 
 if (!$upd->execute()) {
-    echo json_encode(['success' => false, 'error' => 'DB error: ' . $conn->error]); exit;
+    error_log('[patient-medical-info-save] DB error: ' . $conn->error);
+    echo json_encode(['success' => false, 'error' => 'Could not save the medical information. Please try again.']); exit;
 }
 
 echo json_encode(['success' => true, 'message' => 'Medical information saved']);

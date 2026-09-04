@@ -89,7 +89,8 @@ $ins->bind_param('iiisssss', $patient_id, $doctor_id, $appointmentId, $documentN
 
 if (!$ins->execute()) {
     @unlink($destPath);
-    echo json_encode(['success' => false, 'error' => 'DB error: ' . $conn->error]); exit;
+    error_log('[patient-document-upload] DB error: ' . $conn->error);
+    echo json_encode(['success' => false, 'error' => 'Could not save the document. Please try again.']); exit;
 }
 
 echo json_encode([

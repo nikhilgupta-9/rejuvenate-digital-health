@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/auth/bootstrap.php';
 
 session_start();
 include "db-conn.php";
@@ -18,9 +19,10 @@ if (isset($_GET['delete'])) {
             'message' => 'Blog post deleted successfully!'
         ];
     } else {
+        error_log('[admin/view-all-blog] DB error: ' . mysqli_error($conn));
         $_SESSION['delete_message'] = [
             'status' => 'danger',
-            'message' => 'Error deleting blog post: ' . mysqli_error($conn)
+            'message' => 'Could not delete the blog post. Please try again.'
         ];
     }
 

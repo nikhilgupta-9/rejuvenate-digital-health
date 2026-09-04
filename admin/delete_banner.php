@@ -1,7 +1,7 @@
 <?php
+require_once __DIR__ . '/auth/bootstrap.php';
 ob_start();
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
 include "db-conn.php";
 
 // Get banner ID from URL
@@ -26,7 +26,8 @@ if (isset($_GET['id'])) {
         if ($conn->query($delete_sql) === TRUE) {
             echo "Banner deleted successfully.";
         } else {
-            echo "Error deleting banner: " . $conn->error;
+            error_log('[admin/delete_banner] DB error: ' . $conn->error);
+            echo "Could not delete the banner. Please try again.";
         }
     } else {
         echo "Banner not found.";

@@ -32,7 +32,8 @@ $upd = $conn->prepare("UPDATE patient_documents SET document_name=?, description
 $upd->bind_param('ssii', $document_name, $description, $doc_id, $doctor_id);
 
 if (!$upd->execute()) {
-    echo json_encode(['success' => false, 'error' => 'DB error: ' . $conn->error]); exit;
+    error_log('[patient-document-update] DB error: ' . $conn->error);
+    echo json_encode(['success' => false, 'error' => 'Could not update the document. Please try again.']); exit;
 }
 
 echo json_encode(['success' => true, 'message' => 'Document updated']);

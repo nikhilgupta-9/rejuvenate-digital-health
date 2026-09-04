@@ -1,6 +1,6 @@
 <?php
+require_once __DIR__ . '/auth/bootstrap.php';
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
 
 include "db-conn.php";
 
@@ -74,7 +74,8 @@ if (isset($_POST['update-product'])) {
               </script>";
         exit;
     } else {
-        echo "Error updating product: " . mysqli_error($conn);
+        error_log('[admin/update-product] DB error: ' . mysqli_error($conn));
+        echo "Could not update the product. Please try again.";
     }
 
     mysqli_stmt_close($stmt);

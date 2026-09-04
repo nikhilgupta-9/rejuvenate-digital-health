@@ -3,6 +3,10 @@ session_start();
 include_once "config/connect.php";
 include_once "config/abdm.php";
 include_once "util/function.php";
+require_once __DIR__ . "/lib/Security.php";
+
+// CSRF token for the AJAX login flows (ABHA / Aadhaar / OTP → ajax/*.php)
+$csrf_token = Security::csrfToken();
 
 /* ── Already logged-in redirects ── */
 if (!empty($_SESSION['logged_in'])) {
@@ -757,6 +761,7 @@ $abdm_on = ABDM_CONFIGURED;
   <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
   <script>
     const BASE = '<?= BASE_URL ?>';
+    const RDH_CSRF = '<?= htmlspecialchars($csrf_token, ENT_QUOTES) ?>';
 
     /* ── Tab switching ── */
     function switchMethod(m) {
@@ -822,7 +827,9 @@ $abdm_on = ABDM_CONFIGURED;
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(Object.assign({
+          _csrf: RDH_CSRF
+        }, body)),
       });
       return r.json();
     }
