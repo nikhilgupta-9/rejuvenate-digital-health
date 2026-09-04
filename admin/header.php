@@ -162,6 +162,7 @@ if ($is_admin && isset($conn)) {
                 <li><a href="abha-management.php?portal=patients"><i class="fas fa-users me-1"></i> Patient ABHA</a></li>
                 <li><a href="abha-management.php?portal=school"><i class="fas fa-school me-1"></i> School ABHA</a></li>
                 <li><a href="abha-management.php?tab=requests"><i class="fas fa-inbox me-1"></i> Link Requests <?php if ($abha_pend > 0): ?><span class="badge bg-danger ms-1" style="font-size:9px;"><?= $abha_pend ?></span><?php endif; ?></a></li>
+                <li><a href="hip-linking.php"><i class="fas fa-link me-1"></i> HIP Care-Context Linking</a></li>
             </ul>
         </li>
         <?php endif; ?>
