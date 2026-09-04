@@ -28,6 +28,7 @@ include_once(__DIR__ . "/../util/function.php");
 require_once(__DIR__ . "/../lib/Settlement.php");
 require_once(__DIR__ . "/../lib/Abha.php");
 require_once(__DIR__ . "/../lib/HipLinking.php");   // ABDM care-context linking (async — worker: scripts/abdm-hip-worker.php)
+require_once(__DIR__ . "/../lib/HipApi.php");        // ABDM hiType canonical map (HipApi::canonicalHiType)
 require_once(__DIR__ . "/../util/prescription-render.php"); // shared read-only "parcha" — same as user/admin/video-call
 require_once(__DIR__ . "/auth/guard.php");
 
@@ -299,7 +300,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
                         $rxId,
                         'PATIENT-' . (int) $pid,
                         (string) ($rxRow['care_context_ref'] ?? $care_ref),
-                        'Prescription',
+                        HipApi::canonicalHiType('Prescription'),   // canonical, never a raw literal
                         HipLinking::newRequestId()
                     );
                 }

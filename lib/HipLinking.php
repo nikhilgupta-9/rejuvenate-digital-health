@@ -120,6 +120,25 @@ class HipLinking
         return $ok;
     }
 
+    /**
+     * Token-generate callback carried an error (e.g. ABDM-1207 demographic
+     * mismatch) instead of a linkToken → mark the pending row unusable so the
+     * worker requests a fresh token. ('expired' is the terminal "unusable"
+     * state in the status ENUM.)
+     */
+    public static function failLinkToken(mysqli $conn, string $requestId): bool
+    {
+        $st = $conn->prepare(
+            "UPDATE abdm_link_tokens SET status = 'expired'
+             WHERE request_id = ? AND status = 'pending'"
+        );
+        $st->bind_param('s', $requestId);
+        $st->execute();
+        $ok = $st->affected_rows > 0;
+        $st->close();
+        return $ok;
+    }
+
     /** linking-status callback → linked | failed (non-terminal rows only). */
     public static function applyLinkingStatus(mysqli $conn, string $requestId, bool $success): bool
     {

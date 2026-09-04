@@ -111,13 +111,17 @@ while ($row = $rows->fetch_assoc()) {
     out("cc#$ccId: linking care context " . $row['care_context_reference']);
     if ($DRY) { $done++; continue; }
 
+    // Route the stored hi_type through the canonical map — never a raw string.
+    $ccHiType   = HipApi::canonicalHiType((string) ($row['hi_type'] ?: 'Prescription'));
+    $patientRef = $row['reference_number'] ?: ('PATIENT-' . $patientId);
+
     $link = $hip->linkCareContext(
         $abhaAddr,
         $abhaNumber,
-        $row['reference_number'] ?: ('PATIENT-' . $patientId),
+        $patientRef,
         $name,
-        $row['hi_type'] ?: 'Prescription',
-        [['referenceNumber' => $row['care_context_reference'], 'display' => 'Prescription ' . date('d M Y')]],
+        $ccHiType,   // HipApi maps to the UPPERCASE form for link/carecontext
+        [['referenceNumber' => $row['care_context_reference'], 'display' => $ccHiType . ' ' . date('d M Y')]],
         (string) $token['link_token'],
         (string) $row['request_id']
     );
@@ -128,7 +132,7 @@ while ($row = $rows->fetch_assoc()) {
     }
 
     // 3. notify (best effort — its own request id)
-    $notify = $hip->notifyCareContext($abhaAddr, $row['care_context_reference'], [$row['hi_type'] ?: 'Prescription']);
+    $notify = $hip->notifyCareContext($abhaAddr, $patientRef, $row['care_context_reference'], [$ccHiType]);
     out("  → link accepted; notify " . ($notify['success'] ? 'accepted' : 'failed: ' . $notify['error']));
     // row stays 'pending' until the linking-status webhook lands
     $done++;

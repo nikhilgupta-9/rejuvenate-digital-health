@@ -37,6 +37,39 @@ class HipApi
     private bool   $sslVerify;
     private ?AbdmApi $abdm = null;
 
+    /**
+     * ABDM care-context type — canonical key → [ UPPERCASE (link/carecontext),
+     * PascalCase (context/notify) ]. ABDM v3 (M2 spec v2.8) uses a DIFFERENT
+     * casing in each call: link wants PRESCRIPTION, notify wants Prescription.
+     */
+    private const HI_TYPES = [
+        'prescription'         => ['PRESCRIPTION',         'Prescription'],
+        'diagnosticreport'     => ['DIAGNOSTICREPORT',     'DiagnosticReport'],
+        'opconsultation'       => ['OPCONSULTATION',       'OPConsultation'],
+        'dischargesummary'     => ['DISCHARGESUMMARY',     'DischargeSummary'],
+        'immunizationrecord'   => ['IMMUNIZATIONRECORD',   'ImmunizationRecord'],
+        'healthdocumentrecord' => ['HEALTHDOCUMENTRECORD', 'HealthDocumentRecord'],
+        'wellnessrecord'       => ['WELLNESSRECORD',       'WellnessRecord'],
+    ];
+
+    /**
+     * Normalise any caller hiType string to ABDM's two required forms.
+     * Unknown / empty → Prescription. A raw string is NEVER sent to ABDM.
+     *
+     * @return array{0:string,1:string} [ UPPERCASE for link, PascalCase for notify ]
+     */
+    public static function hiTypeForms(string $hiType): array
+    {
+        $key = strtolower(preg_replace('/[^a-z]/i', '', $hiType));
+        return self::HI_TYPES[$key] ?? self::HI_TYPES['prescription'];
+    }
+
+    /** Canonical PascalCase hiType — for storage / display / the notify call. */
+    public static function canonicalHiType(string $hiType): string
+    {
+        return self::hiTypeForms($hiType)[1];
+    }
+
     public function __construct()
     {
         $this->base      = rtrim(defined('ABDM_HIECM_BASE_URL') ? ABDM_HIECM_BASE_URL : '', '/');
@@ -85,7 +118,9 @@ class HipApi
         ];
         $abhaNumber = preg_replace('/\D/', '', $abhaNumber);
         if (strlen($abhaNumber) === 14) {
-            $body['abhaNumber'] = AbdmApi::formatAbhaNumber($abhaNumber);
+            // M2 spec: bare 14-digit. The SAME format MUST be used in
+            // linkCareContext() or ABDM-1062 "ABHA number mismatch with link token".
+            $body['abhaNumber'] = $abhaNumber;
         }
 
         $requestId = ($requestId !== null && $requestId !== "") ? $requestId : $this->uuid();
@@ -143,19 +178,24 @@ class HipApi
         }
         if (!$ccs) return $this->fail('At least one care context is required.');
 
+        // M2 spec: link/carecontext hiType is UPPERCASE, no spaces.
+        [$hiTypeUpper] = self::hiTypeForms($hiType);
+
+        $patientEntry = [
+            'referenceNumber' => trim($patientRef),
+            'display'         => trim($displayName),
+            'careContexts'    => $ccs,
+            'hiType'          => $hiTypeUpper,
+            'count'           => count($ccs),
+        ];
         $body = [
             'abhaAddress' => trim($abhaAddress),
-            'patient'     => [
-                'referenceNumber' => trim($patientRef),
-                'display'         => trim($displayName),
-                'careContexts'    => $ccs,
-                'hiType'          => $hiType,
-                'count'           => count($ccs),
-            ],
+            'patient'     => [$patientEntry],   // M2 spec: ARRAY of patient objects
         ];
         $abhaNumber = preg_replace('/\D/', '', $abhaNumber);
         if (strlen($abhaNumber) === 14) {
-            $body['abhaNumber'] = AbdmApi::formatAbhaNumber($abhaNumber);
+            // Bare 14-digit — must match the format sent to generateLinkToken().
+            $body['abhaNumber'] = $abhaNumber;
         }
 
         $requestId = ($requestId !== null && $requestId !== "") ? $requestId : $this->uuid();
@@ -182,28 +222,46 @@ class HipApi
           POST {base}/hip/v3/link/context/notify
           Tells the CM that a new care context now exists for this ABHA.
           Fire-and-forget; still returns a requestId.
+
+          M2 spec body:
+            notification.careContext = { patientReference, careContextReference }
+            notification.hiTypes     = PascalCase (Prescription, OPConsultation…)
+            notification.hip         = { id }   (no name)
     ═══════════════════════════════════════════════════════════════ */
 
-    public function notifyCareContext(string $abhaAddress, string $careContextRef, array $hiTypes, ?string $requestId = null): array
-    {
+    public function notifyCareContext(
+        string $abhaAddress,
+        string $patientReference,
+        string $careContextRef,
+        array $hiTypes,
+        ?string $requestId = null
+    ): array {
         [$token, $err] = $this->token();
         if ($err !== null) return $this->fail($err);
 
-        $abhaAddress    = trim($abhaAddress);
-        $careContextRef = trim($careContextRef);
-        if ($abhaAddress === '' || $careContextRef === '') {
-            return $this->fail('ABHA address and care-context reference are required.');
+        $abhaAddress      = trim($abhaAddress);
+        $patientReference = trim($patientReference);
+        $careContextRef   = trim($careContextRef);
+        if ($abhaAddress === '' || $patientReference === '' || $careContextRef === '') {
+            return $this->fail('ABHA address, patient reference and care-context reference are required.');
         }
+
+        // M2 spec: notify uses PascalCase hiTypes (link/carecontext uses UPPERCASE).
         $hiTypes = array_values(array_filter(array_map('strval', $hiTypes)));
-        if (!$hiTypes) $hiTypes = ['Prescription'];
+        $hiTypes = $hiTypes
+            ? array_values(array_unique(array_map(fn ($t) => self::hiTypeForms($t)[1], $hiTypes)))
+            : ['Prescription'];
 
         $body = [
             'notification' => [
                 'patient'     => ['id' => $abhaAddress],
-                'careContext' => ['referenceNumber' => $careContextRef],
-                'hiTypes'     => $hiTypes,
-                'date'        => $this->timestamp(),
-                'hip'         => ['id' => $this->hipId, 'name' => $this->hipName],
+                'careContext' => [
+                    'patientReference'     => $patientReference,
+                    'careContextReference' => $careContextRef,
+                ],
+                'hiTypes' => $hiTypes,
+                'date'    => $this->timestamp(),
+                'hip'     => ['id' => $this->hipId],
             ],
         ];
 
@@ -305,6 +363,31 @@ class HipApi
         return ['success' => false, 'data' => null, 'error' => $message, 'code' => $code];
     }
 
+    /**
+     * Known ABDM HIP error codes (M2 spec v2.8) → operator-readable text.
+     * ABDM-9999 is generic — the caller should prefer the server `message`.
+     */
+    private const ABDM_CODES = [
+        'ABDM-1030' => 'ABDM rejected the request id (REQUEST-ID). It will be retried with a fresh id.',
+        'ABDM-1016' => 'ABDM rejected the request timestamp — the server clock is out of sync (must be within a few minutes of UTC).',
+        'ABDM-1064' => 'ABDM rejected the request: the body was missing or empty.',
+        'ABDM-1092' => 'A link token was already issued for this patient (duplicate). Reusing the existing one.',
+        'ABDM-1090' => 'This HIP link request duplicates one already in progress for the same care context.',
+        'ABDM-1062' => 'The ABHA number does not match the one the link token was issued for.',
+        'ABDM-1038' => 'The ABHA address does not match the one the link token was issued for.',
+        'ABDM-1066' => 'The ABDM link token is invalid or expired — a new one will be requested.',
+        'ABDM-1063' => 'HIP ID mismatch — the configured ABDM_HIP_ID does not match the link token.',
+        'ABDM-1037' => 'Care-context count does not match the number of care contexts sent.',
+        'ABDM-1027' => 'ABDM has rate-limited this HIP — care-context linking is blocked for 24 hours.',
+        'ABDM-1207' => 'ABDM could not verify the patient demographic details for the link token.',
+    ];
+
+    /** @return ?string readable text for a known ABDM-xxxx code, else null */
+    public static function abdmCodeMessage(string $code): ?string
+    {
+        return self::ABDM_CODES[strtoupper(trim($code))] ?? null;
+    }
+
     /** Best-effort readable error from an $this->http() result (ABDM error shapes → HTTP hints). */
     private function extractError(array $r, string $fallback = 'ABDM HIP API error'): string
     {
@@ -313,13 +396,21 @@ class HipApi
         }
         $j = $r['_json'];
         if (is_array($j)) {
+            $code = strtoupper(trim((string) ($j['error']['code'] ?? $j['code'] ?? '')));
+            $srvMsg = null;
+            foreach ([$j['error']['message'] ?? null, $j['message'] ?? null, $j['details'][0]['message'] ?? null] as $m) {
+                if (is_string($m) && $m !== '') { $srvMsg = $m; break; }
+            }
+            if ($code === 'ABDM-9999') {
+                return $srvMsg ?? 'ABDM rejected the request (validation error).';
+            }
+            if (($known = self::abdmCodeMessage($code)) !== null) {
+                return $known;
+            }
             foreach ([
-                $j['error']['message'] ?? null,
+                $srvMsg,
                 $j['errorMessage'] ?? null,
-                $j['details'][0]['message'] ?? null,
-                $j['message'] ?? null,
-                $j['error']['code'] ?? null,
-                $j['code'] ?? null,
+                $code !== '' ? $code : null,
             ] as $c) {
                 if (is_string($c) && $c !== '') return $c;
             }

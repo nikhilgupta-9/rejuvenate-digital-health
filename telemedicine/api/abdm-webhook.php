@@ -3,8 +3,13 @@
  * ABDM HIP-Initiated Linking — webhook receiver.
  *
  * PUBLIC endpoint (ABDM's gateway is the caller — no login, no session,
- * no CSRF). Register the URL with ABDM as the HIP callback:
- *   https://<host>/telemedicine/api/abdm-webhook.php?k=<ABDM_WEBHOOK_SECRET>
+ * no CSRF). Register a single BRIDGE URL with ABDM:
+ *   https://<host>/?k=<ABDM_WEBHOOK_SECRET>
+ * ABDM appends one of three fixed sub-paths, which .htaccess rewrites here:
+ *   /api/v3/hip/token/on-generate-token   → link token (or async error)
+ *   /api/v3/link/on_carecontext           → care-context linking status
+ *   /api/v3/links/context/on-notify       → our notify() ACK
+ * (direct hits to this file still work via payload-shape fallback.)
  *
  * ── Security model (there is no per-request auth from ABDM in the V3 HIP
  *    callback, so this is layered defence, weakest → strongest) ──
@@ -128,15 +133,37 @@ function wh_request_id(array $p): ?string
     return null;
 }
 
-/** Classify by which keys are present. */
-function wh_callback_type(array $p): string
+/**
+ * Route from the request path. ABDM appends one of three fixed sub-paths to
+ * the registered bridge URL (M2 spec v2.8); .htaccess rewrites each here.
+ * REQUEST_URI keeps the ORIGINAL path across an internal rewrite.
+ */
+function wh_route(): ?string
 {
-    if (isset($p['linkToken']) || isset($p['response']['linkToken'])) return 'linkToken';
-    if (isset($p['acknowledgement']) || isset($p['status']) || isset($p['error'])
-        || isset($p['response']['status'])) {
-        return 'linking-status';
-    }
-    return 'unknown';
+    $path = (string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+    if (str_ends_with($path, '/api/v3/hip/token/on-generate-token')) return 'link-token';
+    if (str_ends_with($path, '/api/v3/link/on_carecontext'))         return 'carecontext';
+    if (str_ends_with($path, '/api/v3/links/context/on-notify'))     return 'notify';
+    return null;
+}
+
+/**
+ * Fallback when the path is not one of the three (direct hit / local test).
+ * Confirmed shapes: link-token has `linkToken`; on-notify has `acknowledgement`;
+ * on_carecontext has a `status` string (or an `error` object).
+ */
+function wh_classify(array $p): string
+{
+    if (isset($p['linkToken']) || isset($p['response']['linkToken'])) return 'link-token';
+    if (isset($p['acknowledgement'])) return 'notify';
+    return 'carecontext';
+}
+
+/** ABDM error code carried in a callback (async ABDM-1207 etc. in `error`). */
+function wh_error_code(array $p): string
+{
+    $c = $p['error']['code'] ?? $p['response']['error']['code'] ?? '';
+    return is_string($c) ? strtoupper(trim($c)) : '';
 }
 
 function wh_link_token(array $p): string
@@ -144,23 +171,37 @@ function wh_link_token(array $p): string
     return (string) ($p['linkToken'] ?? $p['response']['linkToken'] ?? '');
 }
 
-function wh_status_ok(array $p): bool
+/**
+ * on_carecontext success — EXACT `status` string match (confirmed shapes).
+ * Failure variants also contain the words "care context", so no substring test.
+ *   success:  "Successfully Linked care context"
+ *             "These care contexts have been already linked"  (idempotent → linked)
+ *   failure:  "Counter and Care context count mismatch"
+ *             "ABHA address and Link token mismatch"
+ *             "Dependent service unavailable"
+ * Anything else (or an `error` object) → failed.
+ */
+function wh_carecontext_linked(array $p): bool
 {
-    $s = strtoupper((string) (
-        $p['acknowledgement']['status']
-        ?? $p['status']
-        ?? $p['response']['status']
-        ?? ($p['error'] ?? null ? 'FAILED' : '')
-    ));
-    return in_array($s, ['SUCCESS', 'OK', 'ACCEPTED', 'LINKED', 'COMPLETED'], true);
+    return in_array(trim((string) ($p['status'] ?? '')), [
+        'Successfully Linked care context',
+        'These care contexts have been already linked',
+    ], true);
 }
 
-$requestId    = wh_request_id($payload);
-$callbackType = wh_callback_type($payload);
+/** on-notify success — acknowledgement.status === "SUCCESS" and no error object. */
+function wh_notify_ok(array $p): bool
+{
+    if (isset($p['error']['code'])) return false;
+    return strtoupper(trim((string) ($p['acknowledgement']['status'] ?? ''))) === 'SUCCESS';
+}
+
+$route     = wh_route() ?? wh_classify($payload);
+$requestId = wh_request_id($payload);
 
 // 0. Always record the raw callback first.
 try {
-    $logId = HipLinking::logWebhook($conn, $requestId, $callbackType, $raw);
+    $logId = HipLinking::logWebhook($conn, $requestId, $route, $raw);
 } catch (Throwable $e) {
     error_log('[abdm-webhook] logWebhook failed: ' . $e->getMessage());
     webhook_ack(); // can't even log — still ack so ABDM doesn't hammer us
@@ -169,8 +210,20 @@ try {
 // 6. THE REAL GATE + 7. idempotency + processing — all wrapped so nothing
 //    below can prevent the 200.
 try {
+    // context/on-notify — the ACK of our own notify() call. We don't persist its
+    // requestId, and the care-context link status is governed by on_carecontext,
+    // so this is log-only (no abdm_care_context_links change).
+    if ($route === 'notify') {
+        $ec = wh_error_code($payload);
+        error_log('[abdm-webhook] notify ack ' . (wh_notify_ok($payload)
+            ? 'SUCCESS'
+            : 'not-ok' . ($ec !== '' ? " code={$ec}" : '')));
+        HipLinking::markWebhookProcessed($conn, $logId);
+        webhook_ack();
+    }
+
     if ($requestId === null) {
-        error_log('[abdm-webhook] no requestId in payload (type=' . $callbackType . ')');
+        error_log('[abdm-webhook] no requestId in payload (route=' . $route . ')');
         HipLinking::markWebhookProcessed($conn, $logId);
         webhook_ack();
     }
@@ -192,22 +245,37 @@ try {
     }
 
     $applied = false;
+    $errCode = wh_error_code($payload);
 
-    if ($tokenRow && ($callbackType === 'linkToken' || wh_link_token($payload) !== '')) {
+    if ($tokenRow) {
+        // token-generate callback → a linkToken, or an async error (ABDM-1207…).
         $lt = wh_link_token($payload);
-        if ($lt === '') {
-            error_log('[abdm-webhook] linkToken callback with empty token');
-        } else {
+        if ($errCode !== '') {
+            error_log('[abdm-webhook] token-generate error code=' . $errCode);
+            $applied = HipLinking::failLinkToken($conn, $requestId);
+        } elseif ($lt !== '') {
             $applied = HipLinking::applyLinkToken($conn, $requestId, $lt);
+        } else {
+            error_log('[abdm-webhook] link-token callback with neither token nor error');
         }
     } elseif ($ccRow) {
-        $applied = HipLinking::applyLinkingStatus($conn, $requestId, wh_status_ok($payload));
-    } else {
-        error_log('[abdm-webhook] callback type/record mismatch (type=' . $callbackType . ')');
+        // on_carecontext → linking status. Error object OR a non-success `status`
+        // string → failed; only the two exact success strings → linked.
+        if ($errCode !== '') {
+            error_log('[abdm-webhook] on_carecontext error code=' . $errCode);
+            $linked = false;
+        } else {
+            $linked = wh_carecontext_linked($payload);
+            if (!$linked) {
+                error_log('[abdm-webhook] on_carecontext non-success status="'
+                    . substr((string) ($payload['status'] ?? ''), 0, 80) . '"');
+            }
+        }
+        $applied = HipLinking::applyLinkingStatus($conn, $requestId, $linked);
     }
 
     HipLinking::markWebhookProcessed($conn, $logId);
-    error_log('[abdm-webhook] processed type=' . $callbackType . ' applied=' . ($applied ? '1' : '0'));
+    error_log('[abdm-webhook] processed route=' . $route . ' applied=' . ($applied ? '1' : '0'));
 
 } catch (Throwable $e) {
     error_log('[abdm-webhook] processing error: ' . $e->getMessage());

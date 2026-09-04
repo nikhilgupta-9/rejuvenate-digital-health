@@ -9,6 +9,12 @@ RewriteEngine On
 # Sitemap
 RewriteRule ^sitemap\.xml$ sitemap.php [L,QSA]
 
+# ── ABDM HIP callbacks — single registered bridge URL, ABDM appends these
+#    fixed sub-paths (M2 spec v2.8). All route to one receiver; ?k= is kept.
+RewriteRule ^api/v3/hip/token/on-generate-token$  telemedicine/api/abdm-webhook.php [L,QSA]
+RewriteRule ^api/v3/link/on_carecontext$          telemedicine/api/abdm-webhook.php [L,QSA]
+RewriteRule ^api/v3/links/context/on-notify$      telemedicine/api/abdm-webhook.php [L,QSA]
+
 # Rewrite Product Details URL
 RewriteRule ^department/([^/]+)/?$ e-cardiology.php?alias=$1 [L,QSA]
 RewriteRule ^departments/?$ departments.php? [L,QSA]
