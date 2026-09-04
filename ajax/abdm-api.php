@@ -146,16 +146,32 @@ try {
 
             if (!$otp || !$txnId) fail('OTP and session required. Please start again.');
 
-            // /enrollment/auth/byAbdm with scope ["abha-login"]
             $res = $abdm->confirmAuth($otp, $txnId);
 
-            // Response can carry token at root level OR nested under tokens.token
+            // /profile/login/verify hands back a short-lived typ:"Transfer" token
+            // (+ an accounts[] list), NOT a usable X-token.
             $xToken  = $res['token']
                     ?? $res['tokens']['token']
+                    ?? $res['tokens']['id_token']
                     ?? $res['ABHAToken']
                     ?? $res['userToken']
                     ?? '';
             $resTxnId = $res['txnId'] ?? $txnId;
+
+            // Step 3 — exchange the Transfer token for the real X-token via
+            // /profile/login/verify/user before any /profile/account call
+            // (a Transfer token there returns HTTP 401 ABDM-1094 "X-token expired").
+            if ($xToken) {
+                $accounts   = $res['accounts'] ?? [];
+                $selectAbha = $accounts[0]['ABHANumber'] ?? $healthId;
+                if ($selectAbha) {
+                    $sel   = $abdm->verifyUserLogin($resTxnId, AbdmApi::formatAbhaNumber((string)$selectAbha), $xToken);
+                    $realX = $sel['token'] ?? $sel['tokens']['id_token'] ?? $sel['tokens']['token'] ?? '';
+                    if ($realX && AbdmApi::wasSuccessful($sel)) {
+                        $xToken = $realX;
+                    }
+                }
+            }
 
             // Case 1: got a user token — fetch full profile then save
             if ($xToken) {

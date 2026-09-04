@@ -473,13 +473,14 @@ class AbdmApi
                     ],
                 ],
             ], $token, true, ['T-token' => $txnId]);
-            // --- TEMP DIAGNOSTIC (X-token expired bug) ---
-            $acc = $vres['accounts'] ?? null;
+            // /profile/login/verify returns a short-lived typ:"Transfer" token +
+            // an `accounts` list — NOT a usable X-token. The caller MUST exchange
+            // it via verifyUserLogin() (/profile/login/verify/user); passing this
+            // token straight to /profile/account is what triggers ABDM-1094
+            // "X-token expired". PII-safe log — shape only, never token/ABHA.
             error_log('[ABDM login/verify] http=' . ($vres['_http'] ?? '?')
-                . ' keys=' . json_encode(array_keys($vres))
-                . ' accountsCount=' . (is_array($acc) ? count($acc) : 'none')
-                . ' accounts=' . json_encode($acc)
-                . ' token.claims=' . json_encode(self::peekJwt((string)($vres['token'] ?? ''))));
+                . ' transferToken=' . (!empty($vres['token']) ? 'y' : 'n')
+                . ' accounts=' . (is_array($vres['accounts'] ?? null) ? count($vres['accounts']) : 0));
             return $vres;
         }
 
@@ -507,14 +508,26 @@ class AbdmApi
      * straight to /profile/account gets HTTP 401 "X-token expired" (ABDM-1094).
      *
      * POST /profile/login/verify/user
-     *   header  T-token: <the Transfer token>
+     *   header  T-token: Bearer <the Transfer token>   (Bearer scheme REQUIRED —
+     *           a bare JWT is rejected by ABDM as "Invalid T-token")
      *   body    { ABHANumber, txnId }
      *   → { token: <X-token> }
+     *
+     * The returned X-token is short-lived and CANNOT be refreshed — ABDM v3
+     * exposes no X-token refresh for the profile flow (only the client-credential
+     * gateway token has a refresh). A later ABDM-1094 on /profile/account means
+     * the user must re-authenticate (fresh OTP); callers should surface
+     * AbdmApi::extractError() (see isXTokenExpired()).
      */
     public function verifyUserLogin(string $txnId, string $abhaNumber, string $tToken = ''): array
     {
         $token = $this->getAccessToken();
-        $extraHeaders = $tToken ? ['T-token' => $tToken] : [];
+        // ABDM's /profile/login/verify/user needs the Transfer token as a proper
+        // Bearer credential in the T-token header — a bare JWT here comes back as
+        // "Invalid T-token". (Regression: the 'Bearer ' prefix was dropped in the
+        // P0 rewrite, commit 5465df3.) Tolerate a value that already has it.
+        $tToken = preg_replace('/^\s*Bearer\s+/i', '', trim($tToken));
+        $extraHeaders = $tToken !== '' ? ['T-token' => 'Bearer ' . $tToken] : [];
 
         $res = $this->rawPost(
             $this->base . '/profile/login/verify/user',
@@ -526,9 +539,9 @@ class AbdmApi
             true,
             $extraHeaders
         );
+        // PII-safe: HTTP + whether the real X-token came back, nothing else.
         error_log('[ABDM verify/user] http=' . ($res['_http'] ?? '?')
-            . ' keys=' . json_encode(array_keys($res))
-            . ' token.claims=' . json_encode(self::peekJwt((string)($res['token'] ?? ''))));
+            . ' xToken=' . (!empty($res['token']) ? 'y' : 'n'));
         return $res;
     }
 
@@ -558,17 +571,21 @@ class AbdmApi
     {
         $gToken = $this->getAccessToken();
 
-        // --- TEMP DIAGNOSTIC (X-token expired bug) ---
-        $claims = self::peekJwt($xToken);
-        error_log('[ABDM getProfile] xToken claims=' . json_encode($claims)
-            . ' now=' . time() . ' skew(exp-now)=' . (isset($claims['exp']) ? ($claims['exp'] - time()) : 'n/a'));
-
         $res = $this->rawGet(
             $this->base . '/profile/account',
             $gToken,
             ['X-token' => 'Bearer ' . $xToken]
         );
-        error_log('[ABDM getProfile] http=' . ($res['_http'] ?? '?') . ' body=' . json_encode($res));
+
+        // PII-safe: never log the profile body (name / DOB / address / ABHA).
+        // ABDM-1094 "X-token expired" here almost always means the caller passed
+        // the /profile/login/verify Transfer token instead of exchanging it for
+        // the real X-token via verifyUserLogin() — there is no X-token refresh.
+        if (self::isXTokenExpired($res)) {
+            error_log('[ABDM getProfile] http=' . ($res['_http'] ?? '?') . ' rejected: X-token invalid/expired (ABDM-1094)');
+        } elseif (!self::wasSuccessful($res)) {
+            error_log('[ABDM getProfile] http=' . ($res['_http'] ?? '?') . ' failed');
+        }
         return $res;
     }
 
@@ -822,6 +839,12 @@ class AbdmApi
             return 'The ABDM gateway is temporarily unavailable (endpoint suspended). Try again in a few minutes.';
         }
 
+        // User X-token rejected (ABDM-1094 / "X-token expired"). ABDM v3 has no
+        // X-token refresh — the ABHA session must be re-established with a fresh OTP.
+        if (self::isXTokenExpired($res)) {
+            return 'Your ABHA session has expired. Please start the ABHA login again.';
+        }
+
         // ABDM wraps errors in various structures — try each shape in order
         $msg = null;
         if (is_string($res['details'][0]['message'] ?? null))   $msg = $res['details'][0]['message'];
@@ -870,6 +893,35 @@ class AbdmApi
     {
         $http = $res['_http'] ?? 200;
         return $http >= 200 && $http < 300;
+    }
+
+    /**
+     * True when ABDM rejected an X-token-authenticated call because the user
+     * X-token is invalid / expired — HTTP 401, error code ABDM-1094, or a body
+     * mentioning "x-token expired".
+     *
+     * There is NO X-token refresh endpoint in the ABDM v3 profile flow: the user
+     * must re-authenticate (fresh OTP). This is also the exact symptom of passing
+     * the /profile/login/verify "Transfer" token through without the
+     * verifyUserLogin() (/profile/login/verify/user) exchange.
+     */
+    public static function isXTokenExpired(array $res): bool
+    {
+        $http = (int)($res['_http'] ?? 0);
+        $code = strtolower((string)($res['code'] ?? $res['error']['code'] ?? ''));
+        if ($code === 'abdm-1094') {
+            return true;
+        }
+        $blob = strtolower((string)json_encode([
+            $res['message']               ?? '',
+            $res['error']['message']      ?? '',
+            $res['details'][0]['message'] ?? '',
+            $res['_raw']                  ?? '',
+        ]));
+        if (strpos($blob, 'x-token expired') !== false) {
+            return true;
+        }
+        return $http === 401 && strpos($blob, 'x-token') !== false;
     }
 
     /**

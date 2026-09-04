@@ -103,6 +103,36 @@ function normalise_abha(string $raw): string
     return trim($raw);
 }
 
+/**
+ * ABDM v3 login Step 3 — exchange the /profile/login/verify "Transfer" token for
+ * the real user X-token via /profile/login/verify/user.
+ *
+ * confirmAuth() (=> /profile/login/verify) returns a short-lived typ:"Transfer"
+ * token plus an `accounts` list, NOT a usable X-token. Handing the Transfer token
+ * to /profile/account returns HTTP 401 ABDM-1094 "X-token expired". This picks
+ * the ABHA to open (the one we expect, else the first ABDM returned) and returns
+ * the real X-token — or '' if the exchange could not be completed.
+ */
+function abdm_exchange_x_token(AbdmApi $abdm, array $verifyRes, string $txnId, string $transferToken, string $preferredAbha = ''): string
+{
+    $accounts = $verifyRes['accounts'] ?? [];
+    $want     = preg_replace('/\D/', '', $preferredAbha);
+
+    $abha = '';
+    foreach ($accounts as $acc) {
+        $have = preg_replace('/\D/', '', (string)($acc['ABHANumber'] ?? ''));
+        if ($have !== '' && $want !== '' && $have === $want) { $abha = (string)$acc['ABHANumber']; break; }
+    }
+    if ($abha === '') {
+        $abha = (string)($accounts[0]['ABHANumber'] ?? $preferredAbha);
+    }
+    if ($abha === '') return '';
+
+    $sel = $abdm->verifyUserLogin($txnId, AbdmApi::formatAbhaNumber($abha), $transferToken);
+    if (!AbdmApi::wasSuccessful($sel)) return '';
+    return $sel['token'] ?? $sel['tokens']['id_token'] ?? $sel['tokens']['token'] ?? '';
+}
+
 try {
     $abdm = new AbdmApi();
 
@@ -141,13 +171,21 @@ try {
 
             if (!$otp || !$txnId || !$abhaId) fail('OTP and session required. Please start again.');
 
-            $res    = $abdm->confirmAuth($otp, $txnId);
-            $xToken = $res['token'] ?? $res['ABHAToken'] ?? $res['userToken']
-                    ?? $res['tokens']['token'] ?? $res['tokens']['id_token'] ?? '';
-            if (!$xToken) {
+            $res         = $abdm->confirmAuth($otp, $txnId);
+            $verifyTxn   = $res['txnId'] ?? $txnId;
+            $transferTok = $res['token'] ?? $res['ABHAToken'] ?? $res['userToken']
+                         ?? $res['tokens']['token'] ?? $res['tokens']['id_token'] ?? '';
+            if (!$transferTok) {
                 $logger->logAuthAttempt($abhaId, 'abha', false, 0, 'user');
                 fail(AbdmApi::extractError($res, 'OTP verification failed'));
             }
+
+            /* ── Step 3 — swap the "Transfer" token for the real X-token.
+                  /profile/login/verify never returns a usable X-token; the
+                  Transfer token 401s ("X-token expired", ABDM-1094) against
+                  /profile/account. Keep the Transfer token as a fallback so the
+                  accounts[]-based identity check below can still run. ── */
+            $xToken = abdm_exchange_x_token($abdm, $res, $verifyTxn, $transferTok, $abhaId) ?: $transferTok;
 
             $found = findByAbha($conn, $abhaId);
             if (!$found) {
@@ -221,10 +259,11 @@ try {
 
             if (!$otp || !$txnId || !$aadhaar) fail('OTP and session required');
 
-            $res = $abdm->confirmAuth($otp, $txnId);
-            $xToken = $res['token'] ?? $res['ABHAToken'] ?? $res['userToken']
-                    ?? $res['tokens']['token'] ?? $res['tokens']['id_token'] ?? '';
-            if (!$xToken) {
+            $res         = $abdm->confirmAuth($otp, $txnId);
+            $verifyTxn   = $res['txnId'] ?? $txnId;
+            $transferTok = $res['token'] ?? $res['ABHAToken'] ?? $res['userToken']
+                         ?? $res['tokens']['token'] ?? $res['tokens']['id_token'] ?? '';
+            if (!$transferTok) {
                 $logger->logAuthAttempt('[MASKED_UID]', 'aadhaar_login', false, 0, 'user');
                 fail(AbdmApi::extractError($res, 'Aadhaar OTP invalid'));
             }
@@ -234,6 +273,13 @@ try {
                 $logger->logAuthAttempt('[MASKED_UID]', 'aadhaar_login', false, 0, 'user');
                 fail('Account not found for this Aadhaar.');
             }
+
+            /* ── Step 3 — swap the "Transfer" token for the real X-token (see
+                  confirm_abha_login). Prefer the ABHA already on the account. ── */
+            $xToken = abdm_exchange_x_token(
+                $abdm, $res, $verifyTxn, $transferTok,
+                (string)($found['user']['abha_id'] ?? '')
+            ) ?: $transferTok;
 
             /* ── Identity binding ──
                If the account already has an ABHA number on file, the ABHA that
