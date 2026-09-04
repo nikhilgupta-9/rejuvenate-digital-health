@@ -8,6 +8,7 @@ include_once __DIR__ . '/../lib/AbdmApi.php';
 include_once __DIR__ . '/../lib/Validator.php';
 include_once __DIR__ . '/../lib/Security.php';
 include_once __DIR__ . '/../lib/AuditLogger.php';
+include_once __DIR__ . '/../lib/Abha.php';
 
 Security::setSecurityHeaders();
 
@@ -69,12 +70,16 @@ function fail(string $msg): void {
 }
 
 function saveAbha(mysqli $conn, string $table, int $id, string $abhaNum, ?string $abhaAddr): void {
-    $fmt = AbdmApi::formatAbhaNumber($abhaNum);
-    $upd = $conn->prepare(
-        "UPDATE $table SET abha_id=?, abha_address=?, abha_linked=1, abha_linked_at=NOW(), abha_verified=1 WHERE id=?"
-    );
-    $upd->bind_param('ssi', $fmt, $abhaAddr, $id);
-    $upd->execute();
+    // abha_accounts is now the authoritative store (Abha::save also mirrors
+    // the deprecated users/school_members.abha_* columns during the transition).
+    $entityType = ($table === 'school_members') ? 'school_member' : 'patient';
+    Abha::save($conn, $entityType, $id, [
+        'abha_number'  => $abhaNum,
+        'abha_address' => $abhaAddr,
+        'linked'       => 1,
+        'verified'     => 1,
+        'source'       => 'abdm',
+    ]);
 }
 
 /* ─── Route ─────────────────────────────────────────────────────────── */
@@ -562,10 +567,10 @@ try {
             $res = $abdm->updateAbhaAddress($xToken, $newAddr);
 
             if (empty($res['code']) || ($res['_http'] ?? 200) < 400) {
-                // Update local DB too
-                $sa = $conn->prepare("UPDATE $entity_table SET abha_address=? WHERE id=?");
-                $sa->bind_param('si', $newAddr, $entity_id);
-                $sa->execute();
+                // Update local store (address only — keeps linked/verified state)
+                Abha::save($conn, ($entity_table === 'school_members') ? 'school_member' : 'patient', (int) $entity_id, [
+                    'abha_address' => $newAddr,
+                ]);
 
                 ok(['abha_address' => $newAddr]);
             }

@@ -22,7 +22,7 @@
 | HPR (doctor registry) | 🔴 Not integrated | Admin-manual review only; **no ABDM HPR API calls exist** |
 | Telemedicine / WebRTC | 🟢 Working | HTTP-polling signalling, signed tickets; WS server deprecated |
 | Security posture | 🟠 Improving | P0 items 1/2/4/5/6 fixed in code (2026-09-04); residual: git-history purge, secret rotation, GET-CSRF (§6) |
-| Database schema | 🟠 Inconsistent | No FKs on core tables, naming drift, 10 tables created at runtime |
+| Database schema | 🟡 Improving | FKs added (18→48), runtime `CREATE TABLE` moved to migrations + runner (2026-09-04); ABHA normalisation in progress; naming drift + `utf8` charset still open |
 
 **Top 5 things to fix before any production/pilot use** (detail in §6):
 
@@ -288,10 +288,17 @@
 - `identification_type` ENUM uses `'Aadhar'` (misspelled) in `users`; school members use `aadhar_number`.
 - `hpr_verification_requests.status` is lowercase `enum('pending','approved','rejected')`; most other status enums are Title-case (`'Pending','Approved','Rejected'`). `doctors.status` is `'Active'/'Inactive'`.
 
-### 5.2 Missing foreign keys
-- **Core tables have no FKs at all:** `doctors`, `users`, `appointments`, `doctor_patients`, `doctor_sessions`, `jwt_refresh_tokens`, `abdm_audit_logs`, `user_abha_requests`, `abha_link_requests`, `prescriptions`, `parent_consent_forms`, `login_otps`, `login_rate_limits`.
-- FKs only appear in newer migrations: `school_module.sql` (7), `migration_doctor_subscription_referral.sql` (6), `migration_doctor_student_care.sql` (3), `migration_doctor_bank_settlement.sql` (3), `migration_student_medical_certificates.sql` (3), `migration_admin_medical_records.sql` (2), `migration_telemedicine.sql` (1).
-- Result: orphaned rows are inevitable (e.g. `doctor_patients` rows survive doctor deletion — `admin/doctors-list.php` does a bare `DELETE FROM doctors WHERE id=?` with no cascade and **on a GET request with no CSRF**).
+### 5.2 Missing foreign keys — ✅ FIXED (2026-09-04)
+
+`database/migration_core_foreign_keys.sql` adds **30 FKs** (live FK count 18 → 48), verified against the data first (zero orphans). Policy: **RESTRICT** on clinical/health/identity refs (`prescriptions.*`, `parent_consent_forms.*`, `school_members.school_id`, `doctor_patients.doctor_id`, `school_member_*`), **CASCADE** on operational/session/workflow (`doctor_sessions`, `doctor_patients.patient_id`, `user_abha_requests`, `abha_link_requests`, `school_users`, `teacher_student_assignments`), **SET NULL** on optional attribution (`plan_id`, `recorded_by_doctor_id`, `reviewed_by`).
+
+Also fixed: 6 `INT UNSIGNED → INT(11)` type mismatches that blocked FK creation; and the migration-declared-but-never-applied FKs (`school_members`, `school_member_*`, `member_health_profiles`, …) — their `CREATE TABLE IF NOT EXISTS` had been a silent no-op because the tables already existed.
+
+**Deliberately no FK:** the polymorphic `entity_id` columns (`jwt_refresh_tokens`, `abha_accounts`, `abdm_audit_logs` — different parent per `entity_type`), and `abdm_audit_logs` subject refs (audit trail must outlive its subjects for NHA compliance).
+
+**App changes shipped with it:** `admin/doctors-list.php` + `admin/delete-school.php` → soft-delete (`status='Inactive'`), because RESTRICT now blocks the old hard `DELETE`.
+
+~30 tables still have no FK (mostly leaf/content/log tables where it adds little): `login_otps`, `login_rate_limits`, `doctor_plans`, `doctor_reviews`, `hpr_verification_requests`, `medical_reports`, `opd_records`, `payments`, `product_*`, `admin_role_permissions`, …
 
 ### 5.3 ABHA tables — normalization
 - ABHA identity is **denormalized onto 3 tables** (`users`, `school_members`, `appointments`) with copies of number/address/linked/verified flags, plus 2 request tables (`user_abha_requests`, `abha_link_requests`) that are structurally identical but split by entity. A single `abha_accounts` (entity_type, entity_id, abha_number, abha_address, verified_at, linked_at, source) + one `abha_link_requests` would remove the drift.
@@ -303,7 +310,8 @@
 `CREATE TABLE IF NOT EXISTS` executed from PHP in: `doctor/patient-form.php` (**`prescriptions`**), `doctor/my-patients.php`, `doctor/change-password.php`, `doctor/api/create-patient-submit.php`, `lib/AbhaPatientResolver.php` (`doctor_patients`), `school/parent-consent.php` (**`parent_consent_forms`**), `admin/permissions.php`, `admin/user-roles.php`, `admin/school-plans.php`, `admin/telemedicine-settings.php`. → Prod schema depends on code execution order; fresh DB + first request races.
 
 ### 5.5 Other
-- `config/connect.php` uses `$conn->set_charset("utf8")` (3-byte) while every table is `utf8mb4` — emoji / some scripts will corrupt on write.
+- ✅ **FIXED** — `set_charset("utf8")` (3-byte) → `utf8mb4` in `config/connect.php`, `admin/db-conn.php`, `telemedicine/SignalingServer.php`. All 81 tables + every column were already `utf8mb4` (DB default too), so only the client connection was wrong; no table conversion needed. 4-byte round-trip verified.
+- Minor: table collations are a 60/40 mix of `utf8mb4_general_ci` and `utf8mb4_unicode_ci` — harmless, optional cleanup.
 - `.env` `DB_NAME=rej_digital_health_db`; CLAUDE.md + most migration headers say `u950539402_reju_digi_beta`. Pick one.
 
 ---
@@ -328,7 +336,7 @@
 | 12 | 🟡 Medium | Password min length **6** for patient signup (`process-signup.php`), **8+complexity** for admin/doctor. Inconsistent, weak for health data | `process-signup.php` | Raise to 8 + basic complexity everywhere |
 | 13 | 🟡 Medium | User enumeration in doctor `forgot-password.php` ("not verified"/"not active" messages) and `process-login.php` ("No account found") | root auth | Generic messages |
 | 14 | 🟡 Medium | `remember_token` written but never verified; plaintext `user_id` cookie set | `process-login.php` | Remove or implement properly (HttpOnly, hashed, selector+validator) |
-| 15 | 🟡 Medium | `set_charset("utf8")` vs `utf8mb4` tables — not security per se, but data-integrity | `config/connect.php` | `utf8mb4` |
+| 15 | 🟡 Medium | ~~`set_charset("utf8")` vs `utf8mb4` tables — data-integrity~~ | `config/connect.php` | ✅ **FIXED** — `utf8mb4` in all 3 DB-connect points; tables were already utf8mb4 |
 | 16 | 🟢 Low | `admin/functions.php` + legacy admin pages use `mysqli_real_escape_string` + `mt_rand()` IDs | `admin/` | Migrate to prepared statements; `random_int` |
 | 17 | 🟢 Low | `doctor/api/create-patient-submit.php` has no CSRF (sibling `abdm-api.php` does); `array_map('trim', $raw)` fatals on nested arrays | `doctor/api/create-patient-submit.php` | Add CSRF; guard against non-scalar |
 | 18 | 🟢 Low | Doctor `login-api.php` comment claims "Rate limit: max 10 attempts per IP per 15 min" but **no such code exists** (only per-account lock) | `doctor/auth/login-api.php` L240 | Implement the IP limit like `admin/auth/login.php` |
@@ -381,7 +389,7 @@
 6. Build the real ABDM **consent** + **care-context (HIP link/notify)** layer in `lib/AbdmApi.php` and new tables (`abha_consents`, `abha_care_contexts`). This is the actual NHA blocker.
 7. Decide HPR: either integrate the ABDM HPR API or clearly document it as manual-review-only.
 8. Normalize ABHA storage → one `abha_accounts` table; unify `abha_id`/`abha_number` naming; fix CLAUDE.md to match.
-9. Add FKs to core tables; move all runtime `CREATE TABLE` into migrations; add a migration runner + `schema_migrations` table.
+9. ✅ ~~Add FKs to core tables; move all runtime `CREATE TABLE` into migrations; add a migration runner + `schema_migrations` table~~ — done: `database/MIGRATIONS.md` (34-file ordered manifest), `database/run-migrations.php` (tracked runner), 8 new migration files, `migration_core_foreign_keys.sql` (30 FKs). ABHA data migration (`migrate-abha-data.php --commit`) still pending manual run.
 10. Fix `set_charset` → `utf8mb4`.
 
 ### P2 — consolidation

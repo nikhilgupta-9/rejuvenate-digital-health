@@ -7,6 +7,7 @@
  */
 include_once(__DIR__ . "/../../config/connect.php");
 require_once(__DIR__ . "/../auth/guard.php");
+require_once(__DIR__ . "/../../lib/Abha.php");
 
 header('Content-Type: application/json');
 
@@ -65,24 +66,25 @@ if ($mode === 'abha' && $abha_input !== '') {
         exit;
     }
 
-    // Check if user already in portal with this ABHA
-    $col = $is_number ? 'abha_number' : 'abha_address';
-    $find = $conn->prepare("SELECT id, name, last_name, abha_address, abha_number FROM users WHERE $col = ? LIMIT 1");
-    $find->bind_param('s', $abha_input);
-    $find->execute();
-    $existing = $find->get_result()->fetch_assoc();
-
-    if ($existing) {
-        $result = link_patient($conn, $doctor_id, $existing['id'], 'abha');
-        $result['name'] = trim($existing['name'] . ' ' . $existing['last_name']);
-        $result['source'] = 'portal';
-        echo json_encode($result);
-        exit;
+    // Check if a patient already holds this ABHA (abha_accounts is the source
+    // of truth; Abha::find falls back to the legacy columns during migration).
+    $hit = Abha::find($conn, $abha_input);
+    if ($hit && $hit['entity_type'] === 'patient') {
+        $u = $conn->prepare("SELECT id, name, last_name FROM users WHERE id = ? LIMIT 1");
+        $u->bind_param('i', $hit['entity_id']);
+        $u->execute();
+        $existing = $u->get_result()->fetch_assoc();
+        if ($existing) {
+            $result = link_patient($conn, $doctor_id, (int) $existing['id'], 'abha');
+            $result['name'] = trim($existing['name'] . ' ' . $existing['last_name']);
+            $result['source'] = 'portal';
+            echo json_encode($result);
+            exit;
+        }
     }
 
     // TODO: Real ABDM API call would go here to fetch patient profile
-    // For now: create a placeholder user with abha info
-    // In production, call AbdmApi::fetchPatientProfile($abha_input) and populate fields
+    // For now: create a placeholder user, then store the ABHA in abha_accounts.
     $abha_address = $is_address ? (str_contains($abha_input, '@') ? $abha_input : $abha_input . '@abdm') : null;
     $abha_number  = $is_number ? preg_replace('/\D/', '', $abha_input) : null;
     $placeholder_email = ($abha_address ?? ($abha_number . '@abha.gov.in'));
@@ -90,10 +92,9 @@ if ($mode === 'abha' && $abha_input !== '') {
     $placeholder_pass  = password_hash(bin2hex(random_bytes(16)), PASSWORD_BCRYPT, ['cost' => 12]);
 
     $ins = $conn->prepare(
-        "INSERT INTO users (name, email, password, abha_address, abha_number, abha_linked, abha_verified, created_at)
-         VALUES (?, ?, ?, ?, ?, 1, 1, NOW())"
+        "INSERT INTO users (name, email, password, created_at) VALUES (?, ?, ?, NOW())"
     );
-    $ins->bind_param('sssss', $placeholder_name, $placeholder_email, $placeholder_pass, $abha_address, $abha_number);
+    $ins->bind_param('sss', $placeholder_name, $placeholder_email, $placeholder_pass);
 
     if (!$ins->execute()) {
         error_log('[patient-add] DB error: ' . $conn->error);
@@ -101,7 +102,15 @@ if ($mode === 'abha' && $abha_input !== '') {
         exit;
     }
 
-    $new_patient_id = $conn->insert_id;
+    $new_patient_id = (int) $conn->insert_id;
+
+    Abha::save($conn, 'patient', $new_patient_id, [
+        'abha_number'  => $abha_number,
+        'abha_address' => $abha_address,
+        'linked'       => 1,
+        'verified'     => 0,
+        'source'       => 'doctor_added',
+    ]);
     $result = link_patient($conn, $doctor_id, $new_patient_id, 'abha');
     $result['name']   = $placeholder_name;
     $result['source'] = 'abha_new';

@@ -14,6 +14,7 @@
 include_once(__DIR__ . '/../config/connect.php');   // vendor/autoload (FPDF), session, $conn, BASE_URL, JWT_SECRET
 include_once(__DIR__ . '/../util/function.php');     // get_header_logo()
 require_once(__DIR__ . '/../lib/JWT.php');
+require_once(__DIR__ . '/../lib/Abha.php');
 
 // FPDF 1.82 trips PHP 8.2+ E_DEPRECATED (utf8_encode); any stray output aborts
 // the PDF stream, so silence non-fatal notices for this endpoint.
@@ -66,13 +67,15 @@ if (!$appointment_id) opd_notice('No appointment specified.');
 $as = $conn->prepare("
     SELECT a.id, a.user_id, a.doctor_id, a.appointment_date, a.appointment_time,
            u.name AS patient_name, u.last_name AS patient_last, u.mobile AS patient_phone,
-           u.gender, u.blood_group, u.abha_id AS abha_number, u.abha_address,
+           u.gender, u.blood_group,
+           " . Abha::selectAliases('aa', 'u') . ",
            TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) AS patient_age,
            d.name AS doctor_name, d.degrees, d.specialization, d.phone AS doctor_phone,
            d.email AS doctor_email, d.hpr_id, d.nmc_reg_number
     FROM appointments a
     JOIN users u   ON a.user_id = u.id
     JOIN doctors d ON a.doctor_id = d.id
+    " . Abha::joinClause('patient', 'u', 'aa') . "
     WHERE a.id = ? LIMIT 1
 ");
 $as->bind_param('i', $appointment_id);

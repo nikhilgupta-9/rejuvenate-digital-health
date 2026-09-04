@@ -3,19 +3,7 @@ require_once __DIR__ . '/db-conn.php';
 require_once __DIR__ . '/auth/guard.php';
 admin_jwt_guard();
 
-/* ── Ensure linkage/provenance columns exist (table itself is created by school/parent-consent.php) ── */
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS member_id INT DEFAULT NULL");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS source ENUM('parent','doctor') NOT NULL DEFAULT 'parent'");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS recorded_by_doctor_id INT DEFAULT NULL");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS linked_at DATETIME DEFAULT NULL");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS reviewed_at DATETIME DEFAULT NULL");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS plan_id INT UNSIGNED DEFAULT NULL");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS plan_name VARCHAR(120) DEFAULT NULL");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS plan_price DECIMAL(10,2) DEFAULT NULL");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS payment_status ENUM('pending','paid','failed') NOT NULL DEFAULT 'pending'");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(64) DEFAULT NULL");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS razorpay_payment_id VARCHAR(64) DEFAULT NULL");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS paid_at DATETIME DEFAULT NULL");
+/* parent_consent_forms schema: see database/migration_parent_consent_forms.sql */
 
 /* ── Status update ── */
 if (isset($_GET['set_status'], $_GET['id'])) {

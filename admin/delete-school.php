@@ -13,16 +13,15 @@ $stmt->bind_param('i', $id); $stmt->execute();
 $school = $stmt->get_result()->fetch_assoc();
 if (!$school) { header("Location: schools-list.php"); exit(); }
 
-// Remove uploaded logo file, if any
-if ($school['logo'] && file_exists('../' . $school['logo'])) {
-    @unlink('../' . $school['logo']);
-}
-
-// FK constraints cascade-delete school_users, school_members, member_health_profiles, teacher_student_assignments
-$del = $conn->prepare("DELETE FROM schools WHERE id=?");
+// SOFT delete only. school_members carry health data (parent consents,
+// health profiles, prescriptions, certificates) and school_members.school_id
+// is FK RESTRICT — a hard DELETE FROM schools would fail. Deactivate instead;
+// all member records are retained and the school drops out of every
+// "status = 'Active'" listing / login.
+$del = $conn->prepare("UPDATE schools SET status = 'Inactive' WHERE id = ?");
 $del->bind_param('i', $id);
 $del->execute();
 
-$_SESSION['success_message'] = "School \"" . $school['school_name'] . "\" and all its related records have been deleted.";
+$_SESSION['success_message'] = "School \"" . $school['school_name'] . "\" has been deactivated. Its member records are retained.";
 header("Location: schools-list.php");
 exit();

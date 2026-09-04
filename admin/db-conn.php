@@ -31,7 +31,7 @@ if (APP_DEBUG) {
     error_reporting(E_ALL);
     ini_set('display_errors', '1');
 } else {
-    error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE & ~E_STRICT);
+    error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
     ini_set('display_errors', '0');
     ini_set('display_startup_errors', '0');
 }
@@ -60,4 +60,5 @@ if ($conn->connect_error) {
     die(APP_DEBUG ? ('Database Connection Failed: ' . $conn->connect_error) : 'Service temporarily unavailable. Please try again shortly.');
 }
 
-$conn->set_charset("utf8");
+// Match the DB — every table/column is utf8mb4 (see config/connect.php).
+$conn->set_charset("utf8mb4");

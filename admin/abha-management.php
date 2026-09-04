@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/db-conn.php';
 require_once __DIR__ . '/auth/guard.php';
+require_once __DIR__ . '/../lib/Abha.php';
 admin_jwt_guard();
 
 $portal = $_GET['portal'] ?? 'all';   // all | patients | school
@@ -22,19 +23,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         else {
             $fmt = substr($abha_raw,0,2).'-'.substr($abha_raw,2,4).'-'.substr($abha_raw,6,4).'-'.substr($abha_raw,10,4);
             if ($abha_addr && strpos($abha_addr,'@') === false) $abha_addr .= '@abdm';
-            $upd = $conn->prepare("UPDATE users SET abha_id=?, abha_address=?, abha_linked=1, abha_linked_at=NOW(), abha_verified=? WHERE id=?");
-            $upd->bind_param('ssii', $fmt, $abha_addr, $verified, $uid);
-            if ($upd->execute()) $success = "ABHA linked to patient.";
-            else $error = "DB error: ".$conn->error;
+            try {
+                Abha::save($conn, 'patient', $uid, [
+                    'abha_number'  => $fmt,
+                    'abha_address' => $abha_addr,
+                    'linked'       => 1,
+                    'verified'     => $verified,
+                    'source'       => 'admin',
+                ]);
+                $success = "ABHA linked to patient.";
+            } catch (Throwable $e) {
+                error_log('[admin/abha-management link] ' . $e->getMessage());
+                $error = "Could not link ABHA. Please try again.";
+            }
         }
     }
 
     /* Unlink ABHA from patient */
     if ($action === 'unlink_user_abha') {
         $uid = (int)$_POST['uid'];
-        $upd = $conn->prepare("UPDATE users SET abha_id=NULL, abha_address=NULL, abha_linked=0, abha_verified=0, abha_linked_at=NULL WHERE id=?");
-        $upd->bind_param('i', $uid);
-        if ($upd->execute()) $success = "ABHA unlinked from patient.";
+        Abha::unlink($conn, 'patient', $uid);
+        $success = "ABHA unlinked from patient.";
     }
 
     /* Approve patient ABHA request */
@@ -44,12 +53,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $rq->bind_param('i', $req_id); $rq->execute();
         $req = $rq->get_result()->fetch_assoc();
         if ($req) {
-            $raw2 = preg_replace('/\D/', '', $req['abha_id']);
-            $fmt2 = strlen($raw2) === 14
-                ? substr($raw2,0,2).'-'.substr($raw2,2,4).'-'.substr($raw2,6,4).'-'.substr($raw2,10,4)
-                : $req['abha_id'];
-            $upd = $conn->prepare("UPDATE users SET abha_id=?, abha_address=?, abha_linked=1, abha_linked_at=NOW() WHERE id=?");
-            $upd->bind_param('ssi', $fmt2, $req['abha_address'], $req['user_id']); $upd->execute();
+            Abha::save($conn, 'patient', (int) $req['user_id'], [
+                'abha_number'  => $req['abha_id'],
+                'abha_address' => $req['abha_address'],
+                'linked'       => 1,
+                'source'       => 'admin',
+            ]);
             $done = $conn->prepare("UPDATE user_abha_requests SET status='Approved', reviewed_at=NOW(), reviewed_by=? WHERE id=?");
             $done->bind_param('ii', $_SESSION['admin_id'], $req_id); $done->execute();
             $success = "Patient ABHA request approved.";

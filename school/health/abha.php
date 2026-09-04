@@ -1,6 +1,16 @@
 <?php
 include_once "../../config/connect.php";
 include_once "../auth/auth.php";
+require_once __DIR__ . "/../../lib/Abha.php";
+
+/** True when this member belongs to the signed-in school (ABHA writes are school-scoped). */
+function _member_in_school(mysqli $conn, int $memberId, int $schoolId): bool
+{
+    $c = $conn->prepare("SELECT 1 FROM school_members WHERE id=? AND school_id=? LIMIT 1");
+    $c->bind_param('ii', $memberId, $schoolId);
+    $c->execute();
+    return (bool) $c->get_result()->fetch_row();
+}
 
 $tab     = $_GET['tab'] ?? 'overview';
 $filter  = $_GET['filter'] ?? 'all';        // all | Student | Teacher | Staff
@@ -25,20 +35,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // append @abdm if address given without it
             if ($abha_addr && strpos($abha_addr,'@') === false) $abha_addr .= '@abdm';
 
-            $upd = $conn->prepare("UPDATE school_members SET abha_id=?, abha_address=?, abha_linked=1, abha_linked_at=NOW(), abha_verified=? WHERE id=? AND school_id=?");
-            $upd->bind_param('ssiii', $abha_fmt, $abha_addr, $verified, $mid, $school_id);
-            if ($upd->execute()) $success = "ABHA linked successfully for member.";
-            else $error = "DB error: " . $conn->error;
+            if (!_member_in_school($conn, $mid, (int) $school_id)) {
+                $error = "Member not found in your school.";
+            } else {
+                Abha::save($conn, 'school_member', $mid, [
+                    'abha_number'  => $abha_fmt,
+                    'abha_address' => $abha_addr,
+                    'linked'       => 1,
+                    'verified'     => $verified,
+                    'source'       => 'school',
+                ]);
+                $success = "ABHA linked successfully for member.";
+            }
         }
     }
 
     /* Unlink ABHA */
     if ($action === 'unlink_abha') {
         $mid = (int)$_POST['mid'];
-        $upd = $conn->prepare("UPDATE school_members SET abha_id=NULL, abha_address=NULL, abha_linked=0, abha_verified=0, abha_linked_at=NULL WHERE id=? AND school_id=?");
-        $upd->bind_param('ii', $mid, $school_id);
-        if ($upd->execute()) $success = "ABHA unlinked.";
-        else $error = "DB error: " . $conn->error;
+        if (!_member_in_school($conn, $mid, (int) $school_id)) {
+            $error = "Member not found in your school.";
+        } else {
+            Abha::unlink($conn, 'school_member', $mid);
+            $success = "ABHA unlinked.";
+        }
     }
 
     /* Approve link request from student/teacher */
@@ -49,13 +69,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $rq->execute();
         $req = $rq->get_result()->fetch_assoc();
         if ($req) {
-            $raw2 = preg_replace('/\D/', '', $req['abha_id']);
-            $abha_fmt2 = strlen($raw2) === 14
-                ? substr($raw2,0,2).'-'.substr($raw2,2,4).'-'.substr($raw2,6,4).'-'.substr($raw2,10,4)
-                : $req['abha_id'];
-            $upd = $conn->prepare("UPDATE school_members SET abha_id=?, abha_address=?, abha_linked=1, abha_linked_at=NOW() WHERE id=? AND school_id=?");
-            $upd->bind_param('ssii', $abha_fmt2, $req['abha_address'], $req['member_id'], $school_id);
-            $upd->execute();
+            if (_member_in_school($conn, (int) $req['member_id'], (int) $school_id)) {
+                Abha::save($conn, 'school_member', (int) $req['member_id'], [
+                    'abha_number'  => $req['abha_id'],
+                    'abha_address' => $req['abha_address'],
+                    'linked'       => 1,
+                    'source'       => 'school',
+                ]);
+            }
             $done = $conn->prepare("UPDATE abha_link_requests SET status='Approved', reviewed_at=NOW(), reviewed_by=? WHERE id=?");
             $done->bind_param('ii', $school_user_id, $req_id);
             $done->execute();

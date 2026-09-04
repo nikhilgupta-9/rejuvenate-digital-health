@@ -7,19 +7,7 @@ $jwt_doctor = doctor_jwt_guard();
 $doctor_id  = (int)$jwt_doctor['sub'];
 $doctor_name = $jwt_doctor['name'] ?? 'Doctor';
 
-// Ensure doctor_patients table exists
-$conn->query("
-    CREATE TABLE IF NOT EXISTS `doctor_patients` (
-      `id`           INT UNSIGNED NOT NULL AUTO_INCREMENT,
-      `doctor_id`    INT UNSIGNED NOT NULL,
-      `patient_id`   INT UNSIGNED NOT NULL,
-      `added_at`     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      `added_via`    ENUM('appointment','manual','abha') NOT NULL DEFAULT 'manual',
-      `abha_fetched` TINYINT(1)   NOT NULL DEFAULT 0,
-      PRIMARY KEY (`id`),
-      UNIQUE KEY `unique_link` (`doctor_id`,`patient_id`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-");
+// doctor_patients schema: see database/migration_doctor_abha.sql
 
 // Auto-import existing appointment patients (skip guest bookings — user_id NULL)
 $imp = $conn->prepare("

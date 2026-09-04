@@ -10,12 +10,7 @@ require_once __DIR__ . '/db-conn.php';
 require_once __DIR__ . '/auth/guard.php';
 admin_jwt_guard();
 
-/* ── key/value settings store (created on first visit) ── */
-$conn->query("CREATE TABLE IF NOT EXISTS telemedicine_settings (
-    setting_key   VARCHAR(50) NOT NULL PRIMARY KEY,
-    setting_value TEXT DEFAULT NULL,
-    updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+/* telemedicine_settings schema: see database/migration_telemedicine_settings.sql */
 
 $FIELDS = ['turn_url', 'turn_username', 'turn_credential', 'extra_stun', 'poll_interval_ms'];
 

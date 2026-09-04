@@ -5,6 +5,7 @@
  */
 include_once(__DIR__ . "/../../config/connect.php");
 require_once(__DIR__ . "/../auth/guard.php");
+require_once(__DIR__ . "/../../lib/Abha.php");
 
 header('Content-Type: application/json');
 
@@ -23,13 +24,15 @@ if (strlen($query) < 3) {
     exit;
 }
 
-// Search in portal users
-$sql = "SELECT id, name, last_name, email, mobile, abha_address, abha_id, abha_linked, gender, blood_group, profile_pic
-        FROM users
-        WHERE email = ? OR mobile = ? OR abha_address = ?
+// Search in portal users (ABHA fields come from abha_accounts via the join)
+$sql = "SELECT u.id, u.name, u.last_name, u.email, u.mobile, u.gender, u.blood_group, u.profile_pic,
+        " . Abha::selectAliases('aa', 'u') . "
+        FROM users u
+        " . Abha::joinClause('patient', 'u', 'aa') . "
+        WHERE u.email = ? OR u.mobile = ? OR aa.abha_address = ? OR u.abha_address = ?
         LIMIT 5";
 $stmt = $conn->prepare($sql);
-$stmt->bind_param('sss', $query, $query, $query);
+$stmt->bind_param('ssss', $query, $query, $query, $query);
 $stmt->execute();
 $result = $stmt->get_result();
 

@@ -7,8 +7,10 @@
  * in doctor/api/abdm_save_patient.php, abdm_set_address.php,
  * abha-otp-verify.php, and abha-select-user.php.
  *
- * Match order: abha_id -> mobile -> email (first hit wins).
+ * Match order: abha_number -> mobile -> email (first hit wins).
  */
+require_once __DIR__ . '/Abha.php';
+
 class AbhaPatientResolver
 {
     /**
@@ -84,11 +86,10 @@ class AbhaPatientResolver
         $existing = null;
 
         if ($abhaNumber) {
-            $s = $conn->prepare("SELECT id FROM users WHERE abha_id=? LIMIT 1");
-            $s->bind_param('s', $abhaNumber);
-            $s->execute();
-            $existing = $s->get_result()->fetch_assoc();
-            $s->close();
+            $hit = Abha::find($conn, $abhaNumber);
+            if ($hit && $hit['entity_type'] === 'patient') {
+                $existing = ['id' => (int) $hit['entity_id']];
+            }
         }
         if (!$existing && $mobile) {
             $s = $conn->prepare("SELECT id FROM users WHERE mobile=? LIMIT 1");
@@ -111,19 +112,13 @@ class AbhaPatientResolver
             $patientId = (int)$existing['id'];
             $upd = $conn->prepare("
                 UPDATE users SET
-                  abha_id       = ?,
-                  abha_address  = ?,
-                  abha_linked   = 1,
-                  abha_verified = 1,
                   name          = CASE WHEN name='' OR name IS NULL THEN ? ELSE name END,
                   gender        = CASE WHEN gender='' OR gender IS NULL THEN ? ELSE gender END,
                   dob           = CASE WHEN dob IS NULL THEN ? ELSE dob END
                 WHERE id = ?
             ");
             $upd->bind_param(
-                'sssssi',
-                $abhaNumber,
-                $profile['abha_address'],
+                'sssi',
                 $profile['name'],
                 $profile['gender'],
                 $profile['dob'],
@@ -131,6 +126,15 @@ class AbhaPatientResolver
             );
             $upd->execute();
             $upd->close();
+
+            // ABHA identity -> abha_accounts (authoritative; mirrors legacy cols)
+            Abha::save($conn, 'patient', $patientId, [
+                'abha_number'  => $abhaNumber,
+                'abha_address' => $profile['abha_address'],
+                'linked'       => 1,
+                'verified'     => 1,
+                'source'       => 'abdm',
+            ]);
         } else {
             $isNew = true;
             if (!$mobile) {
@@ -143,20 +147,17 @@ class AbhaPatientResolver
             $ins = $conn->prepare("
                 INSERT INTO users
                   (name, email, mobile, password, gender, dob,
-                   abha_id, abha_address, abha_linked, abha_verified,
                    zip_code, city, state, address, created_at)
-                VALUES (?,?,?,?,?,?,?,?,1,1,?,?,?,?,NOW())
+                VALUES (?,?,?,?,?,?,?,?,?,?,NOW())
             ");
             $ins->bind_param(
-                'ssssssssssss',
+                'ssssssssss',
                 $profile['name'],
                 $email,
                 $mobile,
                 $hash,
                 $profile['gender'],
                 $profile['dob'],
-                $abhaNumber,
-                $profile['abha_address'],
                 $profile['pincode'],
                 $profile['district'],
                 $profile['state'],
@@ -167,6 +168,15 @@ class AbhaPatientResolver
             }
             $patientId = (int)$conn->insert_id;
             $ins->close();
+
+            // ABHA identity -> abha_accounts (authoritative; mirrors legacy cols)
+            Abha::save($conn, 'patient', $patientId, [
+                'abha_number'  => $abhaNumber,
+                'abha_address' => $profile['abha_address'],
+                'linked'       => 1,
+                'verified'     => 1,
+                'source'       => 'abdm',
+            ]);
         }
 
         self::linkToDoctor($conn, $doctorId, $patientId);
@@ -174,20 +184,9 @@ class AbhaPatientResolver
         return ['patient_id' => $patientId, 'is_new' => $isNew];
     }
 
-    /** Ensure the doctor_patients link table exists and link doctor <-> patient. */
+    /** Link doctor <-> patient. doctor_patients schema: database/migration_doctor_abha.sql */
     private static function linkToDoctor(mysqli $conn, int $doctorId, int $patientId): void
     {
-        $conn->query("CREATE TABLE IF NOT EXISTS `doctor_patients` (
-          `id`           INT UNSIGNED NOT NULL AUTO_INCREMENT,
-          `doctor_id`    INT UNSIGNED NOT NULL,
-          `patient_id`   INT UNSIGNED NOT NULL,
-          `added_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          `added_via`    ENUM('appointment','manual','abha') NOT NULL DEFAULT 'manual',
-          `abha_fetched` TINYINT(1) NOT NULL DEFAULT 0,
-          PRIMARY KEY (`id`),
-          UNIQUE KEY `unique_link` (`doctor_id`,`patient_id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
         $lnk = $conn->prepare("
             INSERT INTO doctor_patients (doctor_id, patient_id, added_via, abha_fetched)
             VALUES (?, ?, 'abha', 1)

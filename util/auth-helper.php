@@ -5,6 +5,7 @@
  */
 require_once __DIR__ . '/mail_config.php';
 require_once __DIR__ . '/../lib/WhatsAppOtp.php';   // wa_send_otp()
+require_once __DIR__ . '/../lib/Abha.php';          // Abha::find()
 
 /* ─── Role session setup ────────────────────────────────────────────── */
 
@@ -165,27 +166,32 @@ function findByIdentifier(mysqli $conn, string $id): ?array
  */
 function findByAbha(mysqli $conn, string $abhaId): ?array
 {
-    $fmt = preg_replace('/\D/', '', $abhaId);
-    if (strlen($fmt) === 14) {
-        $fmt = substr($fmt,0,2).'-'.substr($fmt,2,4).'-'.substr($fmt,6,4).'-'.substr($fmt,10,4);
+    // abha_accounts is the source of truth (Abha::find falls back to the
+    // deprecated abha_id/abha_address columns while the data is migrated).
+    $hit = Abha::find($conn, $abhaId);
+    if (!$hit) return null;
+
+    if ($hit['entity_type'] === 'patient') {
+        $s = $conn->prepare("SELECT * FROM users WHERE id=? AND status='Active' LIMIT 1");
+        $s->bind_param('i', $hit['entity_id']); $s->execute();
+        if ($r = $s->get_result()->fetch_assoc()) return ['user' => $r, 'role' => 'patient'];
+        return null;
     }
 
-    $s = $conn->prepare("SELECT * FROM users WHERE abha_id=? AND status='Active' LIMIT 1");
-    $s->bind_param('s', $fmt); $s->execute();
-    if ($r = $s->get_result()->fetch_assoc()) return ['user' => $r, 'role' => 'patient'];
-
-    $s = $conn->prepare("
-        SELECT sm.*, s.school_name FROM school_members sm
-        JOIN schools s ON sm.school_id=s.id
-        WHERE sm.abha_id=? AND sm.status='Active' LIMIT 1");
-    $s->bind_param('s', $fmt); $s->execute();
-    if ($r = $s->get_result()->fetch_assoc()) {
-        $role = match(strtolower($r['type'])) {
-            'student' => 'student',
-            'teacher' => 'teacher',
-            default   => 'staff',
-        };
-        return ['user' => $r, 'role' => $role];
+    if ($hit['entity_type'] === 'school_member') {
+        $s = $conn->prepare("
+            SELECT sm.*, s.school_name FROM school_members sm
+            JOIN schools s ON sm.school_id=s.id
+            WHERE sm.id=? AND sm.status='Active' LIMIT 1");
+        $s->bind_param('i', $hit['entity_id']); $s->execute();
+        if ($r = $s->get_result()->fetch_assoc()) {
+            $role = match(strtolower($r['type'])) {
+                'student' => 'student',
+                'teacher' => 'teacher',
+                default   => 'staff',
+            };
+            return ['user' => $r, 'role' => $role];
+        }
     }
 
     return null;

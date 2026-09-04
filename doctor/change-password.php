@@ -232,34 +232,8 @@ function sendPasswordChangeEmail($email, $name) {
     return true;
 }
 
-// Create required tables if they don't exist
-$create_tables_sql = array(
-    "CREATE TABLE IF NOT EXISTS doctor_password_history (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        doctor_id INT NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (doctor_id) REFERENCES doctors(id) ON DELETE CASCADE
-    )",
-    
-    "CREATE TABLE IF NOT EXISTS doctor_password_logs (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        doctor_id INT NOT NULL,
-        ip_address VARCHAR(45),
-        user_agent TEXT,
-        action VARCHAR(50),
-        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (doctor_id) REFERENCES doctors(id) ON DELETE CASCADE
-    )"
-);
-
-foreach ($create_tables_sql as $sql) {
-    try {
-        $conn->query($sql);
-    } catch (Exception $e) {
-        error_log("Table creation error: " . $e->getMessage());
-    }
-}
+// doctor_password_history / doctor_password_logs schema:
+// see database/migration_doctor_password_security.sql
 
 $sidebar_active = 'settings';
 require_once __DIR__ . '/inc/sidebar.php';

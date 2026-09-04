@@ -52,12 +52,18 @@ switch ($type) {
             echo json_encode(['success' => false, 'error' => 'Enter a valid ABHA number or address.']);
             exit;
         }
-        // Matches either the 14-digit ABHA number or the name@abdm address
-        $stmt = $conn->prepare("SELECT sm.*, s.school_name FROM school_members sm JOIN schools s ON s.id=sm.school_id
-            WHERE sm.type='Student' AND sm.status='Active' AND (sm.abha_id=? OR sm.abha_address=?) LIMIT 2");
-        $stmt->bind_param('ss', $value, $value);
-        $stmt->execute();
-        $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        // Resolve the ABHA (number or name@abdm address) via abha_accounts
+        // (Abha::find falls back to the legacy columns during migration).
+        $hit = Abha::find($conn, $value);
+        if ($hit && $hit['entity_type'] === 'school_member') {
+            $stmt = $conn->prepare("SELECT sm.*, s.school_name FROM school_members sm JOIN schools s ON s.id=sm.school_id
+                WHERE sm.id=? AND sm.type='Student' AND sm.status='Active' LIMIT 1");
+            $stmt->bind_param('i', $hit['entity_id']);
+            $stmt->execute();
+            $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        } else {
+            $rows = [];
+        }
         $col = null;
         break;
 

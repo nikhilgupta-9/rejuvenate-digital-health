@@ -17,38 +17,15 @@ if (empty($_SESSION['csrf_token'])) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-// ── Bootstrap DB tables ───────────────────────────────────────────────────────
-$conn->query("CREATE TABLE IF NOT EXISTS admin_roles (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(50) UNIQUE NOT NULL,
-    display_name VARCHAR(100) NOT NULL,
-    description TEXT,
-    color VARCHAR(20) DEFAULT '#0C74C5',
-    icon VARCHAR(50) DEFAULT 'fa-user-shield',
-    is_system TINYINT(1) DEFAULT 0,
-    updated_at DATETIME DEFAULT NOW() ON UPDATE NOW(),
-    created_at DATETIME DEFAULT NOW()
-)");
-
-$conn->query("CREATE TABLE IF NOT EXISTS admin_permissions (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) UNIQUE NOT NULL,
-    display_name VARCHAR(100) NOT NULL,
-    description VARCHAR(255) DEFAULT '',
-    module VARCHAR(50) NOT NULL,
-    sort_order INT DEFAULT 0,
-    created_at DATETIME DEFAULT NOW()
-)");
-
-$conn->query("CREATE TABLE IF NOT EXISTS admin_role_permissions (
-    role_id INT NOT NULL,
-    permission_id INT NOT NULL,
-    PRIMARY KEY (role_id, permission_id)
-)");
+// admin RBAC schema: see database/migration_admin_rbac.sql — run the migrations
+// before first use. The seed blocks below still bootstrap the default roles /
+// permissions / role-permission map on a fresh install (each guarded by
+// "if COUNT(*) == 0"); they no-op once the migration + seed have run.
+$_rbac_ready = (bool) $conn->query("SHOW TABLES LIKE 'admin_roles'")->num_rows;
 
 // ── Seed default roles if empty ───────────────────────────────────────────────
-$roleCount = (int)$conn->query("SELECT COUNT(*) FROM admin_roles")->fetch_row()[0];
-if ($roleCount === 0) {
+$roleCount = $_rbac_ready ? (int) $conn->query("SELECT COUNT(*) FROM admin_roles")->fetch_row()[0] : 1;
+if ($_rbac_ready && $roleCount === 0) {
   $conn->query("INSERT INTO admin_roles (name, display_name, description, color, icon, is_system) VALUES
         ('super_admin', 'Super Admin', 'Full unrestricted access to all system features and settings.', '#dc2626', 'fa-crown', 1),
         ('admin',       'Admin',       'Full access to all features except super admin management.',    '#0C74C5', 'fa-user-shield', 1),
@@ -56,8 +33,8 @@ if ($roleCount === 0) {
 }
 
 // ── Seed default permissions if empty ────────────────────────────────────────
-$permCount = (int)$conn->query("SELECT COUNT(*) FROM admin_permissions")->fetch_row()[0];
-if ($permCount === 0) {
+$permCount = $_rbac_ready ? (int) $conn->query("SELECT COUNT(*) FROM admin_permissions")->fetch_row()[0] : 1;
+if ($_rbac_ready && $permCount === 0) {
   $seeds = [
     ['view_dashboard',        'View Dashboard',          'Access the admin dashboard overview',                'Dashboard',       1],
     ['view_admins',           'View Admin Users',        'View the list of admin accounts',                    'User Management', 10],

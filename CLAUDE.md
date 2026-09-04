@@ -1,31 +1,35 @@
 # Rejuvenate Digital Health — CLAUDE.md
 
 ## Project Overview
-PHP/MySQL telemedicine platform with multi-role user system (patients, doctors, school members, admins).  
-Database: `u950539402_reju_digi_beta` (MariaDB 11.8, PHP 7.2).  
+PHP/MySQL telemedicine platform with multi-role user system (patients, doctors, school members, admins).
+Database: **`rej_digital_health_db`** (name comes from `.env` `DB_NAME`; production/Hostinger uses `u950539402_reju_digi_beta`). **MariaDB 10.4**, **PHP 8.1+** (XAMPP dev ships 8.2, cPanel handler is `ea-php81`).
 The project must comply with **ABDM / ABHA guidelines** as mandated by NHA India.
+
+> **`PROJECT_STATUS.md`** (repo root) is the current single source of truth for what is built / half-built / broken. **`database/MIGRATIONS.md`** is the schema manifest.
 
 ---
 
 ## Tech Stack
-- **Backend**: PHP 7.2 (no Composer, no frameworks — raw PHP + MySQLi)
+- **Backend**: PHP 8.1+ (Composer used — `phpmailer`, `fpdf`, `phpdotenv`, `phpspreadsheet`, `ratchet`), raw PHP + MySQLi (no framework)
 - **Frontend**: HTML, Bootstrap, custom CSS/JS
-- **Database**: MariaDB via MySQLi prepared statements
-- **Auth currently**: PHP sessions (`$_SESSION`) — **migrating to JWT**
-- **Config**: `config/connect.php` (DB), `config/abdm.php` (ABDM credentials)
+- **Database**: MariaDB 10.4 via MySQLi prepared statements; `utf8mb4` end to end
+- **Auth**: **doctor + admin panels are on JWT** (`*/auth/guard.php`, refresh tokens in `jwt_refresh_tokens`); **patient + school panels still on PHP sessions** (`$_SESSION`)
+- **Config**: `.env` (all secrets), `config/connect.php` (DB + `APP_ENV`/`APP_DEBUG`), `config/abdm.php` (ABDM — reads `.env`), `config/payment.php`, `config/whatsapp.php`
+- **Migrations**: `database/*.sql` + `database/run-migrations.php` (tracked in `schema_migrations`); run before deploy — see `database/MIGRATIONS.md`
 
 ---
 
 ## Directory Structure
 ```
 /
-├── config/           connect.php (DB), abdm.php (ABDM)
-├── util/             auth-helper.php, function.php, appointment-handler.php
-├── lib/              AbdmApi.php, AuditLogger.php, Security.php, Validator.php
-├── doctor/           Doctor panel pages (session-based, migrating to JWT)
-├── user/             Patient panel pages
-├── admin/            Admin panel (role-based permissions)
-├── school/           School module (school_admin / teacher / student)
+├── config/           connect.php (DB + APP_ENV), abdm.php, payment.php, whatsapp.php  (all read .env)
+├── util/             auth-helper.php, function.php, appointment-handler.php, otp-service.php, mail_config.php
+├── lib/              AbdmApi.php, Abha.php, AbhaPatientResolver.php, AuditLogger.php, JWT.php, Security.php, Validator.php, DoctorAccess.php, WhatsAppOtp.php
+├── doctor/           Doctor panel (JWT — doctor/auth/guard.php)
+├── user/             Patient panel (session — $_SESSION['logged_in'])
+├── admin/            Admin panel (JWT — admin/auth/bootstrap.php; RBAC)
+├── school/           School module (session — school/auth/auth.php)
+├── database/         *.sql migrations + MIGRATIONS.md + run-migrations.php
 └── uploads/          User/doctor media
 ```
 
@@ -33,30 +37,41 @@ The project must comply with **ABDM / ABHA guidelines** as mandated by NHA India
 
 ## Current Data Model (Key Tables)
 
+### `abha_accounts` — authoritative ABHA identity (one row per entity)
+- `entity_type` ENUM('patient','school_member','doctor'), `entity_id`
+- `abha_number` VARCHAR(17) — the 14-digit number, formatted `XX-XXXX-XXXX-XXXX`
+- `abha_address`, `linked`, `verified`, `linked_at`, `verified_at`, `source`, `profile_data`
+- Access via **`lib/Abha.php`** (`Abha::get / save / unlink / find / joinClause / selectAliases`).
+- **Transition:** `users.abha_id` / `school_members.abha_id` / `doctors.abha_id` (+ `abha_address`, `abha_linked`, `abha_verified`) are **DEPRECATED**, still mirrored by `Abha::save()` and still read by ~20 not-yet-repointed display pages. Run `database/migrate-abha-data.php --commit` to populate, then finish repointing + drop the legacy columns. See `database/ABHA_MIGRATION_NOTES.md`.
+
 ### `doctors`
-- `id`, `doctor_uid` (DOCxxxxxxx), `name`, `dob`, `gender`
-- `degrees`, `specialization`, `experience_years`, `rating`, `languages`
-- `email`, `phone`, `password` (bcrypt)
-- `status` ENUM('Active','Inactive'), `is_verified`, `is_approved`
-- `login_attempts`, `is_locked`, `locked_until`
-- Auth: session `$_SESSION['doctor_logged_in']`, `$_SESSION['doctor_id']`
-- **Missing ABHA fields**: HPR ID, HFR ID, NMC registration number
+- `id`, `doctor_uid` (DOCxxxxxxx), `name`, `dob`, `gender`, `degrees`, `specialization`, `experience_years`, `rating`, `languages`
+- `email`, `phone`, `password` (bcrypt), `status` ENUM('Active','Inactive'), `is_verified`, `is_approved`
+- `login_attempts`, `is_locked`, `locked_until`, `grace_period_until` (activation gate)
+- **HPR fields (exist):** `hpr_id`, `hfr_id`, `nmc_reg_number`, `council_name`, `year_of_registration`, `qualification_year`, `hpr_verified`, `hpr_verified_at`, `hpr_txn_id`, `hpr_requested_at`
+- Auth: JWT (`doctor/auth/guard.php` sets `$_SESSION['doctor_id']` for legacy code); login → `doctor/auth/login-api.php`
 
 ### `users` (patients)
-- `id`, `name`, `last_name`, `email`, `mobile`, `password`
-- `dob`, `gender`, `blood_group`, `address`, `city`, `state`, `zip_code`
-- `identification_type` ENUM('Aadhar','Passport','Driving License','None')
-- `identification_number`, `emergency_contact`
-- `abha_id`, `abha_address`, `abha_linked`, `abha_verified`
+- `id`, `name`, `last_name`, `email`, `mobile`, `password`, `dob`, `gender`, `blood_group`, `address`, `city`, `state`, `zip_code`
+- `identification_type` ENUM('Aadhar','Passport','Driving License','None'), `identification_number`, `emergency_contact`
+- `allergies`, `existing_condition`, `current_medication`, `medical_history`
+- `abha_id`, `abha_address`, `abha_linked`, `abha_verified` — **DEPRECATED**, use `abha_accounts`
 - `login_attempts`, `is_locked`, `locked_until`
 - Auth: session `$_SESSION['logged_in']`, `$_SESSION['user_id']`
-- **Missing ABHA fields**: abha_number (14-digit), proper consent timestamp
 
 ### `appointments`
 - `id`, `user_id`, `doctor_id`, `appointment_date`, `appointment_time`
-- `purpose`, `notes`, `appointment_type`, `visit_person`, `status`
-- `approved_by_admin`, `admin_verified_at`
-- **Missing ABHA fields**: care_context_reference, health_info_type
+- `purpose`, `notes`, `appointment_type`, `visit_person`, `status`, `approved_by_admin`, `admin_verified_at`
+- `abha_number` — per-visit ABHA **snapshot** (kept by design), not identity
+- `meeting_*` columns — telemedicine room record
+- FK: `user_id → users` / `doctor_id → doctors` (ON DELETE RESTRICT)
+- **Not implemented:** ABDM care-context registration (`prescriptions.care_context_ref` is a local `CC-<id>` string, never pushed to ABDM)
+
+### `prescriptions` — saved consultation / e-prescription
+- `id`, `appointment_id` (UNIQUE), `doctor_id`, `patient_id`, `care_context_ref`, `visit_date`
+- `chief_complaints`, `vitals` (JSON), `examination`, `diagnosis`, `icd_codes`, `medications` (JSON), `lab_tests`, `radiology`, `report_findings`, `advice`, `follow_up_*`
+- `abha_number` (snapshot), `hpr_id` (snapshot), `status` ENUM('draft','final')
+- FKs to appointments / doctors / users — all **ON DELETE RESTRICT**
 
 ### `abdm_audit_logs`
 - Full ABDM audit trail: `event_type`, `log_type`, `entity_id`, `entity_type`
@@ -64,12 +79,20 @@ The project must comply with **ABDM / ABHA guidelines** as mandated by NHA India
 - `auth_method`, `accessor_id`, `patient_id`, `ip_address`, `user_agent`
 
 ### Other Key Tables
-- `admin_user` — Super admin / admin / manager with role-based permissions
-- `doctor_sessions` — Doctor session tracking
-- `login_otps` — OTP for login (email/mobile)
-- `doctor_documents`, `doctor_reviews`, `doctor_gallery`
-- `school_members`, `school_users`, `schools` — School health module
-- `user_abha_requests`, `abha_link_requests` — ABHA linking workflows
+- `admin_user` — super_admin / admin / manager; RBAC in `admin_roles` / `admin_permissions` / `admin_role_permissions`
+- `jwt_refresh_tokens` — shared refresh-token store (doctor + admin), SHA-256 hashed, rotated
+- `abdm_audit_logs` (+ `abdm_audit_archive`) — ABDM audit trail; `entity_id` is **polymorphic** (no FK), and rows deliberately outlive their subjects (NHA retention)
+- `doctor_sessions`, `doctor_documents`, `doctor_reviews`, `doctor_gallery`, `doctor_bank_accounts`, `doctor_subscriptions`
+- `login_otps`, `registration_otps`, `login_rate_limits`
+- `schools`, `school_users`, `school_members`, `member_health_profiles`, `school_member_prescriptions/certificates/documents`
+- `parent_consent_forms` — school parent-consent submissions (+ `school_health_plans`)
+- `user_abha_requests`, `abha_link_requests` — manual ABHA-link approval workflow
+- `hpr_verification_requests` — **manual** HPR review queue (no ABDM HPR API)
+- `telemedicine_rooms / signals / chat_messages / settings` — WebRTC (HTTP-polling)
+- `schema_migrations` — migration tracking (see `database/run-migrations.php`)
+
+### Foreign keys
+`database/migration_core_foreign_keys.sql` added 30 FKs (see `database/MIGRATIONS.md` #34). Policy: **RESTRICT** on clinical/health/identity refs (prescriptions, consent forms, `school_members.school_id`, `doctor_patients.doctor_id`), **CASCADE** on operational/session/workflow, **SET NULL** on optional attribution. Hard-delete of a `doctors` / `schools` row is now blocked → `admin/doctors-list.php` and `admin/delete-school.php` do **soft-delete** (`status='Inactive'`).
 
 ---
 
@@ -80,162 +103,87 @@ ABHA = Ayushman Bharat Health Account (14-digit Health ID).
 ABDM = Ayushman Bharat Digital Mission (NHA India).  
 Every patient and doctor must have an ABHA for digital health record exchange.
 
-### Doctor Compliance (HPR)
-Doctors must be registered on **HPR (Health Professional Registry)**:
-- `hpr_id` — HPR registration number (e.g., `27-1234-5678-9012`)
-- `hfr_id` — Health Facility Registry ID (if clinic-based)
-- `nmc_reg_number` — NMC (National Medical Commission) registration
-- `council_name` — State Medical Council name
-- `year_of_registration` — Year of NMC registration
-- `qualification_year` — Year of degree completion
-- Doctors must verify via ABDM Aadhaar OTP flow before HPR registration
+### Doctor Compliance (HPR) — **partially built**
+Fields exist on `doctors` (`hpr_id`, `hfr_id`, `nmc_reg_number`, `council_name`, `year_of_registration`, `qualification_year`, `hpr_verified*`).
+**Current state:** a doctor types their HPR ID on `doctor/my-contact.php` (no verification); `hpr_verified` is set only by an **admin** via `admin/hpr-verification.php` after reviewing `hpr_verification_requests`. There is **no ABDM HPR API integration** in `lib/AbdmApi.php` — the target ("verify via ABDM Aadhaar OTP") is not implemented.
 
 ### Patient Compliance (ABHA)
-- `abha_number` — 14-digit ABHA number (format: `XX-XXXX-XXXX-XXXX`)
-- `abha_address` — @abdm handle (e.g., `name@abdm`)
-- `abha_verified` — must be 1 before accessing health records
-- Patient consent required for every health data access (logged in `abdm_audit_logs`)
-- Data linked via **care contexts** (each visit = one care context)
+- `abha_number` — 14-digit, format `XX-XXXX-XXXX-XXXX` — stored in **`abha_accounts.abha_number`**
+- `abha_address` — `@abdm` / `@sbx` handle
+- `verified` must be 1 before accessing health records
+- **Not built:** ABDM HI consent artefacts, care-context registration, HIP/HIU data exchange. `abdm_audit_logs` logging covers only ~9 call sites today.
 
-### Auth — JWT Migration Plan
-Current: PHP sessions. Target: **JWT (JSON Web Tokens)**.
-- JWT issued on login, stored in `HttpOnly` cookie + `localStorage`
-- Payload: `{ user_id, role, abha_linked, exp, iat, jti }`
-- Refresh token stored in DB table `jwt_refresh_tokens`
-- Doctor JWT must include `hpr_verified` claim
-- Token expiry: Access=15min, Refresh=7days
-- All ABDM API calls must include doctor's HPR token
+### Auth — status
+- **Doctor:** JWT done. `doctor/auth/login-api.php` → access (15 min) + refresh (7 d, hashed, rotated) in `HttpOnly; Secure; SameSite=Strict` cookies (`rdh_doctor_token` / `rdh_doctor_refresh`). Guard: `doctor/auth/guard.php::doctor_jwt_guard()`. Activation gate in `lib/DoctorAccess.php`.
+- **Admin:** JWT done. `admin/auth/login.php` (CSRF + IP rate-limit + `session_regenerate_id`). Guard: `admin/auth/guard.php`, applied via `admin/auth/bootstrap.php`.
+- **Patient / School:** still `$_SESSION` (`process-login.php` → `util/auth-helper.php::setRoleSession()`). ABHA/Aadhaar login via `ajax/login-abdm.php` (CSRF + rate-limit + fail-closed identity check).
+- JWT secret: **`.env` `JWT_SECRET`** (exposed as `JWT_SECRET` constant by `config/connect.php`).
 
-### ABDM API Integration (lib/AbdmApi.php)
-- Sandbox base: `https://sandbox.abdm.gov.in/`
-- Production: `https://live.abdm.gov.in/`
-- Auth: OAuth2 client_credentials (`config/abdm.php`)
-- Key flows: Aadhaar OTP → ABHA creation, Mobile OTP → ABHA linking
-- All calls logged to `abdm_audit_logs`
+### ABDM API Integration (`lib/AbdmApi.php`)
+- OAuth gateway: `https://dev.abdm.gov.in/api/hiecm/gateway/v3/sessions`; ABHA v3 sandbox `https://abhasbx.abdm.gov.in/abha/api/v3`
+- Credentials from **`.env`** (`ABDM_CLIENT_ID` / `ABDM_CLIENT_SECRET` / `ABDM_ENV`) via `config/abdm.php`
+- **Working (sandbox):** OAuth token, RSA cert, ABHA create (Aadhaar OTP), existing-ABHA login (number/mobile/aadhaar)
+- **Coded, lightly tested:** DL enrolment, mobile-verify, ABHA address, profile fetch, ABHA card
+- Dispatchers: `ajax/abdm-api.php` (patient), `doctor/api/abdm-api.php` (doctor), `ajax/login-abdm.php` (login)
 
 ---
 
-## Development Priority (Step-by-Step Plan)
+## Development Priority
 
-### Phase 1 — Doctor Panel (CURRENT FOCUS)
-**Goal**: Make doctor login/panel fully ABHA-compliant with JWT auth.
+**See `PROJECT_STATUS.md` §9 for the live prioritised plan.** Summary of where things stand:
 
-**Step 1.1 — Doctor Login with JWT** (`doctor-login.php`)
-- Replace session-based auth with JWT
-- Add ABHA/HPR login option alongside email/password
-- Issue JWT on success; store in HttpOnly cookie
-- Log login event to `abdm_audit_logs`
-
-**Step 1.2 — Doctor Profile — HPR Fields**
-- Add `hpr_id`, `nmc_reg_number`, `council_name`, `year_of_registration` to `doctors` table
-- Doctor profile page must show HPR verification status
-- HPR verification via ABDM Aadhaar OTP flow
-
-**Step 1.3 — Doctor Dashboard**
-- Show HPR verification badge
-- Show linked patients with ABHA status
-- Appointments must reference care contexts
-
-**Step 1.4 — Patient Records (ABDM Care Context)**
-- Each appointment creates a care context entry
-- Doctor can only access health records with patient's active consent
-- Consent status shown on patient card
-
-### Phase 2 — Patient Panel
-- Patient ABHA creation/linking flow
-- Health records linked to ABHA care contexts
-- Consent management UI
-
-### Phase 3 — Admin Panel
-- ABHA linking request approval
-- HPR verification dashboard
-- Audit log viewer
+- **Phase 1 — Doctor Panel:** JWT auth ✅, HPR fields ✅ (manual review, no ABDM API), dashboard/patients ✅. Care-context registration ❌ not built.
+- **Phase 2 — Patient Panel:** ABHA create/link (sandbox) ✅, session auth (JWT not migrated). Consent-management UI ❌.
+- **Phase 3 — Admin Panel:** ABHA-request approval ✅, HPR review queue ✅, audit-log viewer ❌.
+- **Cross-cutting done (2026-09):** P0 security fixes, `abha_accounts` normalisation, migrations + runner, 30 FKs, `utf8mb4`.
+- **Biggest gap for NHA compliance:** HI **consent artefacts** + **care-context / HIP data-exchange** have no API layer at all.
 
 ---
 
-## Auth Flow (Target — JWT)
-
-```
-POST /api/auth/doctor-login
-  → validate credentials (email+password OR HPR ID+OTP)
-  → check is_verified, is_approved, not locked
-  → generate JWT { doctor_id, role:'doctor', hpr_verified, exp }
-  → generate refresh_token → store in jwt_refresh_tokens
-  → set HttpOnly cookie 'rdh_token'
-  → log to abdm_audit_logs (event_type: 'login_success')
-  → return { token, doctor: {id, name, hpr_verified} }
-```
-
-```
-Doctor panel pages:
-  → read JWT from cookie
-  → verify signature + expiry
-  → if expired → try refresh token
-  → if invalid → redirect to doctor-login.php
-```
+## Auth entry points (actual)
+- `process-login.php` — unified login for **patient / school** roles → `util/auth-helper.php::setRoleSession()` (`findByIdentifier()`, `findByAbha()` → now via `lib/Abha.php`)
+- `doctor/auth/login-api.php` — doctor JWT login (POST JSON); `doctor/auth/guard.php` guards every doctor page
+- `admin/auth/login.php` — admin JWT login; `admin/auth/bootstrap.php` (`= db-conn + guard + admin_jwt_guard()`) at the top of every admin page
+- `school/auth/auth.php` — school session guard (`$_SESSION['school_logged_in']`)
+- `ajax/login-abdm.php` — ABHA / Aadhaar OTP login (patient + doctor); CSRF + rate-limit + fail-closed identity check
+- Doctor cookies: `rdh_doctor_token` / `rdh_doctor_refresh`. Admin: `rdh_admin_token` / `rdh_admin_refresh`.
 
 ---
 
-## Current Auth Entry Points
-- `process-login.php` — unified login handler (all roles)
-- `util/auth-helper.php` — `findByIdentifier()`, `setRoleSession()`, OTP utils
-- `doctor/doctor-dashboard.php` — checks `$_SESSION['doctor_logged_in']`
-- `admin/auth/auth.php` — admin session guard
-- `school/auth/auth.php` — school session guard
-
----
-
-## Database Migrations Needed (Doctor Phase)
-```sql
--- Add HPR fields to doctors table
-ALTER TABLE doctors
-  ADD COLUMN hpr_id VARCHAR(20) DEFAULT NULL AFTER doctor_uid,
-  ADD COLUMN nmc_reg_number VARCHAR(50) DEFAULT NULL,
-  ADD COLUMN council_name VARCHAR(100) DEFAULT NULL,
-  ADD COLUMN year_of_registration YEAR DEFAULT NULL,
-  ADD COLUMN qualification_year YEAR DEFAULT NULL,
-  ADD COLUMN hpr_verified TINYINT(1) DEFAULT 0,
-  ADD COLUMN hpr_verified_at DATETIME DEFAULT NULL,
-  ADD COLUMN hpr_txn_id VARCHAR(100) DEFAULT NULL;
-
--- JWT refresh tokens table
-CREATE TABLE jwt_refresh_tokens (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  entity_type VARCHAR(20) NOT NULL,  -- 'doctor', 'patient', 'admin'
-  entity_id INT UNSIGNED NOT NULL,
-  token_hash VARCHAR(64) NOT NULL,
-  issued_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  expires_at DATETIME NOT NULL,
-  revoked TINYINT(1) DEFAULT 0,
-  revoked_at DATETIME DEFAULT NULL,
-  ip_address VARCHAR(45) DEFAULT NULL,
-  user_agent VARCHAR(255) DEFAULT NULL,
-  INDEX idx_entity (entity_type, entity_id),
-  INDEX idx_token (token_hash)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+## Database migrations
+All schema lives in `database/*.sql`. **Run before deploy:**
 ```
+php database/run-migrations.php            # applies pending, tracked in schema_migrations
+php database/run-migrations.php --dry-run
+```
+Canonical order + rationale: **`database/MIGRATIONS.md`** (34 files). ABHA data copy (one-off, manual): `php database/migrate-abha-data.php --commit` after review.
+Do **not** `CREATE TABLE` / `ALTER TABLE` at runtime in PHP — add a migration file instead.
 
 ---
 
 ## Coding Rules
 - Always use MySQLi **prepared statements** — no raw string interpolation in SQL
 - Passwords: `password_hash(..., PASSWORD_BCRYPT, ['cost'=>12])`
-- All ABDM interactions must be logged via `lib/AuditLogger.php`
-- JWT secret stored in `config/connect.php` as `JWT_SECRET` constant
-- Never store raw Aadhaar — store only last 4 digits + consent log
-- HttpOnly + Secure + SameSite=Strict cookies for JWT
-- Session variables kept for admin panel (not migrating admin to JWT yet)
+- All ABDM + PHI access must be logged via `lib/AuditLogger.php`
+- ABHA identity: read/write through **`lib/Abha.php`**, never the deprecated `*.abha_id` columns
+- Secrets: **`.env` only** (never hardcode; `config/*.php` read from `$_ENV`)
+- `JWT_SECRET` is an `.env` var, surfaced as a constant by `config/connect.php`
+- Never store raw Aadhaar — last 4 digits + consent log only
+- JWT cookies: `HttpOnly` + `Secure` + `SameSite=Strict`
+- Errors: `APP_DEBUG` gates on-screen display; never echo `$conn->error` to the client
+- New schema → a `database/*.sql` migration (idempotent: `IF NOT EXISTS`), added to `MIGRATIONS.md` + `run-migrations.php` `$ORDER`
 
 ---
 
 ## ABHA Number Format
-- 14 digits: `XX-XXXX-XXXX-XXXX`
-- Validate with: `/^\d{2}-\d{4}-\d{4}-\d{4}$/`
-- ABHA address: `[a-zA-Z0-9._]{3,}@abdm`
+- 14 digits: `XX-XXXX-XXXX-XXXX` — validate `/^\d{2}-\d{4}-\d{4}-\d{4}$/`; format with `Abha::formatNumber()` / `AbdmApi::formatAbhaNumber()`
+- ABHA address: `[a-zA-Z0-9._]{3,}@<suffix>` where suffix is `sbx` on sandbox, `abdm` on production
+- Naming: the old schema called the 14-digit number `abha_id` on `users`/`school_members`/`doctors` and `abha_number` on `appointments`/`prescriptions`. Canonical is now **`abha_accounts.abha_number`**; the snapshot columns keep the name `abha_number`.
 
 ---
 
-## Key Contacts / Identifiers in DB
+## Key Contacts / Identifiers
 - App doctor (test): `iamnikhilgupta9@gmail.com` / `DOC20251215023925774`
-- ABDM Sandbox AUA code: `SBXID_038789` (from audit logs)
-- HPR sandbox doctor: `sanjay8273@hpr.abdm` (shown in screenshot)
+- ABDM sandbox client id: `SBXID_038789` (`.env` `ABDM_CLIENT_ID`; also used as AUA code)
+- HPR sandbox doctor handle: `sanjay8273@hpr.abdm`
+- MySQL socket (XAMPP dev): `/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock` — CLI needs `/Applications/XAMPP/xamppfiles/bin/php`

@@ -255,7 +255,7 @@ class SignalingServer implements MessageComponentInterface
             error_log('[Telemedicine] DB connect failed: ' . $c->connect_error);
             return null;
         }
-        $c->set_charset('utf8');
+        $c->set_charset('utf8mb4');
         $this->db = $c;
         return $this->db;
     }

@@ -11,9 +11,8 @@ require_once __DIR__ . '/inc/sidebar.php';
 $bank_success = '';
 $bank_error   = '';
 
-/* Extra bank columns (branch + account type) — added once, harmless if present */
-$conn->query("ALTER TABLE doctor_bank_accounts ADD COLUMN IF NOT EXISTS branch_name VARCHAR(150) DEFAULT NULL AFTER bank_name");
-$conn->query("ALTER TABLE doctor_bank_accounts ADD COLUMN IF NOT EXISTS account_type VARCHAR(20) DEFAULT NULL AFTER branch_name");
+/* doctor_bank_accounts schema: see database/migration_doctor_bank_settlement.sql
+   + migration_runtime_column_backfills.sql (branch_name, account_type) */
 
 /* Common Indian banks for the picker */
 $bank_list = [

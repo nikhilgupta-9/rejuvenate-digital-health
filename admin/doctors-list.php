@@ -5,17 +5,18 @@ session_start();
 include_once "db-conn.php";
 include_once "functions.php";
 
-// Handle delete action
+// Handle delete action — SOFT delete only. A doctor row is referenced by
+// appointments / prescriptions / doctor_patients / settlements (FK RESTRICT);
+// a hard DELETE would either fail or destroy clinical + payout history.
 if (isset($_GET['delete_id'])) {
     try {
         $delete_id = intval($_GET['delete_id']);
-        $stmt = $conn->prepare("DELETE FROM doctors WHERE id = ?");
+        $stmt = $conn->prepare("UPDATE doctors SET status = 'Inactive' WHERE id = ?");
         $stmt->bind_param('i', $delete_id);
-
         if ($stmt->execute()) {
-            $_SESSION['success_message'] = "Doctor deleted successfully!";
+            $_SESSION['success_message'] = "Doctor deactivated. Their records are retained.";
         } else {
-            throw new Exception("Failed to delete doctor");
+            throw new Exception("Failed to deactivate doctor");
         }
     } catch (Exception $e) {
         $_SESSION['error_message'] = $e->getMessage();

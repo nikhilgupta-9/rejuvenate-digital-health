@@ -17,21 +17,7 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-// Ensure tables exist (user-roles.php creates them, but be safe)
-$conn->query("CREATE TABLE IF NOT EXISTS admin_permissions (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) UNIQUE NOT NULL,
-    display_name VARCHAR(100) NOT NULL,
-    description VARCHAR(255) DEFAULT '',
-    module VARCHAR(50) NOT NULL,
-    sort_order INT DEFAULT 0,
-    created_at DATETIME DEFAULT NOW()
-)");
-$conn->query("CREATE TABLE IF NOT EXISTS admin_role_permissions (
-    role_id INT NOT NULL,
-    permission_id INT NOT NULL,
-    PRIMARY KEY (role_id, permission_id)
-)");
+// admin RBAC schema: see database/migration_admin_rbac.sql
 
 $errors  = [];
 $success = '';

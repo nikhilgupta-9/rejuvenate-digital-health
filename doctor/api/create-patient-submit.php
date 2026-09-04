@@ -9,6 +9,7 @@
 require_once dirname(__DIR__) . '/auth/guard.php';
 require_once dirname(dirname(__DIR__)) . '/config/connect.php';
 require_once dirname(dirname(__DIR__)) . '/util/otp-service.php';
+require_once dirname(dirname(__DIR__)) . '/lib/Abha.php';
 
 header('Content-Type: application/json');
 
@@ -95,18 +96,7 @@ if ($existing) {
     // Link existing user to this doctor
     $patient_id = (int)$existing['id'];
 
-    // Ensure doctor_patients table exists
-    $conn->query("CREATE TABLE IF NOT EXISTS `doctor_patients` (
-      `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-      `doctor_id` INT UNSIGNED NOT NULL,
-      `patient_id` INT UNSIGNED NOT NULL,
-      `added_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      `added_via` ENUM('appointment','manual','abha') NOT NULL DEFAULT 'manual',
-      `abha_fetched` TINYINT(1) NOT NULL DEFAULT 0,
-      PRIMARY KEY (`id`),
-      UNIQUE KEY `unique_link` (`doctor_id`,`patient_id`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
+    // doctor_patients schema: see database/migration_doctor_abha.sql
     $link = $conn->prepare("INSERT IGNORE INTO doctor_patients (doctor_id,patient_id,added_via) VALUES (?,?,?)");
     $mode = ($abha_number || $abha_address) ? 'abha' : 'manual';
     $link->bind_param('iis', $doctor_id, $patient_id, $mode);
@@ -142,20 +132,17 @@ $email = $real_email ?? ('noemail.' . $mobile . '@patients.rejuvenatedigitalheal
 // patient, who signs in by mobile, could never clear that loop at all).
 $email_verified = 1;
 
-// Insert new user
+// Insert new user (ABHA identity is stored separately, in abha_accounts)
 $ins = $conn->prepare("
     INSERT INTO users
       (name, email, mobile, password, gender, dob, blood_group,
-       abha_id, abha_address, abha_linked, abha_verified,
        zip_code, city, state, address, mobile_verified, mobile_verified_at, email_verified, created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,NOW(),?,NOW())
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,1,NOW(),?,NOW())
 ");
 
-$abha_linked = ($abha_number || $abha_address) ? 1 : 0;
-$ins->bind_param('ssssssssssiisssi',
+$ins->bind_param('sssssssssssi',
     $name, $email, $mobile, $hash,
     $gender, $dob, $blood_group,
-    $abha_number, $abha_address, $abha_linked, $abha_verified,
     $pincode, $city, $state, $address, $email_verified
 );
 
@@ -166,18 +153,18 @@ if (!$ins->execute()) {
 
 $patient_id = (int)$conn->insert_id;
 
-// Ensure doctor_patients table exists
-$conn->query("CREATE TABLE IF NOT EXISTS `doctor_patients` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `doctor_id` INT UNSIGNED NOT NULL,
-  `patient_id` INT UNSIGNED NOT NULL,
-  `added_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `added_via` ENUM('appointment','manual','abha') NOT NULL DEFAULT 'manual',
-  `abha_fetched` TINYINT(1) NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `unique_link` (`doctor_id`,`patient_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+// ABHA identity -> abha_accounts (authoritative; mirrors legacy users.abha_* cols)
+if ($abha_number !== '' || $abha_address !== '') {
+    Abha::save($conn, 'patient', $patient_id, [
+        'abha_number'  => $abha_number ?: null,
+        'abha_address' => $abha_address ?: null,
+        'linked'       => 1,
+        'verified'     => $abha_verified,
+        'source'       => 'doctor_added',
+    ]);
+}
 
+// doctor_patients schema: see database/migration_doctor_abha.sql
 $mode = ($abha_number || $abha_address) ? 'abha' : 'manual';
 $link = $conn->prepare("INSERT IGNORE INTO doctor_patients (doctor_id,patient_id,added_via) VALUES (?,?,?)");
 $link->bind_param('iis', $doctor_id, $patient_id, $mode);

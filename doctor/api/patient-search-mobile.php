@@ -6,6 +6,7 @@
  */
 require_once dirname(__DIR__) . '/auth/guard.php';
 require_once dirname(dirname(__DIR__)) . '/config/connect.php';
+require_once dirname(dirname(__DIR__)) . '/lib/Abha.php';
 
 header('Content-Type: application/json');
 
@@ -20,9 +21,10 @@ if (strlen($mobile) !== 10) {
 
 $stmt = $conn->prepare("
     SELECT u.id, u.name, u.mobile, u.email, u.gender, u.dob,
-           u.abha_id AS abha_number, u.abha_address, u.abha_verified,
+           " . Abha::selectAliases('aa', 'u') . ",
            (SELECT COUNT(*) FROM doctor_patients dp WHERE dp.doctor_id=? AND dp.patient_id=u.id) AS already_linked
     FROM users u
+    " . Abha::joinClause('patient', 'u', 'aa') . "
     WHERE u.mobile = ?
     LIMIT 1
 ");

@@ -2,110 +2,13 @@
 /**
  * Parent Health Checkup Consent Form
  * Public page — no login required.
- * Auto-creates parent_consent_forms table and saves submission.
  */
 include_once __DIR__ . "/../config/connect.php";
 
-/* ── Auto-create table ── */
-$conn->query("
-CREATE TABLE IF NOT EXISTS parent_consent_forms (
-id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-token VARCHAR(64) NOT NULL UNIQUE,
-school_id INT UNSIGNED DEFAULT NULL,
-school_name_manual VARCHAR(200) DEFAULT NULL,
-parent_name VARCHAR(150) NOT NULL,
-relation ENUM('Father','Mother','Guardian','Other') NOT NULL DEFAULT 'Father',
-parent_mobile VARCHAR(15) NOT NULL,
-parent_email VARCHAR(150) DEFAULT NULL,
-parent_aadhar_last4 CHAR(4) DEFAULT NULL,
-student_name VARCHAR(150) NOT NULL,
-student_dob DATE DEFAULT NULL,
-student_gender ENUM('Male','Female','Other') DEFAULT NULL,
-student_class VARCHAR(20) DEFAULT NULL,
-student_section VARCHAR(10) DEFAULT NULL,
-student_roll_no VARCHAR(30) DEFAULT NULL,
-student_address TEXT DEFAULT NULL,
-student_city VARCHAR(100) DEFAULT NULL,
-student_state VARCHAR(100) DEFAULT NULL,
-student_pincode VARCHAR(10) DEFAULT NULL,
-student_abha_number VARCHAR(20) DEFAULT NULL,
-student_abha_address VARCHAR(100) DEFAULT NULL,
-blood_group VARCHAR(10) DEFAULT NULL,
-known_allergies TEXT DEFAULT NULL,
-existing_conditions TEXT DEFAULT NULL,
-current_medications TEXT DEFAULT NULL,
-consent_items JSON NOT NULL,
-consent_given TINYINT(1) NOT NULL DEFAULT 0,
-declaration_text TEXT DEFAULT NULL,
-ip_address VARCHAR(45) DEFAULT NULL,
-user_agent VARCHAR(255) DEFAULT NULL,
-submitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-status ENUM('pending','reviewed','archived') NOT NULL DEFAULT 'pending',
-PRIMARY KEY (id),
-KEY idx_school (school_id),
-KEY idx_mobile (parent_mobile)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-");
-
-/* ── Migrations: add columns to a table created before they existed ── */
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS student_address TEXT DEFAULT NULL AFTER student_roll_no");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS student_city VARCHAR(100) DEFAULT NULL AFTER student_address");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS student_state VARCHAR(100) DEFAULT NULL AFTER student_city");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS student_pincode VARCHAR(10) DEFAULT NULL AFTER student_state");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS student_abha_number VARCHAR(20) DEFAULT NULL AFTER student_pincode");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS student_abha_address VARCHAR(100) DEFAULT NULL AFTER student_abha_number");
-/* ── Linkage / provenance: parent submission vs doctor point-of-care capture ── */
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS member_id INT DEFAULT NULL AFTER school_id");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS source ENUM('parent','doctor') NOT NULL DEFAULT 'parent' AFTER status");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS recorded_by_doctor_id INT DEFAULT NULL AFTER source");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS linked_at DATETIME DEFAULT NULL AFTER recorded_by_doctor_id");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS reviewed_at DATETIME DEFAULT NULL AFTER linked_at");
-$conn->query("ALTER TABLE parent_consent_forms ADD INDEX IF NOT EXISTS idx_member (member_id)");
-
-/* ── Full Student Health Assessment fields (based on the school Google Form) ── */
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS student_apaar_id VARCHAR(40) DEFAULT NULL AFTER student_roll_no");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS parent_aadhar_mobile VARCHAR(15) DEFAULT NULL AFTER parent_aadhar_last4");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS student_abha_status VARCHAR(20) DEFAULT NULL AFTER student_abha_address");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS height_cm DECIMAL(5,1) DEFAULT NULL AFTER blood_group");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS weight_kg DECIMAL(5,1) DEFAULT NULL AFTER height_cm");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS bmi DECIMAL(5,1) DEFAULT NULL AFTER weight_kg");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS health_data JSON DEFAULT NULL AFTER current_medications");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS file_id_proof VARCHAR(255) DEFAULT NULL AFTER health_data");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS file_eye_report VARCHAR(255) DEFAULT NULL AFTER file_id_proof");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS file_dental_report VARCHAR(255) DEFAULT NULL AFTER file_eye_report");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS file_vaccination_cert VARCHAR(255) DEFAULT NULL AFTER file_dental_report");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS file_medical_records VARCHAR(255) DEFAULT NULL AFTER file_vaccination_cert");
-
-/* ── Health-plan selection + payment (Razorpay) ── */
-$conn->query("
-CREATE TABLE IF NOT EXISTS school_health_plans (
-  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  name VARCHAR(120) NOT NULL,
-  tier VARCHAR(40) DEFAULT NULL,
-  tagline VARCHAR(200) DEFAULT NULL,
-  price DECIMAL(10,2) NOT NULL DEFAULT 0,
-  billing_label VARCHAR(40) NOT NULL DEFAULT 'per student / year',
-  age_min TINYINT UNSIGNED DEFAULT NULL,
-  age_max TINYINT UNSIGNED DEFAULT NULL,
-  features TEXT DEFAULT NULL,
-  accent_color VARCHAR(20) NOT NULL DEFAULT '#0C74C5',
-  is_popular TINYINT(1) NOT NULL DEFAULT 0,
-  show_on_consent TINYINT(1) NOT NULL DEFAULT 0,
-  is_active TINYINT(1) NOT NULL DEFAULT 1,
-  sort_order INT NOT NULL DEFAULT 0,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS plan_id INT UNSIGNED DEFAULT NULL AFTER school_name_manual");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS plan_name VARCHAR(120) DEFAULT NULL AFTER plan_id");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS plan_price DECIMAL(10,2) DEFAULT NULL AFTER plan_name");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS payment_status ENUM('pending','paid','failed') NOT NULL DEFAULT 'pending' AFTER plan_price");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(64) DEFAULT NULL AFTER payment_status");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS razorpay_payment_id VARCHAR(64) DEFAULT NULL AFTER razorpay_order_id");
-$conn->query("ALTER TABLE parent_consent_forms ADD COLUMN IF NOT EXISTS paid_at DATETIME DEFAULT NULL AFTER razorpay_payment_id");
-$conn->query("ALTER TABLE parent_consent_forms ADD INDEX IF NOT EXISTS idx_pcf_order (razorpay_order_id)");
+/* Schema:
+ *   database/migration_parent_consent_forms.sql   (parent_consent_forms)
+ *   database/migration_school_health_plans.sql     (school_health_plans)
+ */
 
 require_once __DIR__ . '/../config/payment.php';   // RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET
 require_once __DIR__ . '/../util/mail_config.php'; // Mailer

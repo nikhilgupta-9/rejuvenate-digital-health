@@ -25,43 +25,15 @@ function routeSelect($selected, $name) {
 include_once(__DIR__ . "/../config/connect.php");
 include_once(__DIR__ . "/../util/function.php");
 require_once(__DIR__ . "/../lib/Settlement.php");
+require_once(__DIR__ . "/../lib/Abha.php");
 require_once(__DIR__ . "/../util/prescription-render.php"); // shared read-only "parcha" — same as user/admin/video-call
 require_once(__DIR__ . "/auth/guard.php");
 
 $jwt_doctor = doctor_jwt_guard();
 $doctor_id  = (int)$jwt_doctor['sub'];
 
-/* ── Auto-create prescriptions table ── */
-$conn->query("
-    CREATE TABLE IF NOT EXISTS `prescriptions` (
-      `id`               INT UNSIGNED NOT NULL AUTO_INCREMENT,
-      `appointment_id`   INT UNSIGNED NOT NULL,
-      `doctor_id`        INT UNSIGNED NOT NULL,
-      `patient_id`       INT UNSIGNED NOT NULL,
-      `care_context_ref` VARCHAR(120) NOT NULL,
-      `visit_date`       DATE NOT NULL,
-      `chief_complaints` TEXT,
-      `vitals`           JSON,
-      `examination`      TEXT,
-      `diagnosis`        TEXT,
-      `icd_codes`        VARCHAR(500) DEFAULT NULL,
-      `medications`      JSON,
-      `lab_tests`        TEXT,
-      `radiology`        TEXT,
-      `advice`           TEXT,
-      `follow_up_date`   DATE DEFAULT NULL,
-      `follow_up_notes`  TEXT,
-      `abha_number`      VARCHAR(20) DEFAULT NULL,
-      `hpr_id`           VARCHAR(50) DEFAULT NULL,
-      `status`           ENUM('draft','final') NOT NULL DEFAULT 'draft',
-      `created_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      `updated_at`       DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
-      PRIMARY KEY (`id`),
-      UNIQUE KEY `uq_appointment` (`appointment_id`),
-      KEY `idx_doctor`  (`doctor_id`),
-      KEY `idx_patient` (`patient_id`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-");
+/* prescriptions / school_member_prescriptions schema: see
+   database/migration_prescriptions.sql + migration_runtime_column_backfills.sql */
 
 /* ── Load doctor info ── */
 $ds = $conn->prepare("SELECT name, degrees, specialization, phone, email, hpr_id FROM doctors WHERE id = ? LIMIT 1");
@@ -126,12 +98,11 @@ if ($mode === 'patient' && $appointment_id > 0) {
                u.dob,
                u.gender,
                u.blood_group,
-               u.abha_id      AS abha_number,
-               u.abha_address,
-               u.abha_linked,
+               " . Abha::selectAliases('aa', 'u') . ",
                TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) AS patient_age
         FROM appointments a
         JOIN users u ON a.user_id = u.id
+        " . Abha::joinClause('patient', 'u', 'aa') . "
         WHERE a.id = ? AND a.doctor_id = ?
         LIMIT 1
     ");
@@ -328,9 +299,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_student_prescrip
         'weight_kg'    => trim($_POST['s_weight']  ?? ''),
         'height_cm'    => trim($_POST['s_height']  ?? ''),
     ]);
-
-    /* Check if table has vitals column; add if missing */
-    $conn->query("ALTER TABLE school_member_prescriptions ADD COLUMN IF NOT EXISTS vitals JSON DEFAULT NULL");
 
     if ($s_member_id && $s_rx_text) {
         $sins = $conn->prepare("INSERT INTO school_member_prescriptions
