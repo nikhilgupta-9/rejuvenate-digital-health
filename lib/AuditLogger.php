@@ -71,6 +71,37 @@ class AuditLogger
     }
 
     /**
+     * Log an ABHA-recovery ("Forgot ABHA") lookup — an OTP-authenticated
+     * read of which ABHA account(s) sit behind an Aadhaar / mobile. This is
+     * NOT a login (no session is created), but it is an Aadhaar/mobile OTP
+     * auth event, so it gets the AADHAAR_AUTH retention class.
+     *
+     * $modality : 'AADHAAR_OTP' | 'MOBILE_OTP'
+     * $status   : 'PENDING' (OTP sent) | 'SUCCESS' | 'FAILURE'
+     */
+    public function logAbhaRecovery(
+        string $modality,
+        string $txnId,
+        string $status,
+        array  $extra = []
+    ): void {
+        $this->insert('abha_recovery', [
+            'entity_id'     => 0,
+            'entity_type'   => 'user',
+            'terminal_id'   => $this->terminalId,
+            'auth_modality' => $modality,
+            'txn_id'        => $txnId,
+            'aua_code'      => $this->auaCode,
+            'user_consent'  => 'Y',
+            'auth_status'   => $status,
+            'ip_address'    => $this->clientIp(),
+            'user_agent'    => $this->safeUserAgent(),
+            'extra_data'    => ($e = $this->stripProhibited($extra)) ? json_encode($e) : null,
+            'log_type'      => 'AADHAAR_AUTH',
+        ]);
+    }
+
+    /**
      * Log an authentication attempt (login, OTP verify, ABHA login).
      * ABDM: Log ALL authentication failures.
      */

@@ -724,6 +724,13 @@ $abdm_on = ABDM_CONFIGURED;
 
               </div>
 
+              <!-- Forgot ABHA -->
+              <div style="text-align:center;margin-top:12px;">
+                <a href="<?= BASE_URL ?>forgot-abha.php" style="font-size:.78rem;color:var(--ab);font-weight:600;">
+                  Forgot ABHA number / address?
+                </a>
+              </div>
+
             </div>
           <?php endif; ?>
 
