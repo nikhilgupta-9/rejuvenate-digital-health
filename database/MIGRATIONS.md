@@ -118,6 +118,7 @@ dump / phpMyAdmin: `doctors`, `users`, `admin_user`, `appointments`,
 | # | File | Notes |
 |---|------|-------|
 | 33 | `migration_runtime_column_backfills.sql` | `doctor_bank_accounts.branch_name/account_type` (needs #8), `school_member_prescriptions.vitals` (needs #26) |
+| 33b | `migration_family_groups.sql` | `users.family_group_id` (CHAR(36) UUID) + `users.primary_contact_mobile` + `users.is_family_primary` + `idx_family_group`. Backs the "add family member" flow in `doctor/add-patient-new-abha.php` — several ABHA accounts (one Aadhaar each) sharing one real contact phone. No FK (grouping column, polymorphic pattern). |
 
 ## 12. Referential integrity — run LAST
 

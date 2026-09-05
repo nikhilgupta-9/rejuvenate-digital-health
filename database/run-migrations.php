@@ -66,6 +66,7 @@ $ORDER = [
     'migration_whatsapp_otp.sql',
     'migration_department_description.sql',
     'migration_runtime_column_backfills.sql',
+    'migration_family_groups.sql',
     // 12. referential integrity — LAST (needs every table + type fix in place)
     'migration_core_foreign_keys.sql',
 ];
