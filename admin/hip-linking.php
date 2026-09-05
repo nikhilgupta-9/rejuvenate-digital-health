@@ -20,7 +20,8 @@ admin_jwt_guard();
 $csrf = Security::csrfToken();
 
 $tbl = fn($t) => (bool) $conn->query("SHOW TABLES LIKE '" . $conn->real_escape_string($t) . "'")->num_rows;
-$tables_ok = $tbl('abdm_care_context_links') && $tbl('abdm_webhook_log') && $tbl('abdm_link_tokens');
+$tables_ok         = $tbl('abdm_care_context_links') && $tbl('abdm_webhook_log') && $tbl('abdm_link_tokens');
+$consent_tables_ok = $tbl('abha_consents') && $tbl('abha_hi_requests');
 
 /* ── Retry a failed care-context link (PRG) ── */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'retry_link') {
@@ -59,7 +60,7 @@ $error   = $_SESSION['hip_error']   ?? '';
 unset($_SESSION['hip_success'], $_SESSION['hip_error']);
 
 /* ── filters / paging ── */
-$view    = in_array($_GET['view'] ?? '', ['links', 'webhooks', 'tokens'], true) ? $_GET['view'] : 'links';
+$view    = in_array($_GET['view'] ?? '', ['links', 'webhooks', 'tokens', 'consents', 'hi_requests'], true) ? $_GET['view'] : 'links';
 $fstatus = trim((string) ($_GET['status'] ?? ''));
 $page    = max(1, (int) ($_GET['p'] ?? 1));
 $per     = 25;
@@ -81,6 +82,11 @@ $s_linked  = $stat("SELECT COUNT(*) c FROM abdm_care_context_links WHERE status=
 $s_failed  = $stat("SELECT COUNT(*) c FROM abdm_care_context_links WHERE status='failed'");
 $s_tok     = $stat("SELECT COUNT(*) c FROM abdm_link_tokens WHERE status='received' AND expires_at > NOW()");
 $s_unproc  = $stat("SELECT COUNT(*) c FROM abdm_webhook_log WHERE processed=0");
+$cstat = fn($sql) => $consent_tables_ok ? (int) ($conn->query($sql)->fetch_assoc()['c'] ?? 0) : 0;
+$s_consent_granted = $cstat("SELECT COUNT(*) c FROM abha_consents WHERE status='granted'");
+$s_consent_revoked = $cstat("SELECT COUNT(*) c FROM abha_consents WHERE status='revoked'");
+$s_hi_ack          = $cstat("SELECT COUNT(*) c FROM abha_hi_requests WHERE status='acknowledged'");
+$s_hi_ready        = $cstat("SELECT COUNT(*) c FROM abha_hi_requests WHERE status='ready_for_push'");
 $last_wh   = $tables_ok
     ? ($conn->query("SELECT received_at FROM abdm_webhook_log ORDER BY id DESC LIMIT 1")->fetch_assoc()['received_at'] ?? null)
     : null;
@@ -132,7 +138,7 @@ if ($tables_ok) {
         $st = $conn->prepare($sql); $st->bind_param($types, ...$params); $st->execute();
         $rows = $st->get_result()->fetch_all(MYSQLI_ASSOC); $st->close();
 
-    } else { // tokens
+    } elseif ($view === 'tokens') {
         $filters = ['' => 'All', 'pending' => 'Pending', 'received' => 'Received', 'expired' => 'Expired'];
         $where = ''; $params = []; $types = '';
         if (isset($filters[$fstatus]) && $fstatus !== '') { $where = 'WHERE lt.status = ?'; $params[] = $fstatus; $types .= 's'; }
@@ -152,6 +158,50 @@ if ($tables_ok) {
         $params[] = $per; $params[] = $offset; $types .= 'ii';
         $st = $conn->prepare($sql); $st->bind_param($types, ...$params); $st->execute();
         $rows = $st->get_result()->fetch_all(MYSQLI_ASSOC); $st->close();
+
+    } elseif ($view === 'consents' && $consent_tables_ok) {
+        $filters = ['' => 'All', 'granted' => 'Granted', 'revoked' => 'Revoked'];
+        $where = ''; $params = []; $types = '';
+        if (isset($filters[$fstatus]) && $fstatus !== '') { $where = 'WHERE c.status = ?'; $params[] = $fstatus; $types .= 's'; }
+        if ($params) {
+            $cs = $conn->prepare("SELECT COUNT(*) c FROM abha_consents c WHERE c.status = ?");
+            $cs->bind_param('s', $fstatus); $cs->execute();
+            $total = (int) ($cs->get_result()->fetch_assoc()['c'] ?? 0); $cs->close();
+        } else {
+            $total = (int) ($conn->query("SELECT COUNT(*) c FROM abha_consents")->fetch_assoc()['c'] ?? 0);
+        }
+        $sql = "SELECT c.id, c.consent_id, c.status, c.patient_id, c.abha_address, c.hiu_id,
+                       c.purpose_code, c.hi_types, c.date_range_from, c.date_range_to, c.data_erase_at,
+                       c.created_at, c.updated_at,
+                       TRIM(CONCAT(COALESCE(u.name,''),' ',COALESCE(u.last_name,''))) AS patient_name
+                FROM abha_consents c
+                LEFT JOIN users u ON u.id = c.patient_id
+                $where ORDER BY c.id DESC LIMIT ? OFFSET ?";
+        $params[] = $per; $params[] = $offset; $types .= 'ii';
+        $st = $conn->prepare($sql); $st->bind_param($types, ...$params); $st->execute();
+        $rows = $st->get_result()->fetch_all(MYSQLI_ASSOC); $st->close();
+
+    } elseif ($view === 'hi_requests' && $consent_tables_ok) {
+        $filters = ['' => 'All', 'pending' => 'Pending', 'acknowledged' => 'Acknowledged', 'ready_for_push' => 'Ready for push', 'failed' => 'Failed'];
+        $where = ''; $params = []; $types = '';
+        if (isset($filters[$fstatus]) && $fstatus !== '') { $where = 'WHERE r.status = ?'; $params[] = $fstatus; $types .= 's'; }
+        if ($params) {
+            $cs = $conn->prepare("SELECT COUNT(*) c FROM abha_hi_requests r WHERE r.status = ?");
+            $cs->bind_param('s', $fstatus); $cs->execute();
+            $total = (int) ($cs->get_result()->fetch_assoc()['c'] ?? 0); $cs->close();
+        } else {
+            $total = (int) ($conn->query("SELECT COUNT(*) c FROM abha_hi_requests")->fetch_assoc()['c'] ?? 0);
+        }
+        $sql = "SELECT r.id, r.transaction_id, r.consent_id, r.status, r.date_range_from, r.date_range_to,
+                       r.data_push_url, (r.key_material IS NOT NULL AND r.key_material <> '{}') AS has_km,
+                       r.error_detail, r.created_at, r.updated_at,
+                       c.status AS consent_status
+                FROM abha_hi_requests r
+                LEFT JOIN abha_consents c ON c.consent_id = r.consent_id
+                $where ORDER BY r.id DESC LIMIT ? OFFSET ?";
+        $params[] = $per; $params[] = $offset; $types .= 'ii';
+        $st = $conn->prepare($sql); $st->bind_param($types, ...$params); $st->execute();
+        $rows = $st->get_result()->fetch_all(MYSQLI_ASSOC); $st->close();
     }
 }
 
@@ -162,11 +212,15 @@ $qs = fn(array $x) => 'hip-linking.php?' . http_build_query(array_merge(['view' 
 function status_badge(string $s): string
 {
     $map = [
-        'pending'  => 'badge bg-warning text-dark',
-        'linked'   => 'badge bg-success',
-        'received'  => 'badge bg-success',
-        'failed'   => 'badge bg-danger',
-        'expired'  => 'badge bg-secondary',
+        'pending'        => 'badge bg-warning text-dark',
+        'linked'         => 'badge bg-success',
+        'received'       => 'badge bg-success',
+        'granted'        => 'badge bg-success',
+        'acknowledged'   => 'badge bg-info text-dark',
+        'ready_for_push' => 'badge bg-primary',
+        'failed'         => 'badge bg-danger',
+        'revoked'        => 'badge bg-danger',
+        'expired'        => 'badge bg-secondary',
     ];
     return '<span class="' . ($map[$s] ?? 'badge bg-light text-dark') . '">' . htmlspecialchars($s) . '</span>';
 }
@@ -229,6 +283,15 @@ function status_badge(string $s): string
                     <div class="col-6 col-lg-3"><div class="stat-box bg-stat-teal"><i class="fas fa-key big-icon"></i><div class="num"><?= $s_tok ?></div><div class="lbl">Active Link Tokens</div></div></div>
                 </div>
 
+                <?php if ($consent_tables_ok): ?>
+                <div class="row g-3 mb-4">
+                    <div class="col-6 col-lg-3"><div class="stat-box bg-stat-green"><i class="fas fa-file-signature big-icon"></i><div class="num"><?= $s_consent_granted ?></div><div class="lbl">Consents Granted</div></div></div>
+                    <div class="col-6 col-lg-3"><div class="stat-box bg-stat-blue"><i class="fas fa-ban big-icon"></i><div class="num"><?= $s_consent_revoked ?></div><div class="lbl">Consents Revoked</div></div></div>
+                    <div class="col-6 col-lg-3"><div class="stat-box bg-stat-teal"><i class="fas fa-inbox big-icon"></i><div class="num"><?= $s_hi_ack ?></div><div class="lbl">HI Requests Ack'd</div></div></div>
+                    <div class="col-6 col-lg-3"><div class="stat-box bg-stat-warn"><i class="fas fa-paper-plane big-icon"></i><div class="num"><?= $s_hi_ready ?></div><div class="lbl">Ready for Push</div></div></div>
+                </div>
+                <?php endif; ?>
+
                 <div class="row g-4">
                     <!-- Config -->
                     <div class="col-lg-5">
@@ -265,6 +328,10 @@ function status_badge(string $s): string
                                     <a href="<?= $h($qs(['view' => 'links', 'status' => '', 'p' => 1])) ?>" class="<?= $view === 'links' ? 'on' : '' ?>">Care-Context Links</a>
                                     <a href="<?= $h($qs(['view' => 'webhooks', 'status' => '', 'p' => 1])) ?>" class="<?= $view === 'webhooks' ? 'on' : '' ?>">Webhook Log</a>
                                     <a href="<?= $h($qs(['view' => 'tokens', 'status' => '', 'p' => 1])) ?>" class="<?= $view === 'tokens' ? 'on' : '' ?>">Link Tokens</a>
+                                    <?php if ($consent_tables_ok): ?>
+                                    <a href="<?= $h($qs(['view' => 'consents', 'status' => '', 'p' => 1])) ?>" class="<?= $view === 'consents' ? 'on' : '' ?>">HI Consents</a>
+                                    <a href="<?= $h($qs(['view' => 'hi_requests', 'status' => '', 'p' => 1])) ?>" class="<?= $view === 'hi_requests' ? 'on' : '' ?>">HI Data Requests</a>
+                                    <?php endif; ?>
                                 </div>
 
                                 <form method="get" class="d-flex align-items-center gap-2 mb-3">
@@ -328,7 +395,7 @@ function status_badge(string $s): string
                                         </tbody>
                                     </table>
 
-                                <?php else: ?>
+                                <?php elseif ($view === 'tokens'): ?>
                                     <table class="table table-sm hip-table">
                                         <thead><tr><th>#</th><th>Patient</th><th>ABHA Address</th><th>Status</th><th>Token</th><th>Expires</th><th>Created</th></tr></thead>
                                         <tbody>
@@ -344,6 +411,48 @@ function status_badge(string $s): string
                                             </tr>
                                         <?php endforeach; ?>
                                         <?php if (!$rows): ?><tr><td colspan="7" class="text-center text-muted py-3">No rows.</td></tr><?php endif; ?>
+                                        </tbody>
+                                    </table>
+
+                                <?php elseif ($view === 'consents'): ?>
+                                    <table class="table table-sm hip-table">
+                                        <thead><tr><th>#</th><th>Consent ID</th><th>Patient</th><th>HIU</th><th>Purpose</th><th>HI Types</th><th>Date Range</th><th>Erase At</th><th>Status</th></tr></thead>
+                                        <tbody>
+                                        <?php foreach ($rows as $r): $hit = implode(', ', array_map('strval', (array) (json_decode((string) $r['hi_types'], true) ?: []))); ?>
+                                            <tr>
+                                                <td><?= (int) $r['id'] ?></td>
+                                                <td class="mono" title="<?= $h($r['consent_id']) ?>"><?= $h(substr((string) $r['consent_id'], 0, 12)) ?>…</td>
+                                                <td><?= $r['patient_name'] !== '' ? $h($r['patient_name']) : ($r['abha_address'] ? '<span class="mono">' . $h($r['abha_address']) . '</span>' : '<span class="text-muted">not held</span>') ?></td>
+                                                <td class="mono"><?= $h($r['hiu_id'] ?: '—') ?></td>
+                                                <td><?= $h($r['purpose_code'] ?: '—') ?></td>
+                                                <td style="font-size:.76rem;"><?= $h($hit ?: '—') ?></td>
+                                                <td class="mono" style="font-size:.74rem;"><?= $h(substr((string) $r['date_range_from'], 0, 10)) ?> → <?= $h(substr((string) $r['date_range_to'], 0, 10)) ?></td>
+                                                <td class="mono" style="font-size:.74rem;"><?= $h(substr((string) $r['data_erase_at'], 0, 10) ?: '—') ?></td>
+                                                <td><?= status_badge($r['status']) ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                        <?php if (!$rows): ?><tr><td colspan="9" class="text-center text-muted py-3">No rows.</td></tr><?php endif; ?>
+                                        </tbody>
+                                    </table>
+
+                                <?php elseif ($view === 'hi_requests'): ?>
+                                    <table class="table table-sm hip-table">
+                                        <thead><tr><th>#</th><th>Txn ID</th><th>Consent</th><th>Status</th><th>Date Range</th><th>Push URL</th><th>Key Mat.</th><th>Error</th><th>Created</th></tr></thead>
+                                        <tbody>
+                                        <?php foreach ($rows as $r): ?>
+                                            <tr>
+                                                <td><?= (int) $r['id'] ?></td>
+                                                <td class="mono"><?= $h($r['transaction_id'] ?: '—') ?></td>
+                                                <td class="mono" title="<?= $h($r['consent_id']) ?>"><?= $h(substr((string) $r['consent_id'], 0, 12)) ?>…<?= $r['consent_status'] ? ' ' . status_badge($r['consent_status']) : ' <span class="badge bg-light text-dark">?</span>' ?></td>
+                                                <td><?= status_badge($r['status']) ?></td>
+                                                <td class="mono" style="font-size:.74rem;"><?= $h(substr((string) $r['date_range_from'], 0, 10)) ?> → <?= $h(substr((string) $r['date_range_to'], 0, 10)) ?></td>
+                                                <td class="peek mono" title="<?= $h($r['data_push_url']) ?>"><?= $h($r['data_push_url'] ?: '—') ?></td>
+                                                <td><?= $r['has_km'] ? '<span class="badge bg-success">held</span>' : '<span class="text-muted">—</span>' ?></td>
+                                                <td style="font-size:.74rem;color:#b91c1c;"><?= $h($r['error_detail'] ?: '') ?></td>
+                                                <td class="mono"><?= $h($r['created_at']) ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                        <?php if (!$rows): ?><tr><td colspan="9" class="text-center text-muted py-3">No rows.</td></tr><?php endif; ?>
                                         </tbody>
                                     </table>
                                 <?php endif; ?>

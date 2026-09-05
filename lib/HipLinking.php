@@ -34,19 +34,24 @@ class HipLinking
      * Persist a raw callback BEFORE any parsing/validation. The payload is
      * length-capped so a flood can't blow up the row / table.
      *
+     * $channel groups which callback family this is — 'linking' (default,
+     * the HIP-linking webhook), 'consent' or 'hi_request' (HI Consent /
+     * data-request webhooks). See migration_abdm_hi_consent.sql.
+     *
      * @return int abdm_webhook_log.id
      */
-    public static function logWebhook(mysqli $conn, ?string $requestId, string $callbackType, string $rawPayload): int
+    public static function logWebhook(mysqli $conn, ?string $requestId, string $callbackType, string $rawPayload, string $channel = 'linking'): int
     {
         $rawPayload = mb_substr($rawPayload, 0, 65535);
         $requestId  = $requestId !== null ? mb_substr($requestId, 0, 64) : null;
         $callbackType = mb_substr($callbackType, 0, 60);
+        $channel = mb_substr($channel, 0, 20);
 
         $st = $conn->prepare(
-            "INSERT INTO abdm_webhook_log (request_id, callback_type, raw_payload, processed)
-             VALUES (?, ?, ?, 0)"
+            "INSERT INTO abdm_webhook_log (channel, request_id, callback_type, raw_payload, processed)
+             VALUES (?, ?, ?, ?, 0)"
         );
-        $st->bind_param('sss', $requestId, $callbackType, $rawPayload);
+        $st->bind_param('ssss', $channel, $requestId, $callbackType, $rawPayload);
         $st->execute();
         $id = (int) $conn->insert_id;
         $st->close();

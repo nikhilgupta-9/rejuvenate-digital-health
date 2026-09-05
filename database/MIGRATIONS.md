@@ -119,6 +119,7 @@ dump / phpMyAdmin: `doctors`, `users`, `admin_user`, `appointments`,
 |---|------|-------|
 | 33 | `migration_runtime_column_backfills.sql` | `doctor_bank_accounts.branch_name/account_type` (needs #8), `school_member_prescriptions.vitals` (needs #26) |
 | 33b | `migration_family_groups.sql` | `users.family_group_id` (CHAR(36) UUID) + `users.primary_contact_mobile` + `users.is_family_primary` + `idx_family_group`. Backs the "add family member" flow in `doctor/add-patient-new-abha.php` — several ABHA accounts (one Aadhaar each) sharing one real contact phone. No FK (grouping column, polymorphic pattern). |
+| 33c | `migration_abdm_hi_consent.sql` | `abdm_webhook_log.channel` (linking/consent/hi_request) + `abha_consents` (consentId unique, FK patient_id→users RESTRICT nullable, granted/revoked, hi_types/permission/signature/raw JSON) + `abha_hi_requests` (consent_id logical ref, keyMaterial JSON, status pending→acknowledged→ready_for_push→failed). Backs the HI Consent + Data-Request receive/ack plumbing (Phase A) — `telemedicine/api/abdm-consent-webhook.php` + `abdm-hi-request-webhook.php` + `lib/ConsentApi.php`. FHIR/encryption/push = Phase B. |
 
 ## 12. Referential integrity — run LAST
 

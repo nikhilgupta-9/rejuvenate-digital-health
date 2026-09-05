@@ -14,6 +14,8 @@ RewriteRule ^sitemap\.xml$ sitemap.php [L,QSA]
 RewriteRule ^api/v3/hip/token/on-generate-token$  telemedicine/api/abdm-webhook.php [L,QSA]
 RewriteRule ^api/v3/link/on_carecontext$          telemedicine/api/abdm-webhook.php [L,QSA]
 RewriteRule ^api/v3/links/context/on-notify$      telemedicine/api/abdm-webhook.php [L,QSA]
+RewriteRule ^api/v3/consent/request/hip/notify$   telemedicine/api/abdm-consent-webhook.php [L,QSA]
+RewriteRule ^api/v3/hip/health-information/request$ telemedicine/api/abdm-hi-request-webhook.php [L,QSA]
 
 # Rewrite Product Details URL
 RewriteRule ^department/([^/]+)/?$ e-cardiology.php?alias=$1 [L,QSA]

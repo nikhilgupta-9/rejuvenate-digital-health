@@ -102,6 +102,50 @@ class AuditLogger
     }
 
     /**
+     * Log an inbound HI Consent notify (the CM tells us a consent was
+     * GRANTED / REVOKED). event_type 'hi_consent_notify'.
+     *
+     * $consentStatus : 'GRANTED' | 'REVOKED' | 'UNKNOWN'
+     * $status        : 'SUCCESS' | 'FAILURE'
+     */
+    public function logHiConsentNotify(string $consentStatus, string $consentId, string $status, array $extra = []): void
+    {
+        $this->insert('hi_consent_notify', [
+            'entity_id'     => 0,
+            'entity_type'   => 'consent',
+            'auth_modality' => $consentStatus,
+            'txn_id'        => $consentId,
+            'auth_status'   => $status,
+            'ip_address'    => $this->clientIp(),
+            'user_agent'    => $this->safeUserAgent(),
+            'extra_data'    => ($e = $this->stripProhibited($extra)) ? json_encode($e) : null,
+            'log_type'      => 'CONSENT',
+        ]);
+    }
+
+    /**
+     * Log an inbound HI health-information request from a HIU (referencing a
+     * consent). event_type 'hi_data_request'.
+     *
+     * $status : 'ACKNOWLEDGED' | 'FAILURE'
+     */
+    public function logHiDataRequest(string $consentId, string $transactionId, string $status, array $extra = []): void
+    {
+        $this->insert('hi_data_request', [
+            'entity_id'     => 0,
+            'entity_type'   => 'consent',
+            'auth_modality' => 'HI_REQUEST',
+            'txn_id'        => $transactionId !== '' ? $transactionId : $consentId,
+            'auth_status'   => $status,
+            'resource'      => $consentId,
+            'ip_address'    => $this->clientIp(),
+            'user_agent'    => $this->safeUserAgent(),
+            'extra_data'    => ($e = $this->stripProhibited($extra)) ? json_encode($e) : null,
+            'log_type'      => 'CONSENT',
+        ]);
+    }
+
+    /**
      * Log an authentication attempt (login, OTP verify, ABHA login).
      * ABDM: Log ALL authentication failures.
      */
