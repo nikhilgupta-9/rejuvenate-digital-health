@@ -37,6 +37,24 @@ if (!$p) {
   exit;
 }
 
+// Family members — same family_group_id, and this doctor also has access to them
+$family = [];
+if (!empty($p['family_group_id'])) {
+  $fs = $conn->prepare("
+      SELECT u.id, u.name, u.last_name, u.is_family_primary,
+             COALESCE(aa.abha_address, u.abha_address) AS abha_address
+      FROM users u
+      JOIN doctor_patients dp ON dp.patient_id = u.id AND dp.doctor_id = ?
+      LEFT JOIN abha_accounts aa ON aa.entity_type = 'patient' AND aa.entity_id = u.id
+      WHERE u.family_group_id = ? AND u.id <> ?
+      ORDER BY u.is_family_primary DESC, u.name
+  ");
+  $fs->bind_param('isi', $doctor_id, $p['family_group_id'], $patient_id);
+  $fs->execute();
+  $family = $fs->get_result()->fetch_all(MYSQLI_ASSOC);
+  $fs->close();
+}
+
 // Calculate age
 $age = '';
 if (!empty($p['dob'])) {
@@ -80,7 +98,9 @@ require_once __DIR__ . '/inc/sidebar.php';
 <!DOCTYPE html>
 <html lang="en">
 
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title><?= htmlspecialchars($full_name) ?> — Patient Profile</title>
@@ -462,6 +482,37 @@ require_once __DIR__ . '/inc/sidebar.php';
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      <?php endif; ?>
+
+      <?php if (!empty($family)): ?>
+        <div class="info-section">
+          <div style="font-size:.8rem;font-weight:700;color:#374151;margin-bottom:12px;">
+            <i class="fa fa-users mr-1" style="color:#0C74C5;"></i> Family Members
+            <span style="font-weight:500;color:#9ca3af;">&nbsp;(same contact number)</span>
+          </div>
+          <div class="row">
+            <?php foreach ($family as $fm): ?>
+              <div class="col-md-6 mb-2">
+                <a href="<?= BASE_URL ?>doctor/patient-profile.php?id=<?= (int) $fm['id'] ?>"
+                   class="d-flex align-items-center"
+                   style="gap:10px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;text-decoration:none;color:inherit;">
+                  <span style="width:30px;height:30px;border-radius:8px;background:#eef2ff;color:#0C74C5;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">
+                    <i class="fa fa-user"></i>
+                  </span>
+                  <span style="min-width:0;">
+                    <span style="display:block;font-weight:600;font-size:.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                      <?= htmlspecialchars(trim($fm['name'] . ' ' . ($fm['last_name'] ?? ''))) ?>
+                      <?php if ($fm['is_family_primary']): ?><span class="abha-badge abha-ok" style="font-size:.62rem;">primary</span><?php endif; ?>
+                    </span>
+                    <span style="display:block;font-family:monospace;font-size:.74rem;color:#6b7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                      <?= htmlspecialchars($fm['abha_address'] ?: '—') ?>
+                    </span>
+                  </span>
+                </a>
+              </div>
+            <?php endforeach; ?>
           </div>
         </div>
       <?php endif; ?>

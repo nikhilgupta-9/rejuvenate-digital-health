@@ -137,7 +137,9 @@ $req_list = mysqli_query($conn, "
 ?>
 <!DOCTYPE html>
 <html lang="en">
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../../util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title><?= htmlspecialchars($school_name) ?> | ABHA Management</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">

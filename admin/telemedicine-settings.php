@@ -56,11 +56,12 @@ $s_live      = $stat("SELECT COUNT(*) c FROM telemedicine_rooms
 ?>
 <!DOCTYPE html>
 <html lang="en">
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <title>Telemedicine Settings | Admin Panel</title>
-    <link rel="icon" href="assets/img/logo.png" type="image/png">
     <?php include "links.php"; ?>
     <style>
         .check-row { display:flex; align-items:flex-start; gap:12px; padding:12px 0; border-bottom:1px solid #eef0f5; }

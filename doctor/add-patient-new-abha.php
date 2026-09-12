@@ -11,7 +11,9 @@ require_once __DIR__ . '/inc/sidebar.php';
 <!DOCTYPE html>
 <html lang="en">
 
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="csrf-token" content="<?= htmlspecialchars(Security::csrfToken()) ?>">
@@ -367,6 +369,11 @@ require_once __DIR__ . '/inc/sidebar.php';
 
       hideError('error2');
 
+      // "Add another family member" carry-forward (set by addFamilyMember())
+      const famPayload = window.familyPrimaryId
+        ? { family_of: window.familyPrimaryId, family_mobile: window.familyMobile || commMobile }
+        : {};
+
       if (!txnId) {
         txnId = sessionStorage.getItem('abdm_newabha_txnId') || '';
         if (!txnId) {
@@ -382,7 +389,7 @@ require_once __DIR__ . '/inc/sidebar.php';
       fetch(BASE + 'doctor/api/abdm-api.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'verify_otp', txnId: txnId, otp: otp, type: 'aadhaar', mobile: commMobile, _csrf: CSRF_TOKEN })
+        body: JSON.stringify(Object.assign({ action: 'verify_otp', txnId: txnId, otp: otp, type: 'aadhaar', mobile: commMobile, _csrf: CSRF_TOKEN }, famPayload))
       })
         .then(r => r.json())
         .then(data => {
@@ -393,6 +400,12 @@ require_once __DIR__ . '/inc/sidebar.php';
             showError('error2', data.error || 'OTP verification failed');
             return;
           }
+
+          window.lastPatientId  = data.patient_id || '';
+          window.lastCommMobile = commMobile;
+          // the first patient added in this session anchors the family group
+          if (!window.familyPrimaryId) window.familyPrimaryId = data.patient_id || null;
+          window.familyMobile = window.familyMobile || commMobile;
 
           showResult(true, data);
         })
@@ -434,6 +447,17 @@ require_once __DIR__ . '/inc/sidebar.php';
             <div><strong>ABHA Number:</strong> <span style="font-family:monospace;">${escapeHtml(abhaNumber)}</span></div>
             ${abhaAddress ? `<div><strong>ABHA Address:</strong> ${escapeHtml(abhaAddress)}</div>` : ''}
           </div>
+          ${data.family_member ? `<div class="alert alert-success alert-custom" style="max-width:400px;margin:0 auto 14px;font-size:.8rem;"><i class="fa fa-users mr-1"></i> Added to the same family group.</div>` : ''}
+          <div style="max-width:420px;margin:0 auto 16px;padding:14px;border:1px dashed var(--primary);border-radius:10px;background:#f8fbff;">
+            <div style="font-size:.82rem;color:var(--gray-700);margin-bottom:8px;">
+              <i class="fa fa-users mr-1" style="color:var(--primary);"></i>
+              Add another family member on <strong>${escapeHtml(window.familyMobile || '')}</strong>?
+              <div class="form-hint" style="margin-top:2px;">Each member needs their own Aadhaar (one Aadhaar = one ABHA).</div>
+            </div>
+            <button class="btn btn-primary-custom btn-sm" onclick="addFamilyMember()">
+              <i class="fa fa-user-plus mr-1"></i> Add Family Member
+            </button>
+          </div>
           <div class="d-flex justify-content-center" style="gap:10px;">
             <a href="${BASE}doctor/patient-profile.php?id=${data.patient_id || ''}" class="btn btn-primary-custom">
               <i class="fa fa-user mr-1"></i> View Profile
@@ -468,6 +492,28 @@ require_once __DIR__ . '/inc/sidebar.php';
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    // ── Add another family member (reuse the same Aadhaar-create flow) ──
+    function addFamilyMember() {
+      txnId = '';
+      document.getElementById('aadhaarInput').value = '';
+      const consent = document.getElementById('aadhaar_consent');
+      if (consent) consent.checked = false;
+      document.querySelectorAll('.otp-box').forEach(el => { el.value = ''; el.classList.remove('filled'); });
+      // carry the shared contact number into step 2
+      document.getElementById('commMobileInput').value = window.familyMobile || '';
+      hideError('error1'); hideError('error2');
+
+      const badge = document.getElementById('statusBadge');
+      if (badge) { badge.className = 'step-badge pending'; badge.innerHTML = '<i class="fa fa-users"></i> Family member'; }
+      document.querySelectorAll('.wi').forEach((el, i) => {
+        el.className = 'wi' + (i === 0 ? ' active' : '');
+        const wc = el.querySelector('.wc'); if (wc && i > 0) wc.textContent = i + 1;
+      });
+
+      goToStep(1);
+      document.getElementById('aadhaarInput').focus();
     }
   </script>
 </body>

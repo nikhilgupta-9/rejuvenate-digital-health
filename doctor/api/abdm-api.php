@@ -79,7 +79,7 @@ function loginHintFor(string $type): array {
  * Fetch full profile via X-token, resolve/create the patient, log the
  * event, and build the response payload shared by verify_otp + select_user.
  */
-function finishFromXToken(AbdmApi $abdm, mysqli $conn, AuditLogger $logger, int $doctorId, string $modality, string $txnId, string $xToken, string $mobileFallback = ''): void {
+function finishFromXToken(AbdmApi $abdm, mysqli $conn, AuditLogger $logger, int $doctorId, string $modality, string $txnId, string $xToken, string $mobileFallback = '', int $familyOf = 0, string $familyMobile = ''): void {
     $profileRes = $abdm->getProfile($xToken);
     if (!AbdmApi::wasSuccessful($profileRes)) {
         $logger->logAbhaAuth($doctorId, 'doctor', $modality, $txnId, 'FAILURE');
@@ -92,7 +92,9 @@ function finishFromXToken(AbdmApi $abdm, mysqli $conn, AuditLogger $logger, int 
     }
 
     try {
-        $saved = AbhaPatientResolver::resolveFromProfile($conn, $normalized, $doctorId);
+        $saved = $familyOf > 0
+            ? AbhaPatientResolver::resolveFamilyMember($conn, $normalized, $doctorId, $familyOf, $familyMobile ?: $mobileFallback)
+            : AbhaPatientResolver::resolveFromProfile($conn, $normalized, $doctorId);
     } catch (RuntimeException $e) {
         $logger->logAbhaAuth($doctorId, 'doctor', $modality, $txnId, 'FAILURE');
         fail($e->getMessage());
@@ -103,10 +105,11 @@ function finishFromXToken(AbdmApi $abdm, mysqli $conn, AuditLogger $logger, int 
     ]);
 
     ok([
-        'profile'     => $profileRes,
-        'abha_number' => $normalized['abha_number'],
-        'patient_id'  => $saved['patient_id'],
-        'is_new'      => $saved['is_new'],
+        'profile'       => $profileRes,
+        'abha_number'   => $normalized['abha_number'],
+        'patient_id'    => $saved['patient_id'],
+        'is_new'        => $saved['is_new'],
+        'family_member' => $familyOf > 0,
     ]);
 }
 
@@ -187,6 +190,18 @@ try {
                     fail('A valid 10-digit mobile number is required for ABHA communication');
                 }
 
+                /* "Add another family member" — group the new ABHA with an
+                   existing patient of THIS doctor, under one shared phone. */
+                $familyOf     = (int) ($data['family_of'] ?? 0);
+                $familyMobile = Validator::digitsOnly($data['family_mobile'] ?? '');
+                if ($familyOf > 0) {
+                    $fchk = $conn->prepare("SELECT 1 FROM doctor_patients WHERE doctor_id=? AND patient_id=? LIMIT 1");
+                    $fchk->bind_param('ii', $doctorId, $familyOf);
+                    $fchk->execute();
+                    if (!$fchk->get_result()->fetch_row()) $familyOf = 0; // not this doctor's patient — ignore
+                    $fchk->close();
+                }
+
                 $res = $abdm->enrolByAadhaar($otp, $txnId, $mobile);
                 $abhaNumber = $res['ABHANumber'] ?? ($res['ABHAProfile']['ABHANumber'] ?? '');
                 if (!$abhaNumber) {
@@ -199,14 +214,16 @@ try {
                 Security::clearRateLimit(Security::rlKey('doc_abdm_otp', Security::clientIp(), (string)$doctorId));
 
                 if ($xToken) {
-                    finishFromXToken($abdm, $conn, $logger, $doctorId, 'AADHAAR_OTP', $res['txnId'] ?? $txnId, $xToken, $mobile);
+                    finishFromXToken($abdm, $conn, $logger, $doctorId, 'AADHAAR_OTP', $res['txnId'] ?? $txnId, $xToken, $mobile, $familyOf, $familyMobile ?: $mobile);
                 }
 
                 // No X-token returned — fall back to the enrolment payload itself
                 $normalized = AbhaPatientResolver::normalizeAbdmProfile($res['ABHAProfile'] ?? $res);
                 if (strlen($normalized['mobile']) !== 10) $normalized['mobile'] = $mobile;
                 try {
-                    $saved = AbhaPatientResolver::resolveFromProfile($conn, $normalized, $doctorId);
+                    $saved = $familyOf > 0
+                        ? AbhaPatientResolver::resolveFamilyMember($conn, $normalized, $doctorId, $familyOf, $familyMobile ?: $mobile)
+                        : AbhaPatientResolver::resolveFromProfile($conn, $normalized, $doctorId);
                 } catch (RuntimeException $e) {
                     $logger->logAbhaAuth($doctorId, 'doctor', 'AADHAAR_OTP', $txnId, 'FAILURE');
                     fail($e->getMessage());
@@ -215,10 +232,11 @@ try {
                     'abha_number' => $normalized['abha_number'],
                 ]);
                 ok([
-                    'profile'     => $res['ABHAProfile'] ?? [],
-                    'abha_number' => $normalized['abha_number'],
-                    'patient_id'  => $saved['patient_id'],
-                    'is_new'      => $saved['is_new'],
+                    'profile'       => $res['ABHAProfile'] ?? [],
+                    'abha_number'   => $normalized['abha_number'],
+                    'patient_id'    => $saved['patient_id'],
+                    'is_new'        => $saved['is_new'],
+                    'family_member' => $familyOf > 0,
                 ]);
             }
 

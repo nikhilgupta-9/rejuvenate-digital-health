@@ -53,7 +53,9 @@ $jsonld = [
 ?>
 <!DOCTYPE html>
 <html lang="en">
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="author" content="REJUVENATE Digital Health">
@@ -210,6 +212,7 @@ $jsonld = [
                 .then(order => {
                     done();
                     if (!order.success) { say(order.message || 'Could not start the payment.', 'danger'); return; }
+                    if (order.free) { window.location = BASE_URL + 'doctor/doctor-dashboard.php'; return; }
                     const rzp = new Razorpay({
                         key: order.key_id, order_id: order.order_id, amount: order.amount, currency: order.currency,
                         name: 'Rejuvenate Digital Health',

@@ -39,6 +39,27 @@ if (!$plan) {
     exit;
 }
 
+// Free plan (price 0) — Razorpay rejects zero-amount orders, so activate
+// the membership directly instead of going through checkout.
+if ((float) $plan['price'] <= 0) {
+    $cycleDays = (int) $plan['billing_cycle_days'];
+
+    $doc = $conn->prepare("SELECT MAX(expires_at) AS current_expiry FROM doctor_subscriptions WHERE doctor_id = ? AND status = 'paid'");
+    $doc->bind_param('i', $doctor_id);
+    $doc->execute();
+    $currentExpiry = $doc->get_result()->fetch_assoc()['current_expiry'] ?? null;
+
+    $startsAt = ($currentExpiry && strtotime($currentExpiry) > time()) ? $currentExpiry : date('Y-m-d H:i:s');
+    $expiresAt = date('Y-m-d H:i:s', strtotime($startsAt . " +{$cycleDays} days"));
+
+    $ins = $conn->prepare("INSERT INTO doctor_subscriptions (doctor_id, plan_id, amount, status, starts_at, expires_at) VALUES (?, ?, 0, 'paid', ?, ?)");
+    $ins->bind_param('iiss', $doctor_id, $plan['id'], $startsAt, $expiresAt);
+    $ins->execute();
+
+    echo json_encode(['success' => true, 'free' => true, 'expires_at' => $expiresAt]);
+    exit;
+}
+
 if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
     error_log('[Razorpay] RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET not configured in .env');
     echo json_encode(['success' => false, 'message' => 'Online payment is temporarily unavailable. Please try again later.']);

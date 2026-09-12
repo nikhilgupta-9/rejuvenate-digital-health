@@ -69,6 +69,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             throw new Exception("Email already registered. Please use a different email or login.");
         }
 
+        // Check if phone already exists — same person re-signing up with a
+        // different email otherwise slips through as a duplicate account.
+        $phone_check_stmt = $conn->prepare("SELECT id FROM doctors WHERE phone = ? LIMIT 1");
+        $phone_check_stmt->bind_param('s', $phone);
+        $phone_check_stmt->execute();
+        if ($phone_check_stmt->get_result()->num_rows > 0) {
+            throw new Exception("This mobile number is already registered. Please use a different number or login.");
+        }
+
         if (!otp_consume_token('doctor', $phone, $mobile_verify_token)) {
             throw new Exception("Please verify your mobile number with the OTP before creating your account.");
         }
@@ -169,7 +178,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 ?>
 <!DOCTYPE html>
 <html lang="en">
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">

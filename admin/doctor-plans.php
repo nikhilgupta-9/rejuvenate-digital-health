@@ -143,11 +143,12 @@ if ($res) { while ($r = $res->fetch_assoc()) $plans[] = $r; }
 ?>
 <!DOCTYPE html>
 <html lang="zxx">
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <title>Doctor Subscription Plans | Admin Panel</title>
-    <link rel="icon" href="assets/img/logo.png" type="image/png">
     <?php include "links.php"; ?>
     <style>
         .badge_1{background:#2ecc71;color:#fff;padding:5px 12px;border-radius:30px;font-size:11px;font-weight:600;}

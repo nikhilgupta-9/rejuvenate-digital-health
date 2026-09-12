@@ -184,6 +184,145 @@ class AbhaPatientResolver
         return ['patient_id' => $patientId, 'is_new' => $isNew];
     }
 
+    /**
+     * Like resolveFromProfile(), but for an ADDITIONAL family member created
+     * under one shared contact mobile (doctor/add-patient-new-abha.php →
+     * "add another family member").
+     *
+     * ABDM rule: one Aadhaar = one ABHA, so every member is a separate `users`
+     * row. They share a phone, but `users.mobile` / `users.email` are UNIQUE —
+     * so a NEW member gets an ABHA-derived synthetic value there while the real
+     * shared number goes in `users.primary_contact_mobile`. Matching is by ABHA
+     * number ONLY (never the shared mobile/email).
+     *
+     * @param int    $primaryPatientId  an existing member of the family group
+     *                                  (the first patient added under this phone)
+     * @param string $sharedMobile      the real family contact number
+     * @return array{patient_id:int, is_new:bool}
+     */
+    public static function resolveFamilyMember(mysqli $conn, array $profile, int $doctorId, int $primaryPatientId, string $sharedMobile): array
+    {
+        $abhaNumber = $profile['abha_number'] ?? '';
+        $abhaDigits = preg_replace('/\D/', '', (string) $abhaNumber);
+
+        $existing = null;
+        if ($abhaNumber) {
+            $hit = Abha::find($conn, $abhaNumber);
+            if ($hit && ($hit['entity_type'] ?? '') === 'patient') {
+                $existing = (int) $hit['entity_id'];
+            }
+        }
+
+        if ($existing) {
+            $patientId = $existing;
+            $isNew = false;
+            $upd = $conn->prepare("
+                UPDATE users SET
+                  name   = CASE WHEN name='' OR name IS NULL THEN ? ELSE name END,
+                  gender = CASE WHEN gender='' OR gender IS NULL THEN ? ELSE gender END,
+                  dob    = CASE WHEN dob IS NULL THEN ? ELSE dob END
+                WHERE id = ?
+            ");
+            $upd->bind_param('sssi', $profile['name'], $profile['gender'], $profile['dob'], $patientId);
+            $upd->execute();
+            $upd->close();
+        } else {
+            $isNew = true;
+            $hash = password_hash(bin2hex(random_bytes(8)), PASSWORD_BCRYPT, ['cost' => 12]);
+
+            // Synthetic, collision-proof values for the UNIQUE columns. The
+            // 14-digit ABHA number can never collide with a 10-digit login.
+            $synMobile = strlen($abhaDigits) === 14 ? $abhaDigits : ('FAM' . bin2hex(random_bytes(6)));
+            $synEmail  = (strlen($abhaDigits) === 14 ? $abhaDigits : bin2hex(random_bytes(8))) . '@abha.invalid';
+
+            $ins = $conn->prepare("
+                INSERT INTO users
+                  (name, email, mobile, password, gender, dob, zip_code, city, state, address, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,NOW())
+            ");
+            $ins->bind_param(
+                'ssssssssss',
+                $profile['name'],
+                $synEmail,
+                $synMobile,
+                $hash,
+                $profile['gender'],
+                $profile['dob'],
+                $profile['pincode'],
+                $profile['district'],
+                $profile['state'],
+                $profile['address']
+            );
+            if (!$ins->execute()) {
+                throw new RuntimeException('Failed to create the family member record.');
+            }
+            $patientId = (int) $conn->insert_id;
+            $ins->close();
+        }
+
+        Abha::save($conn, 'patient', $patientId, [
+            'abha_number'  => $abhaNumber,
+            'abha_address' => $profile['abha_address'],
+            'linked'       => 1,
+            'verified'     => 1,
+            'source'       => 'abdm',
+        ]);
+
+        self::joinFamilyGroup($conn, $primaryPatientId, $patientId, $sharedMobile);
+        self::linkToDoctor($conn, $doctorId, $patientId);
+
+        return ['patient_id' => $patientId, 'is_new' => $isNew];
+    }
+
+    /**
+     * Put $memberId into $primaryId's family group, creating the group (and
+     * marking $primaryId the primary) on the first "add another".
+     */
+    private static function joinFamilyGroup(mysqli $conn, int $primaryId, int $memberId, string $sharedMobile): void
+    {
+        if ($primaryId <= 0 || $memberId <= 0 || $primaryId === $memberId) return;
+
+        $digits = preg_replace('/\D/', '', (string) $sharedMobile);
+        $mob = strlen($digits) === 10 ? $digits : null;
+
+        $st = $conn->prepare("SELECT family_group_id FROM users WHERE id = ?");
+        $st->bind_param('i', $primaryId);
+        $st->execute();
+        $gid = $st->get_result()->fetch_assoc()['family_group_id'] ?? null;
+        $st->close();
+
+        if (!$gid) {
+            $gid = self::uuid4();
+            $u = $conn->prepare("
+                UPDATE users
+                   SET family_group_id = ?, is_family_primary = 1,
+                       primary_contact_mobile = COALESCE(primary_contact_mobile, ?)
+                 WHERE id = ?
+            ");
+            $u->bind_param('ssi', $gid, $mob, $primaryId);
+            $u->execute();
+            $u->close();
+        }
+
+        $u = $conn->prepare("
+            UPDATE users
+               SET family_group_id = ?, is_family_primary = 0,
+                   primary_contact_mobile = COALESCE(primary_contact_mobile, ?)
+             WHERE id = ?
+        ");
+        $u->bind_param('ssi', $gid, $mob, $memberId);
+        $u->execute();
+        $u->close();
+    }
+
+    private static function uuid4(): string
+    {
+        $b = random_bytes(16);
+        $b[6] = chr((ord($b[6]) & 0x0f) | 0x40);
+        $b[8] = chr((ord($b[8]) & 0x3f) | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($b), 4));
+    }
+
     /** Link doctor <-> patient. doctor_patients schema: database/migration_doctor_abha.sql */
     private static function linkToDoctor(mysqli $conn, int $doctorId, int $patientId): void
     {

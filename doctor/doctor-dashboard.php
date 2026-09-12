@@ -62,7 +62,9 @@ if (empty($jwt_doctor['_active_ok'])) {
     ?>
 <!DOCTYPE html>
 <html lang="en">
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Activate Your Account | REJUVENATE Doctor Portal</title>
@@ -366,7 +368,9 @@ $earnings = $earnings_result->fetch_assoc();
 <!DOCTYPE html>
 <html lang="en">
 
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard | REJUVENATE Doctor Portal</title>

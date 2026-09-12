@@ -22,12 +22,13 @@ $result = $conn->query("SELECT * FROM brands ORDER BY created_at DESC");
 
 <!-- Mirrored from demo.dashboardpack.com/sales-html/themefy_icon.html by HTTrack Website Copier/3.x [XR&CO'2014], Sun, 16 Apr 2023 14:08:14 GMT -->
 
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
 
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <title>Sales</title>
-    <link rel="icon" href="assets/img/logo.png" type="image/png">
 
     <?php include "links.php"; ?>
 </head>

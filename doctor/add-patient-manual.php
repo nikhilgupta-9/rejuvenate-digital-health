@@ -11,7 +11,9 @@ $prefill_mobile = preg_replace('/\D/', '', ($_GET['mobile'] ?? ''));
 <!DOCTYPE html>
 <html lang="en">
 
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Register Patient — Rejuvenate</title>

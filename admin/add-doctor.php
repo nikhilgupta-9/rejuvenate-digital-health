@@ -40,6 +40,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             throw new Exception("Please select at least one department");
         }
 
+        // This form collects no email/phone (those are set later when the
+        // doctor completes their own signup), so name is the only signal
+        // available to catch an accidental re-submit creating a duplicate
+        // profile. A real second doctor sharing a name can tick "add anyway".
+        if (empty($_POST['confirm_duplicate'])) {
+            $dup_stmt = $conn->prepare("SELECT id FROM doctors WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1");
+            $dup_stmt->bind_param('s', $name);
+            $dup_stmt->execute();
+            if ($dup_stmt->get_result()->fetch_assoc()) {
+                throw new Exception("A doctor named \"$name\" already exists. If this is a different person, tick \"This is a different doctor\" below and submit again.");
+            }
+        }
+
         // Generate doctor UID
         $doctor_uid = 'DOC' . date('YmdHis') . rand(100, 999);
 
@@ -172,11 +185,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <!DOCTYPE html>
 <html lang="en">
 
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <title>Add Doctor | Admin Panel</title>
-    <link rel="icon" href="assets/img/logo.png" type="image/png">
     <?php include "links.php"; ?>
     <style>
         .doctor-form {
@@ -299,6 +313,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     <div class="col-md-6 mb-3">
                                         <label class="form-label">Doctor Name <span class="text-danger">*</span></label>
                                         <input type="text" class="form-control" name="name" required value="<?= htmlspecialchars($_POST['name'] ?? '') ?>">
+                                        <?php if (!empty($error_message) && str_contains($error_message, 'already exists')): ?>
+                                            <div class="form-check mt-2">
+                                                <input class="form-check-input" type="checkbox" name="confirm_duplicate" value="1" id="confirmDuplicateCheck">
+                                                <label class="form-check-label small" for="confirmDuplicateCheck">This is a different doctor — add anyway</label>
+                                            </div>
+                                        <?php endif; ?>
                                     </div>
 
                                     <div class="col-md-6 mb-3">

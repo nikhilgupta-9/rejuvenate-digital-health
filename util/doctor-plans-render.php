@@ -91,9 +91,11 @@ function render_doctor_plan_cards(array $plans, array $opts = []): void
     <h3 class="dpc-name"><?= _dpc_e($p['name']) ?></h3>
     <div class="dpc-tag"><?= _dpc_e($p['tagline'] ?? '') ?></div>
 
-    <div class="dpc-price">&#8377;<?= number_format($price) ?></div>
+    <div class="dpc-price"><?= $price > 0 ? '&#8377;' . number_format($price) : 'Free' ?></div>
     <span class="dpc-dur"><i class="fas fa-calendar-alt me-1"></i><?= _dpc_e(plan_duration_text($days)) ?> plan</span>
-    <?php if ($perMonth !== null && (int)$months !== 1): ?>
+    <?php if ($price <= 0): ?>
+      <span class="dpc-permonth">No charge for <?= _dpc_e(plan_duration_text($days)) ?></span>
+    <?php elseif ($perMonth !== null && (int)$months !== 1): ?>
       <span class="dpc-permonth">&asymp; &#8377;<?= number_format($perMonth) ?> / month, billed once for <?= _dpc_e(plan_duration_text($days)) ?></span>
     <?php else: ?>
       <span class="dpc-permonth">Billed once every <?= _dpc_e(plan_duration_text($days)) ?></span>
@@ -110,7 +112,7 @@ function render_doctor_plan_cards(array $plans, array $opts = []): void
     <?php if ($ctaMode === 'subscribe'): ?>
       <button type="button" class="dpc-cta dpc-subscribe" data-plan-id="<?= (int)$p['id'] ?>"
               data-plan-name="<?= _dpc_e($p['name']) ?>" data-plan-price="<?= number_format($price) ?>">
-        Subscribe &ndash; &#8377;<?= number_format($price) ?>
+        <?= $price > 0 ? 'Subscribe &ndash; &#8377;' . number_format($price) : 'Activate for Free' ?>
       </button>
     <?php else: ?>
       <a class="dpc-cta" href="<?= _dpc_e($signupUrl) ?>">Join &amp; Choose This Plan</a>

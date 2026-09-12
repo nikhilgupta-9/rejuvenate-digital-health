@@ -153,7 +153,9 @@ class Abha
         $col = $byNumber ? 'abha_id' : 'abha_address';
         foreach (['patient' => 'users', 'school_member' => 'school_members', 'doctor' => 'doctors'] as $type => $tbl) {
             if ($type === 'doctor' && !$byNumber) continue; // doctors has no abha_address
-            $st = $conn->prepare("SELECT id, abha_id, abha_address FROM `$tbl` WHERE `$col` = ? LIMIT 1");
+            // `doctors` has abha_id but NOT abha_address
+            $sel = ($tbl === 'doctors') ? 'id, abha_id, NULL AS abha_address' : 'id, abha_id, abha_address';
+            $st = $conn->prepare("SELECT $sel FROM `$tbl` WHERE `$col` = ? LIMIT 1");
             $st->bind_param('s', $value);
             $st->execute();
             $r = $st->get_result()->fetch_assoc();

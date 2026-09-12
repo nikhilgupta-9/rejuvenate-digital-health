@@ -78,12 +78,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_action'])) {
 ?>
 <!DOCTYPE html>
 <html lang="zxx">
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
 
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <title>Medical Department Management | Admin Dashboard</title>
-    <link rel="icon" href="assets/img/logo.png" type="image/png">
 
     <?php include "links.php"; ?>
 
@@ -258,7 +259,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_action'])) {
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    <?php echo get_Sub_Category(); ?>
+                                                    <?php echo get_sub_category_admin_rows(); ?>
                                                 </tbody>
                                             </table>
                                         </div>

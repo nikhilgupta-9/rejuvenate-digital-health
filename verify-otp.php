@@ -91,7 +91,9 @@ $can_resend = $time_elapsed > 60; // Can resend after 60 seconds
 
 <!DOCTYPE html>
 <html lang="en">
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
     <meta charset="UTF-8">
     <title>Verify OTP | REJUVENATE Digital Health</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">

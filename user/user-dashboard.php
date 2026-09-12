@@ -90,7 +90,9 @@ $stmt->close();
 <!DOCTYPE html>
 <html lang="en">
 
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -107,28 +109,6 @@ $stmt->close();
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/nice-select.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
-  <style>
-    .dashboard-stats {
-        margin-bottom: 2rem;
-    }
-    .recent-appointments {
-        background: white;
-        border-radius: 12px;
-        padding: 1.5rem;
-        box-shadow: 0 1px 6px rgba(0,0,0,.06);
-        margin-top: 2rem;
-    }
-    .dashboard{
-    width:100%;
-    min-width:0;
-}
-@media (min-width:992px){
-    .patient-content{
-        margin-left:280px; /* sidebar width */
-        width:calc(100% - 280px);
-    }
-}
-  </style>
 </head>
 
 <body>
@@ -177,134 +157,104 @@ $stmt->close();
           <?php endif; ?>
 
           <!-- Statistics Cards -->
-          <div class="dashboard-stats">
-    <div class="row g-3 g-md-4">
-        <div class="col-12 col-sm-6 col-md-3">
-            <div class="stat-card card-primary h-100">
-                <i class="fa fa-calendar bg-icon"></i>
-                <h3><?= $appointment_count ?></h3>
-                <p>Total Appointments</p>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-md-3">
-            <div class="stat-card card-orange h-100">
-                <i class="fa fa-hourglass-half bg-icon"></i>
-                <h3><?= $pending_appointments ?></h3>
-                <p>Pending Appointments</p>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-md-3">
-            <div class="stat-card card-teal2 h-100">
-                <i class="fa fa-file-text-o bg-icon"></i>
-                <h3><?= $reports_count ?></h3>
-                <p>Medical Reports</p>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-md-3">
-            <div class="stat-card card-purple h-100">
-                <i class="fa fa-shopping-bag bg-icon"></i>
-                <h3><?= $orders_count ?></h3>
-                <p>Supplement Orders</p>
-            </div>
-        </div>
-    </div>
-</div>
+          <p class="section-title">Overview</p>
+          <div class="row g-3 g-md-4">
+              <div class="col-12 col-sm-6 col-md-3">
+                  <div class="stat-card card-primary h-100">
+                      <i class="fa fa-calendar bg-icon"></i>
+                      <h3><?= $appointment_count ?></h3>
+                      <p>Total Appointments</p>
+                  </div>
+              </div>
+              <div class="col-12 col-sm-6 col-md-3">
+                  <div class="stat-card card-orange h-100">
+                      <i class="fa fa-hourglass-half bg-icon"></i>
+                      <h3><?= $pending_appointments ?></h3>
+                      <p>Pending Appointments</p>
+                  </div>
+              </div>
+              <div class="col-12 col-sm-6 col-md-3">
+                  <div class="stat-card card-teal2 h-100">
+                      <i class="fa fa-file-text-o bg-icon"></i>
+                      <h3><?= $reports_count ?></h3>
+                      <p>Medical Reports</p>
+                  </div>
+              </div>
+              <div class="col-12 col-sm-6 col-md-3">
+                  <div class="stat-card card-purple h-100">
+                      <i class="fa fa-shopping-bag bg-icon"></i>
+                      <h3><?= $orders_count ?></h3>
+                      <p>Supplement Orders</p>
+                  </div>
+              </div>
+          </div>
 
           <!-- Quick Actions -->
-          <div class="profile-card shadow">
-            <h4 class="mb-4">Quick Actions</h4>
-            <div class="row mt-4">
-              <div class="col-md-4">
-                <div class="user_dash_box">
-                  <a href="my-bookings.php">
-                    <img src="<?= BASE_URL ?>assets/img/d1.jpeg" alt="My Bookings">
-                    <h5>My Bookings</h5>
-                    <small><?= $appointment_count ?> bookings</small>
-                  </a>
-                </div>
+          <p class="section-title mt-4">Quick Actions</p>
+          <div class="row g-3">
+            <?php
+            $actions = [
+                [BASE_URL . 'user/my-bookings.php',             'bg-primary-theme text-white', 'fa fa-calendar',       'My Bookings'],
+                [BASE_URL . 'user/my-reports.php',               'bg-accent-theme text-white',  'fa fa-file-text-o',    'My Reports'],
+                [BASE_URL . 'user/my-supplement-order.php',      'bg-orange text-white',        'fa fa-shopping-bag',   'Supplement Order'],
+                [BASE_URL . 'user/my-doctor-appointments.php',   'bg-green text-white',         'fa fa-stethoscope',    'Doctor Appointments'],
+                [BASE_URL . 'user/manage-address.php',           'bg-purple text-white',        'fa fa-map-marker',     'Manage Addresses'],
+                [BASE_URL . 'user/help-and-contact.php',         'bg-secondary text-white',     'fa fa-life-ring',      'Help & Contact'],
+            ];
+            foreach ($actions as [$href, $cls, $icon, $title]):
+            ?>
+              <div class="col-6 col-sm-4 col-md-3 col-xl-2">
+                <a href="<?= $href ?>" class="quick-action">
+                  <div style="width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;"
+                    class="<?= $cls ?>">
+                    <i class="<?= $icon ?>" style="font-size:1.1rem;"></i>
+                  </div>
+                  <span><?= $title ?></span>
+                </a>
               </div>
-              <div class="col-md-4">
-                <div class="user_dash_box">
-                  <a href="my-reports.php">
-                    <img src="<?= BASE_URL ?>assets/img/d2.jpeg" alt="My Reports">
-                    <h5>My Reports</h5>
-                    <small><?= $reports_count ?> reports</small>
-                  </a>
-                </div>
-              </div>
-              <div class="col-md-4">
-                <div class="user_dash_box">
-                  <a href="my-supplement-order.php">
-                    <img src="<?= BASE_URL ?>assets/img/d3.jpeg" alt="My Supplement Order">
-                    <h5>My Supplement Order</h5>
-                    <small><?= $orders_count ?> orders</small>
-                  </a>
-                </div>
-              </div>
-              <div class="col-md-4">
-                <div class="user_dash_box">
-                  <a href="my-doctor-appointments.php">
-                    <img src="<?= BASE_URL ?>assets/img/d4.jpeg" alt="My Doctor Appointments">
-                    <h5>My Doctor Appointments</h5>
-                    <small><?= $pending_appointments ?> pending</small>
-                  </a>
-                </div>
-              </div>
-              <div class="col-md-4">
-                <div class="user_dash_box">
-                  <a href="manage-address.php">
-                    <img src="<?= BASE_URL ?>assets/img/d5.jpeg" alt="Manage Addresses">
-                    <h5>Manage Addresses</h5>
-                    <small>Update delivery addresses</small>
-                  </a>
-                </div>
-              </div>
-              <div class="col-md-4">
-                <div class="user_dash_box">
-                  <a href="help-and-contact.php">
-                    <img src="<?= BASE_URL ?>assets/img/d6.jpeg" alt="Help & Contact Us">
-                    <h5>Help & Contact Us</h5>
-                    <small>24/7 Support</small>
-                  </a>
-                </div>
-              </div>
-            </div>
+            <?php endforeach; ?>
           </div>
 
           <!-- Recent Appointments -->
           <?php if (!empty($recent_appointments)): ?>
-          <div class="recent-appointments">
-            <h4 class="mb-4">Recent Appointments</h4>
-            <div class="table-responsive">
-              <table class="table table-hover">
-                <thead>
-                  <tr>
-                    <th>Doctor</th>
-                    <th>Specialization</th>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <?php foreach ($recent_appointments as $appointment): ?>
-                  <tr>
-                    <td><?= htmlspecialchars($appointment['doctor_name'] ?? 'N/A') ?></td>
-                    <td><?= htmlspecialchars($appointment['specialization'] ?? 'N/A') ?></td>
-                    <td><?= date('M j, Y', strtotime($appointment['appointment_date'])) ?></td>
-                    <td><?= date('h:i A', strtotime($appointment['appointment_time'])) ?></td>
-                    <td>
-                      <span class="status-badge status-<?= $appointment['status'] ?>">
-                        <?= ucfirst($appointment['status']) ?>
-                      </span>
-                    </td>
-                  </tr>
-                  <?php endforeach; ?>
-                </tbody>
-              </table>
+          <p class="section-title mt-4">Recent Appointments</p>
+          <div class="card border-0 shadow-sm rounded-3">
+            <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3 pb-2">
+              <h6 class="fw-bold mb-0">
+                <i class="fa fa-calendar-check-o me-2" style="color:var(--primary)"></i>
+                Recent Appointments
+              </h6>
+              <a href="my-doctor-appointments.php" class="btn btn-sm btn-outline-primary">View All</a>
             </div>
-            <div class="text-center mt-3">
-              <a href="my-doctor-appointments.php" class="btn btn-outline-primary">View All Appointments</a>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th style="font-size:.73rem;">Doctor</th>
+                      <th style="font-size:.73rem;">Specialization</th>
+                      <th style="font-size:.73rem;">Date</th>
+                      <th style="font-size:.73rem;">Time</th>
+                      <th style="font-size:.73rem;">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <?php foreach ($recent_appointments as $appointment): ?>
+                    <tr>
+                      <td style="font-size:.83rem;"><?= htmlspecialchars($appointment['doctor_name'] ?? 'N/A') ?></td>
+                      <td style="font-size:.83rem;"><?= htmlspecialchars($appointment['specialization'] ?? 'N/A') ?></td>
+                      <td style="font-size:.83rem;"><?= date('M j, Y', strtotime($appointment['appointment_date'])) ?></td>
+                      <td style="font-size:.83rem;"><?= date('h:i A', strtotime($appointment['appointment_time'])) ?></td>
+                      <td>
+                        <span class="status-badge status-<?= $appointment['status'] ?>">
+                          <?= ucfirst($appointment['status']) ?>
+                        </span>
+                      </td>
+                    </tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
           <?php endif; ?>

@@ -43,7 +43,9 @@ $cert_no = 'MC-' . str_pad($cert['id'], 6, '0', STR_PAD_LEFT);
 <!DOCTYPE html>
 <html lang="en">
 
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title><?= htmlspecialchars($cert['certificate_type']) ?> — <?= htmlspecialchars($cert['student_name']) ?></title>

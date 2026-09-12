@@ -5,23 +5,122 @@ session_start();
 include_once "db-conn.php";
 include_once "functions.php";
 
-// Handle delete action — SOFT delete only. A doctor row is referenced by
-// appointments / prescriptions / doctor_patients / settlements (FK RESTRICT);
-// a hard DELETE would either fail or destroy clinical + payout history.
-if (isset($_GET['delete_id'])) {
+// Every action below redirects back preserving the current filter tab, so
+// toggling/deleting a doctor while viewing e.g. "Active" doesn't silently
+// dump the admin back onto "All Doctors" — which made the action look like
+// it hadn't done anything.
+$redirect_qs = !empty($_GET['type']) ? '?type=' . urlencode($_GET['type']) : '';
+
+// Handle PERMANENT delete — a real, irreversible DELETE FROM doctors, only
+// ever allowed once every RESTRICT-linked table (appointments, prescriptions,
+// doctor_patients, school certs/prescriptions) has zero rows for this doctor.
+// That's the FK policy this schema is built on (see CLAUDE.md — RESTRICT on
+// clinical/identity refs, for ABDM/NHA retention) and it's not bypassed here:
+// a doctor with any real history can never be hard-deleted, only deactivated.
+// Tables with no FK at all (doctor_departments, abha_accounts, ...) are
+// cleaned up explicitly since the DB won't cascade them on its own.
+if (isset($_GET['permanent_delete_id'])) {
+    $pd_id = intval($_GET['permanent_delete_id']);
     try {
-        $delete_id = intval($_GET['delete_id']);
-        $stmt = $conn->prepare("UPDATE doctors SET status = 'Inactive' WHERE id = ?");
-        $stmt->bind_param('i', $delete_id);
-        if ($stmt->execute()) {
-            $_SESSION['success_message'] = "Doctor deactivated. Their records are retained.";
+        $blockers = [
+            'appointments'                => 'appointment(s)',
+            'doctor_patients'             => 'linked patient(s)',
+            'prescriptions'               => 'prescription(s)',
+            'school_member_certificates'  => 'school certificate(s) issued',
+            'school_member_prescriptions' => 'school prescription(s) issued',
+        ];
+        $reasons = [];
+        foreach ($blockers as $table => $label) {
+            $c = $conn->prepare("SELECT COUNT(*) c FROM `$table` WHERE doctor_id = ?");
+            $c->bind_param('i', $pd_id);
+            $c->execute();
+            $count = (int) $c->get_result()->fetch_assoc()['c'];
+            if ($count > 0) {
+                $reasons[] = "$count $label";
+            }
+        }
+
+        if (!empty($reasons)) {
+            throw new Exception("Can't permanently delete — this doctor has " . implode(', ', $reasons) . ". Their records must be retained; only deactivation is available.");
+        }
+
+        $chk = $conn->prepare("SELECT name, status FROM doctors WHERE id = ?");
+        $chk->bind_param('i', $pd_id);
+        $chk->execute();
+        $doc = $chk->get_result()->fetch_assoc();
+        if (!$doc) {
+            throw new Exception("Doctor not found");
+        }
+        if ($doc['status'] !== 'Inactive') {
+            throw new Exception("Deactivate this doctor first before permanently deleting them.");
+        }
+
+        $conn->begin_transaction();
+        try {
+            // Auxiliary tables with no FK constraint on doctor_id — these
+            // won't cascade automatically when the doctors row is deleted.
+            foreach (['doctor_departments', 'doctor_deletion_requests', 'doctor_reviews', 'doctor_subscriptions', 'hpr_verification_requests', 'opd_records', 'patient_documents'] as $table) {
+                $d = $conn->prepare("DELETE FROM `$table` WHERE doctor_id = ?");
+                $d->bind_param('i', $pd_id);
+                $d->execute();
+            }
+            // Polymorphic references (entity_type/entity_id, no FK by design).
+            $d = $conn->prepare("DELETE FROM abha_accounts WHERE entity_type = 'doctor' AND entity_id = ?");
+            $d->bind_param('i', $pd_id);
+            $d->execute();
+            $d = $conn->prepare("DELETE FROM jwt_refresh_tokens WHERE entity_type = 'doctor' AND entity_id = ?");
+            $d->bind_param('i', $pd_id);
+            $d->execute();
+
+            // The doctors row itself. FK ON DELETE CASCADE tables (doctor_sessions,
+            // doctor_documents, doctor_gallery, doctor_bank_accounts, doctor_schedules,
+            // hpr_verification_txns, doctor_google_tokens, doctor_password_history/logs,
+            // appointment_settlements, doctor_referral_earnings) are removed by the DB.
+            $del = $conn->prepare("DELETE FROM doctors WHERE id = ?");
+            $del->bind_param('i', $pd_id);
+            $del->execute();
+
+            $conn->commit();
+            $_SESSION['success_message'] = "Dr. {$doc['name']} was permanently deleted.";
+        } catch (Throwable $e) {
+            $conn->rollback();
+            throw $e;
+        }
+    } catch (Throwable $e) {
+        $_SESSION['error_message'] = $e->getMessage();
+    }
+    header("Location: doctors-list.php" . $redirect_qs);
+    exit();
+}
+
+// Handle Active/Inactive toggle — the primary status control (mirrors the
+// same toggle_status pattern used on admin/all-customers.php).
+if (isset($_GET['toggle_status'])) {
+    try {
+        $toggle_id = intval($_GET['toggle_status']);
+
+        $cur = $conn->prepare("SELECT status FROM doctors WHERE id = ?");
+        $cur->bind_param('i', $toggle_id);
+        $cur->execute();
+        $row = $cur->get_result()->fetch_assoc();
+
+        if (!$row) {
+            throw new Exception("Doctor not found");
+        }
+
+        $new_status = ($row['status'] === 'Active') ? 'Inactive' : 'Active';
+        $upd = $conn->prepare("UPDATE doctors SET status = ? WHERE id = ?");
+        $upd->bind_param('si', $new_status, $toggle_id);
+
+        if ($upd->execute()) {
+            $_SESSION['success_message'] = "Doctor status updated to $new_status.";
         } else {
-            throw new Exception("Failed to deactivate doctor");
+            throw new Exception("Failed to update doctor status");
         }
     } catch (Exception $e) {
         $_SESSION['error_message'] = $e->getMessage();
     }
-    header("Location: doctors-list.php");
+    header("Location: doctors-list.php" . $redirect_qs);
     exit();
 }
 
@@ -75,7 +174,7 @@ if (isset($_GET['verify_id'])) {
     } catch (Exception $e) {
         $_SESSION['error_message'] = $e->getMessage();
     }
-    header("Location: doctors-list.php");
+    header("Location: doctors-list.php" . $redirect_qs);
     exit();
 }
 
@@ -94,7 +193,7 @@ if (isset($_GET['unverify_id'])) {
     } catch (Exception $e) {
         $_SESSION['error_message'] = $e->getMessage();
     }
-    header("Location: doctors-list.php");
+    header("Location: doctors-list.php" . $redirect_qs);
     exit();
 }
 
@@ -147,11 +246,12 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
 <!DOCTYPE html>
 <html lang="en">
 
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <title>Doctors List | Admin Panel</title>
-    <link rel="icon" href="assets/img/logo.png" type="image/png">
     <?php include "links.php"; ?>
     <style>
         /* page-specific only */
@@ -284,11 +384,16 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
                                                     <div class="d-inline-flex flex-wrap gap-1 justify-content-end">
                                                         <a href="doctor-edit.php?id=<?= $doctor['id'] ?>" class="tbl-action-btn bg-primary text-white" title="Edit"><i class="fas fa-edit"></i></a>
                                                         <?php if ($doctor['is_verified']): ?>
-                                                            <a href="doctors-list.php?unverify_id=<?= $doctor['id'] ?>" class="tbl-action-btn bg-warning text-dark" onclick="return confirm('Remove verification for this doctor?')" title="Unverify"><i class="fas fa-times-circle"></i></a>
+                                                            <a href="doctors-list.php?unverify_id=<?= $doctor['id'] ?><?= $type_filter !== 'all' ? '&type=' . urlencode($type_filter) : '' ?>" class="tbl-action-btn bg-warning text-dark" onclick="return confirm('Remove verification for this doctor?')" title="Unverify"><i class="fas fa-times-circle"></i></a>
                                                         <?php else: ?>
-                                                            <a href="doctors-list.php?verify_id=<?= $doctor['id'] ?>" class="tbl-action-btn bg-success text-white" onclick="return confirm('Verify this doctor?')" title="Verify"><i class="fas fa-check-circle"></i></a>
+                                                            <a href="doctors-list.php?verify_id=<?= $doctor['id'] ?><?= $type_filter !== 'all' ? '&type=' . urlencode($type_filter) : '' ?>" class="tbl-action-btn bg-success text-white" onclick="return confirm('Verify this doctor?')" title="Verify"><i class="fas fa-check-circle"></i></a>
                                                         <?php endif; ?>
-                                                        <a href="doctors-list.php?delete_id=<?= $doctor['id'] ?>" class="tbl-action-btn bg-danger text-white" onclick="return confirm('Are you sure you want to delete this doctor?')" title="Delete"><i class="fas fa-trash"></i></a>
+                                                        <?php if ($doctor['status'] === 'Active'): ?>
+                                                            <a href="doctors-list.php?toggle_status=<?= $doctor['id'] ?><?= $type_filter !== 'all' ? '&type=' . urlencode($type_filter) : '' ?>" class="tbl-action-btn bg-secondary text-white" onclick="return confirm('Deactivate Dr. <?= htmlspecialchars(addslashes($doctor['name'])) ?>? They won\'t appear for new bookings until reactivated. Permanent delete becomes available once they are Inactive.')" title="Deactivate"><i class="fas fa-toggle-on"></i></a>
+                                                        <?php else: ?>
+                                                            <a href="doctors-list.php?toggle_status=<?= $doctor['id'] ?><?= $type_filter !== 'all' ? '&type=' . urlencode($type_filter) : '' ?>" class="tbl-action-btn bg-success text-white" onclick="return confirm('Activate Dr. <?= htmlspecialchars(addslashes($doctor['name'])) ?>?')" title="Activate"><i class="fas fa-toggle-off"></i></a>
+                                                            <a href="doctors-list.php?permanent_delete_id=<?= $doctor['id'] ?><?= $type_filter !== 'all' ? '&type=' . urlencode($type_filter) : '' ?>" class="tbl-action-btn bg-dark text-white" onclick="return confirm('PERMANENTLY delete Dr. <?= htmlspecialchars(addslashes($doctor['name'])) ?>? This cannot be undone. It will only succeed if they have no appointments, prescriptions or patients on file.')" title="Permanent Delete"><i class="fas fa-trash-alt"></i></a>
+                                                        <?php endif; ?>
                                                     </div>
                                                 </td>
                                             </tr>

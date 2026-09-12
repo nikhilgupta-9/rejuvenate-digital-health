@@ -196,7 +196,10 @@ if (isset($_POST["add-sub-categories"])) {
     }
 }
 
-function get_Category() {
+// Renamed from get_Category() — PHP function names are case-insensitive, so
+// that name collided with util/function.php::get_category() (redeclare fatal)
+// on every page that includes both. See CLAUDE.md / bug report 2026-09-12.
+function get_category_admin_rows() {
     include "db-conn.php";
 
     $sql = "SELECT * FROM `categories` ORDER BY id DESC";
@@ -337,7 +340,9 @@ if (isset($_POST["add-product"])) {
 
 
 
-function get_Sub_Category() {
+// Renamed from get_Sub_Category() — collided (case-insensitively) with
+// util/function.php::get_sub_category(). See CLAUDE.md / bug report 2026-09-12.
+function get_sub_category_admin_rows() {
     include "db-conn.php";
 
     // Scoped to the "Medical Departments" parent category (cate_id 20873) —

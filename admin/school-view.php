@@ -37,7 +37,9 @@ $members_list = mysqli_query($conn, "SELECT * FROM school_members $m_where ORDER
 <!DOCTYPE html>
 <html lang="en">
 
+<?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../util/function.php'; } ?>
 <head>
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>Admin | <?= htmlspecialchars($school['school_name']) ?></title>
