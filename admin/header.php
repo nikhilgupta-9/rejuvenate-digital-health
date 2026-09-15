@@ -26,6 +26,9 @@ if ($is_admin && isset($conn)) {
     $consent_pending = 0;
     $_cp = @mysqli_query($conn, "SELECT COUNT(*) as c FROM parent_consent_forms WHERE status='pending'");
     if ($_cp) $consent_pending = (int)(mysqli_fetch_assoc($_cp)['c'] ?? 0);
+    $school_sub_pending = 0;
+    $_ssp = @mysqli_query($conn, "SELECT COUNT(*) as c FROM school_subscriptions WHERE status='pending_approval'");
+    if ($_ssp) $school_sub_pending = (int)(mysqli_fetch_assoc($_ssp)['c'] ?? 0);
 }
 ?>
 
@@ -210,7 +213,7 @@ if ($is_admin && isset($conn)) {
         <li class="menu-label">School Health</li>
         <li>
             <a class="has-arrow" href="#"><i class="fas fa-school"></i> <span>Schools</span>
-                <?php $school_nav_badge = $pending_schools + ($consent_pending ?? 0); ?>
+                <?php $school_nav_badge = $pending_schools + ($consent_pending ?? 0) + ($school_sub_pending ?? 0); ?>
                 <?php if ($school_nav_badge > 0): ?>
                 <span class="badge bg-danger ms-1" style="font-size:10px;"><?= $school_nav_badge ?></span>
                 <?php endif; ?>
@@ -223,6 +226,9 @@ if ($is_admin && isset($conn)) {
                 <li><a href="school-members.php">School Members</a></li>
                 <li><a href="school-plans.php"><i class="fas fa-layer-group me-1 text-primary"></i> Health Plans &amp; Pricing</a></li>
                 <li><a href="parent-consents.php"><i class="fas fa-file-signature me-1 text-primary"></i> Parent Consents <?php if (($consent_pending ?? 0) > 0): ?><span class="badge bg-danger ms-1" style="font-size:9px;"><?= $consent_pending ?></span><?php endif; ?></a></li>
+                <li><a href="school-subscription-plans.php"><i class="fas fa-cubes me-1 text-primary"></i> Subscription Plans</a></li>
+                <li><a href="school-subscriptions.php?status=pending_approval"><i class="fas fa-file-invoice-dollar me-1 text-primary"></i> Subscriptions <?php if (($school_sub_pending ?? 0) > 0): ?><span class="badge bg-danger ms-1" style="font-size:9px;"><?= $school_sub_pending ?></span><?php endif; ?></a></li>
+                <li><a href="school-referrals.php"><i class="fas fa-hand-holding-usd me-1 text-primary"></i> Referral Earnings</a></li>
             </ul>
         </li>
 

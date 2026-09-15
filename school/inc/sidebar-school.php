@@ -51,6 +51,13 @@ $active_page = $active_page ?? '';
     <a href="<?= $base_path ?? '../' ?>health/abha.php" <?= $active_page==='abha' ? 'class="active"' : '' ?>>
       <i class="fas fa-id-card"></i> ABHA Management
     </a>
+    <div class="nav-label">Billing</div>
+    <a href="<?= $base_path ?? '../' ?>subscription.php" <?= $active_page==='subscription' ? 'class="active"' : '' ?>>
+      <i class="fas fa-cubes"></i> Subscription
+    </a>
+    <a href="<?= $base_path ?? '../' ?>referrals.php" <?= $active_page==='referrals' ? 'class="active"' : '' ?>>
+      <i class="fas fa-share-alt"></i> Refer a School
+    </a>
     <div class="nav-label">Account</div>
     <a href="<?= $base_path ?? '../' ?>profile.php" <?= $active_page==='profile' ? 'class="active"' : '' ?>>
       <i class="fas fa-cog"></i> School Profile

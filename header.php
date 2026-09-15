@@ -158,7 +158,7 @@ $logo = get_header_logo();
                                             }
                                             ?>
                                             
-                                            <li><a href="#">Timing of online clinic</a></li>
+                                            <li><a href="<?= BASE_URL ?>online-clinic/">Online Clinic (Telemedicine)</a></li>
                                         </ul>
                                     </li>
                                     <li> <a href="<?= BASE_URL ?>about-us.php">About Us </a></li>

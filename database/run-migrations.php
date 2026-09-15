@@ -68,6 +68,8 @@ $ORDER = [
     'migration_runtime_column_backfills.sql',
     'migration_family_groups.sql',
     'migration_abdm_hi_consent.sql',
+    'migration_whatsapp_automation.sql',
+    'migration_school_subscription_referral.sql',
     // 12. referential integrity — LAST (needs every table + type fix in place)
     'migration_core_foreign_keys.sql',
 ];

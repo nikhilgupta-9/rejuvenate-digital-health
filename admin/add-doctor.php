@@ -4,6 +4,9 @@ error_reporting(E_ALL);
 session_start();
 include "db-conn.php";
 include_once "functions.php";
+include_once "../util/mail_config.php";
+include_once "../util/otp-service.php";
+require_once "../util/otp-widget.php";
 
 $success_message = $error_message = '';
 
@@ -28,6 +31,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $meta_description = trim($_POST['meta_description']);
         $slug_url = trim($_POST['slug_url']);
 
+        $email = trim($_POST['email'] ?? '');
+        $phone = trim($_POST['phone'] ?? '');
+        $dob = trim($_POST['dob'] ?? '') ?: null;
+        $gender = trim($_POST['gender'] ?? '') ?: 'male';
+        $mobile_verify_token = $_POST['mobile_verify_token'] ?? '';
+
         $doctor_departments = $_POST['department'] ?? [];
 
         // Validate required fields
@@ -40,10 +49,40 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             throw new Exception("Please select at least one department");
         }
 
-        // This form collects no email/phone (those are set later when the
-        // doctor completes their own signup), so name is the only signal
-        // available to catch an accidental re-submit creating a duplicate
-        // profile. A real second doctor sharing a name can tick "add anyway".
+        // Account details — mirrors doctor-signup.php's own validation, since
+        // an admin-created doctor gets a real login account here too.
+        if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new Exception("Enter a valid email address.");
+        }
+        $phone = preg_replace('/\D/', '', $phone);
+        if (!preg_match('/^[6-9]\d{9}$/', $phone)) {
+            throw new Exception("Enter a valid 10-digit mobile number.");
+        }
+        if (!in_array($gender, ['male', 'female', 'other'], true)) {
+            throw new Exception("Invalid gender selection.");
+        }
+
+        $email_check = $conn->prepare("SELECT id FROM doctors WHERE email = ? LIMIT 1");
+        $email_check->bind_param('s', $email);
+        $email_check->execute();
+        if ($email_check->get_result()->fetch_assoc()) {
+            throw new Exception("A doctor with this email already exists.");
+        }
+        $phone_check = $conn->prepare("SELECT id FROM doctors WHERE phone = ? LIMIT 1");
+        $phone_check->bind_param('s', $phone);
+        $phone_check->execute();
+        if ($phone_check->get_result()->fetch_assoc()) {
+            throw new Exception("A doctor with this mobile number already exists.");
+        }
+
+        if (!otp_consume_token('doctor', $phone, $mobile_verify_token)) {
+            throw new Exception("Please verify the doctor's mobile number with the OTP before submitting.");
+        }
+
+        // Name is no longer the only duplicate signal (email/phone above are
+        // authoritative), but a same-name catch is still useful against an
+        // accidental double-submit. A real second doctor sharing a name can
+        // tick "add anyway".
         if (empty($_POST['confirm_duplicate'])) {
             $dup_stmt = $conn->prepare("SELECT id FROM doctors WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1");
             $dup_stmt->bind_param('s', $name);
@@ -53,8 +92,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         }
 
-        // Generate doctor UID
+        // Generate doctor UID + a temporary password (emailed to the doctor below)
         $doctor_uid = 'DOC' . date('YmdHis') . rand(100, 999);
+        $temp_password = bin2hex(random_bytes(5)); // 10 hex chars
+        $hashed_password = password_hash($temp_password, PASSWORD_BCRYPT, ['cost' => 12]);
 
         // Handle profile image upload
         $profile_image_path = '';
@@ -114,14 +155,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         try {
             // Insert doctor
             $stmt = $conn->prepare("INSERT INTO doctors (
-                doctor_uid, name, degrees, specialization, experience_years, rating, languages, 
-                consultation_fee, short_bio, long_bio, profile_image, gallery_images, education, 
+                doctor_uid, name, degrees, specialization, experience_years, rating, languages,
+                consultation_fee, short_bio, long_bio, profile_image, gallery_images, education,
                 area_of_expertise, status, meta_title, meta_keywords, meta_description, slug_url,
+                email, phone, password, dob, gender, mobile_verified, mobile_verified_at,
                 added_on, is_verified
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 0)");
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW(), 0)");
 
             $stmt->bind_param(
-                'ssssidsssssssssssss',
+                'ssssidssssssssssssssssss',
                 $doctor_uid,
                 $name,
                 $degrees,
@@ -140,7 +182,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $meta_title,
                 $meta_keywords,
                 $meta_description,
-                $slug_url
+                $slug_url,
+                $email,
+                $phone,
+                $hashed_password,
+                $dob,
+                $gender
             );
 
             if (!$stmt->execute()) {
@@ -169,7 +216,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             // Commit transaction
             $conn->commit();
 
-            $_SESSION['success_message'] = "Doctor added successfully with " . count($doctor_departments) . " department(s)!";
+            // Email the doctor their login credentials (best-effort — a
+            // failed send shouldn't undo the account that was just created).
+            try {
+                (new Mailer())->sendDoctorAccountCreated($email, $name, $phone, $temp_password, $_SESSION['admin_user'] ?? 'Administrator');
+            } catch (Exception $e) {
+                error_log('[add-doctor] account email failed: ' . $e->getMessage());
+            }
+
+            $_SESSION['success_message'] = "Doctor added successfully with " . count($doctor_departments) . " department(s)! Login credentials were emailed to " . $email . ".";
             header("Location: doctors-list.php");
             exit();
         } catch (Exception $e) {
@@ -414,6 +469,47 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                         <select class="form-select" name="status">
                                             <option value="Active" <?= ($_POST['status'] ?? '') == 'Active' ? 'selected' : '' ?>>Active</option>
                                             <option value="Inactive" <?= ($_POST['status'] ?? '') == 'Inactive' ? 'selected' : '' ?>>Inactive</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Account & Login Section -->
+                                <div class="row mb-4">
+                                    <div class="col-12">
+                                        <h4 class="section-title">Account &amp; Login</h4>
+                                        <p class="text-muted small mt-n2 mb-3">Creates a real login account for the doctor — a
+                                            temporary password is emailed to them. Their profile still needs a separate
+                                            "Verify" (medical credentials) before they can log in.</p>
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Email Address <span class="text-danger">*</span></label>
+                                        <input type="email" class="form-control" name="email" id="doctorEmail" required value="<?= htmlspecialchars($_POST['email'] ?? '') ?>">
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Mobile Number <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" name="phone" id="doctorPhone" maxlength="10" inputmode="numeric" required value="<?= htmlspecialchars($_POST['phone'] ?? '') ?>">
+                                        <?php render_otp_widget([
+                                            'role'            => 'doctor',
+                                            'mobile_field'    => 'phone',
+                                            'email_field'     => 'email',
+                                            'name_field'      => 'name',
+                                            'submit_selector' => '#doctorForm button[type="submit"]',
+                                        ]); ?>
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Date of Birth</label>
+                                        <input type="date" class="form-control" name="dob" value="<?= htmlspecialchars($_POST['dob'] ?? '') ?>">
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Gender</label>
+                                        <select class="form-select" name="gender">
+                                            <?php foreach (['male' => 'Male', 'female' => 'Female', 'other' => 'Other'] as $v => $l): ?>
+                                                <option value="<?= $v ?>" <?= ($_POST['gender'] ?? 'male') === $v ? 'selected' : '' ?>><?= $l ?></option>
+                                            <?php endforeach; ?>
                                         </select>
                                     </div>
                                 </div>

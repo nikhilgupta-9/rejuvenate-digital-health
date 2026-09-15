@@ -8,6 +8,9 @@ $logo = get_header_logo();
 $error = '';
 $success = '';
 
+// Referral link support: school-register.php?ref=<referring school's school_uid>
+$ref_uid = trim($_GET['ref'] ?? $_POST['ref'] ?? '');
+
 if (isset($_SESSION['school_logged_in']) && $_SESSION['school_logged_in'] === true) {
   header("Location: " . BASE_URL . "school/dashboard.php");
   exit();
@@ -55,6 +58,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($chk2->get_result()->num_rows > 0)
       throw new Exception("This email is already in use.");
 
+    /* ── Referral: resolve the referring school's id from its school_uid,
+       if this signup came through a referral link. Silently ignored if
+       the uid doesn't match anything — never blocks registration. ── */
+    $referred_by = null;
+    if ($ref_uid !== '') {
+      $refStmt = $conn->prepare("SELECT id FROM schools WHERE school_uid = ? LIMIT 1");
+      $refStmt->bind_param('s', $ref_uid);
+      $refStmt->execute();
+      $referring_school = $refStmt->get_result()->fetch_assoc();
+      $referred_by = $referring_school['id'] ?? null;
+    }
+
     /* ── Insert school ──
        address / pincode are collected later from the school dashboard,
        but the columns are NOT NULL with no default, so seed them empty.
@@ -62,9 +77,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $address  = '';
     $pincode  = '';
     $ins = $conn->prepare("INSERT INTO schools
-            (school_name, email, phone, address, city, state, pincode, principal_name, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending')");
-    $ins->bind_param('ssssssss', $school_name, $email, $phone, $address, $city, $state, $pincode, $admin_name);
+            (school_name, referred_by, email, phone, address, city, state, pincode, principal_name, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')");
+    $ins->bind_param('sisssssss', $school_name, $referred_by, $email, $phone, $address, $city, $state, $pincode, $admin_name);
     if (!$ins->execute())
       throw new Exception("Registration failed. Please try again.");
     $school_id = $ins->insert_id;
@@ -207,7 +222,7 @@ $states = [
           <div class="benefit-row"><i class="fa fa-check-circle"></i> Secure, admin-supervised platform</div>
           <hr class="my-4">
           <p class="text-muted" style="font-size:.83rem;">Already registered?</p>
-          <a href="<?= BASE_URL ?>school-login.php" class="btn btn-outline-primary btn-sm w-100">Login to School
+          <a href="<?= BASE_URL ?>login.php" class="btn btn-outline-primary btn-sm w-100">Login to School
             Dashboard</a>
         </div>
 
@@ -244,6 +259,7 @@ $states = [
               </div>
 
               <form method="POST" autocomplete="off" id="schoolRegForm">
+                <input type="hidden" name="ref" value="<?= htmlspecialchars($ref_uid) ?>">
 
                 <!-- School name -->
                 <div class="field-group">

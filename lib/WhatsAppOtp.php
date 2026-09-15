@@ -249,3 +249,69 @@ function wa_send_account_credentials(string $mobile, string $name, string $login
 
     return wa_send_text($mobile, $msg);
 }
+
+/**
+ * Send a document by public URL (e.g. an already-hosted PDF). Only lands
+ * inside the 24h customer-service window (recipient messaged this number
+ * recently) — a cold, business-initiated document needs a document-header
+ * template instead. Used by lib/WhatsAppNotifier::sendDocument().
+ */
+function wa_send_document_by_link(string $mobile, string $fileUrl, string $filename, string $caption = ''): array
+{
+    $to = wa_normalize_number($mobile);
+    if (!defined('WHATSAPP_CONFIGURED') || !WHATSAPP_CONFIGURED) {
+        error_log("[WhatsApp] (dev/no-config) document to {$to}: {$fileUrl}");
+        return ['ok' => true, 'wamid' => null, 'error' => null, 'debug' => true];
+    }
+    return _wa_post([
+        'messaging_product' => 'whatsapp', 'recipient_type' => 'individual', 'to' => $to,
+        'type' => 'document',
+        'document' => ['link' => $fileUrl, 'filename' => $filename, 'caption' => $caption],
+    ], $to);
+}
+
+/**
+ * Upload a local file to Meta's media store, returning a media id for use
+ * with wa_send_document_by_media_id(). Needed when the PDF isn't already at
+ * a public URL (e.g. a freshly generated prescription/report on disk).
+ */
+function wa_upload_media(string $filePath, string $mimeType = 'application/pdf'): ?string
+{
+    $url = 'https://graph.facebook.com/' . WHATSAPP_API_VERSION . '/' . WHATSAPP_PHONE_NUMBER_ID . '/media';
+    $cfile = new CURLFile($filePath, $mimeType, basename($filePath));
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 20,
+        CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . WHATSAPP_ACCESS_TOKEN],
+        CURLOPT_POSTFIELDS => ['messaging_product' => 'whatsapp', 'file' => $cfile],
+    ]);
+    $body = curl_exec($ch);
+    $curlErr = curl_error($ch);
+    curl_close($ch);
+    if ($curlErr) {
+        error_log("[WhatsApp] media upload cURL error: {$curlErr}");
+        return null;
+    }
+    $json = json_decode($body, true);
+    if (empty($json['id'])) {
+        error_log("[WhatsApp] media upload failed: {$body}");
+        return null;
+    }
+    return $json['id'];
+}
+
+/** Send a document already uploaded via wa_upload_media(). */
+function wa_send_document_by_media_id(string $mobile, string $mediaId, string $filename, string $caption = ''): array
+{
+    $to = wa_normalize_number($mobile);
+    if (!defined('WHATSAPP_CONFIGURED') || !WHATSAPP_CONFIGURED) {
+        error_log("[WhatsApp] (dev/no-config) document (media {$mediaId}) to {$to}");
+        return ['ok' => true, 'wamid' => null, 'error' => null, 'debug' => true];
+    }
+    return _wa_post([
+        'messaging_product' => 'whatsapp', 'recipient_type' => 'individual', 'to' => $to,
+        'type' => 'document',
+        'document' => ['id' => $mediaId, 'filename' => $filename, 'caption' => $caption],
+    ], $to);
+}
