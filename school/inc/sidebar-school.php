@@ -51,6 +51,17 @@ $active_page = $active_page ?? '';
     <a href="<?= $base_path ?? '../' ?>health/abha.php" <?= $active_page==='abha' ? 'class="active"' : '' ?>>
       <i class="fas fa-id-card"></i> ABHA Management
     </a>
+    <?php
+    // Old generic-link consents still waiting to be matched to a student
+    $_unlinked_q = mysqli_query($conn, "SELECT COUNT(*) as c FROM parent_consent_forms WHERE school_id=$school_id AND member_id IS NULL");
+    $_unlinked_c = mysqli_fetch_assoc($_unlinked_q)['c'] ?? 0;
+    ?>
+    <a href="<?= $base_path ?? '../' ?>consents.php" <?= $active_page==='consents' ? 'class="active"' : '' ?>>
+      <i class="fas fa-file-signature"></i> Parent Consents
+      <?php if ($_unlinked_c > 0): ?>
+        <span style="background:#ea580c;color:#fff;border-radius:10px;padding:1px 7px;font-size:.65rem;font-weight:700;margin-left:auto;"><?= $_unlinked_c ?></span>
+      <?php endif; ?>
+    </a>
     <div class="nav-label">Billing</div>
     <a href="<?= $base_path ?? '../' ?>subscription.php" <?= $active_page==='subscription' ? 'class="active"' : '' ?>>
       <i class="fas fa-cubes"></i> Subscription

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/db-conn.php';
 require_once __DIR__ . '/auth/guard.php';
+require_once __DIR__ . '/../lib/PatientHealthProfile.php';
 admin_jwt_guard();
 
 $customer_id = intval($_GET['id'] ?? 0);
@@ -36,6 +37,8 @@ if (!empty($customer['dob']) && $customer['dob'] != '0000-00-00') {
     $today = new DateTime();
     $age = $today->diff($dob)->y;
 }
+
+$health = PatientHealthProfile::get($conn, $customer_id);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -208,6 +211,22 @@ if (!empty($customer['dob']) && $customer['dob'] != '0000-00-00') {
                             </div>
                         </div>
 
+                        <!-- Tabs -->
+                        <ul class="nav nav-tabs mb-4" id="customerTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview" type="button">
+                                    <i class="fas fa-user me-1"></i> Overview
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="health-tab" data-bs-toggle="tab" data-bs-target="#health" type="button">
+                                    <i class="fas fa-heart-pulse me-1"></i> Health Profile
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content" id="customerTabsContent">
+                        <div class="tab-pane fade show active" id="overview" role="tabpanel">
                         <div class="row">
                             <!-- Personal Information -->
                             <div class="col-md-6">
@@ -422,6 +441,94 @@ if (!empty($customer['dob']) && $customer['dob'] != '0000-00-00') {
                                 </div>
                             </div>
                         </div>
+                        </div><!-- /overview tab-pane -->
+
+                        <!-- Health Profile Tab -->
+                        <div class="tab-pane fade" id="health" role="tabpanel">
+                            <div class="d-flex justify-content-end mb-3">
+                                <a href="edit-customer.php?id=<?= $customer['id'] ?>#health" class="btn btn-sm btn-primary"><i class="fas fa-edit me-1"></i>Edit Health Profile</a>
+                            </div>
+                            <?php if (!$health): ?>
+                                <div class="info-card">
+                                    <div class="info-card-body text-center py-5 text-muted">
+                                        <i class="fas fa-heart-pulse fa-3x mb-3 d-block opacity-25"></i>
+                                        No health profile set up yet for this patient.<br>
+                                        <a href="edit-customer.php?id=<?= $customer['id'] ?>#health">Add one now &rarr;</a>
+                                    </div>
+                                </div>
+                            <?php else: ?>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="info-card">
+                                            <div class="info-card-header"><i class="fas fa-heart-pulse me-2"></i>Vitals</div>
+                                            <div class="info-card-body">
+                                                <div class="detail-row"><span class="detail-label">Height</span><span class="detail-value"><?= $health['height_cm'] !== null ? $health['height_cm'] . ' cm' : 'Not set' ?></span></div>
+                                                <div class="detail-row"><span class="detail-label">Weight</span><span class="detail-value"><?= $health['weight_kg'] !== null ? $health['weight_kg'] . ' kg' : 'Not set' ?></span></div>
+                                                <div class="detail-row"><span class="detail-label">BMI</span><span class="detail-value"><?= $health['bmi'] !== null ? $health['bmi'] : 'Not set' ?></span></div>
+                                                <div class="detail-row"><span class="detail-label">Blood Group</span><span class="detail-value"><?= $health['blood_group'] ?: 'Not set' ?></span></div>
+                                                <div class="detail-row"><span class="detail-label">Blood Pressure</span><span class="detail-value"><?= $health['blood_pressure'] ?: 'Not set' ?></span></div>
+                                                <div class="detail-row"><span class="detail-label">Pulse Rate</span><span class="detail-value"><?= $health['pulse_rate'] !== null ? $health['pulse_rate'] . ' /min' : 'Not set' ?></span></div>
+                                                <div class="detail-row"><span class="detail-label">Vision (L / R)</span><span class="detail-value"><?= ($health['vision_left'] ?: '—') . ' / ' . ($health['vision_right'] ?: '—') ?></span></div>
+                                            </div>
+                                        </div>
+
+                                        <div class="info-card">
+                                            <div class="info-card-header"><i class="fas fa-syringe me-2"></i>Vaccination</div>
+                                            <div class="info-card-body">
+                                                <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value">
+                                                    <span class="status-badge <?= $health['is_vaccinated'] ? 'badge-verified' : 'badge-unverified' ?>"><?= $health['is_vaccinated'] ? 'Vaccinated' : 'Not vaccinated' ?></span>
+                                                </span></div>
+                                                <?php if ($health['vaccination_details']): ?><div class="detail-row"><span class="detail-label">Details</span><span class="detail-value"><?= nl2br(htmlspecialchars($health['vaccination_details'])) ?></span></div><?php endif; ?>
+                                            </div>
+                                        </div>
+
+                                        <div class="info-card">
+                                            <div class="info-card-header"><i class="fas fa-phone me-2"></i>Emergency Contact</div>
+                                            <div class="info-card-body">
+                                                <div class="detail-row"><span class="detail-label">Name</span><span class="detail-value"><?= htmlspecialchars($health['emergency_contact_name'] ?: 'Not set') ?></span></div>
+                                                <div class="detail-row"><span class="detail-label">Phone</span><span class="detail-value"><?= htmlspecialchars($health['emergency_contact_phone'] ?: 'Not set') ?></span></div>
+                                                <div class="detail-row"><span class="detail-label">Relation</span><span class="detail-value"><?= htmlspecialchars($health['emergency_contact_relation'] ?: 'Not set') ?></span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <div class="info-card">
+                                            <div class="info-card-header"><i class="fas fa-notes-medical me-2"></i>Medical History</div>
+                                            <div class="info-card-body">
+                                                <div class="detail-row"><span class="detail-label">Known Allergies</span><span class="detail-value"><?= $health['known_allergies'] ? nl2br(htmlspecialchars($health['known_allergies'])) : 'None recorded' ?></span></div>
+                                                <div class="detail-row"><span class="detail-label">Chronic Conditions</span><span class="detail-value"><?= $health['chronic_conditions'] ? nl2br(htmlspecialchars($health['chronic_conditions'])) : 'None recorded' ?></span></div>
+                                                <div class="detail-row"><span class="detail-label">Current Medications</span><span class="detail-value"><?= $health['current_medications'] ? nl2br(htmlspecialchars($health['current_medications'])) : 'None recorded' ?></span></div>
+                                                <div class="detail-row"><span class="detail-label">Past Surgeries</span><span class="detail-value"><?= $health['past_surgeries'] ? nl2br(htmlspecialchars($health['past_surgeries'])) : 'None recorded' ?></span></div>
+                                                <div class="detail-row"><span class="detail-label">Disability</span><span class="detail-value"><?= $health['disability'] ? nl2br(htmlspecialchars($health['disability'])) : 'None recorded' ?></span></div>
+                                            </div>
+                                        </div>
+
+                                        <div class="info-card">
+                                            <div class="info-card-header"><i class="fas fa-calendar-check me-2"></i>Checkup Schedule</div>
+                                            <div class="info-card-body">
+                                                <div class="detail-row"><span class="detail-label">Last Checkup</span><span class="detail-value"><?= $health['last_checkup_date'] ? date('d M Y', strtotime($health['last_checkup_date'])) : 'Not set' ?></span></div>
+                                                <div class="detail-row"><span class="detail-label">Next Checkup</span><span class="detail-value"><?= $health['next_checkup_date'] ? date('d M Y', strtotime($health['next_checkup_date'])) : 'Not set' ?></span></div>
+                                                <?php if ($health['checkup_notes']): ?><div class="detail-row"><span class="detail-label">Notes</span><span class="detail-value"><?= nl2br(htmlspecialchars($health['checkup_notes'])) ?></span></div><?php endif; ?>
+                                            </div>
+                                        </div>
+
+                                        <div class="info-card">
+                                            <div class="info-card-header"><i class="fas fa-shield-halved me-2"></i>Insurance</div>
+                                            <div class="info-card-body">
+                                                <div class="detail-row"><span class="detail-label">Provider</span><span class="detail-value"><?= htmlspecialchars($health['insurance_provider'] ?: 'Not set') ?></span></div>
+                                                <div class="detail-row"><span class="detail-label">Policy Number</span><span class="detail-value"><?= htmlspecialchars($health['insurance_number'] ?: 'Not set') ?></span></div>
+                                            </div>
+                                        </div>
+
+                                        <div class="text-muted" style="font-size:.75rem;padding:4px 2px;">
+                                            <i class="fas fa-clock me-1"></i>Last updated <?= date('d M Y, h:i A', strtotime($health['updated_at'])) ?> by <?= ucfirst($health['last_updated_role'] ?: 'unknown') ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+                        </div><!-- /health tab-pane -->
+                        </div><!-- /tab-content -->
 
                         <!-- Action Buttons -->
                         <div class="row mt-4">

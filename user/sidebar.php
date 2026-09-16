@@ -32,6 +32,7 @@ if (!$_u_abha_linked) {
 $_page_titles = [
     'dashboard'    => 'Dashboard',
     'profile'      => 'My Profile',
+    'health'       => 'My Health Profile',
     'abha'         => 'My ABHA Health ID',
     'bookings'     => 'My Bookings',
     'reports'      => 'My Reports',
@@ -46,6 +47,7 @@ $_menu = [
     'dashboard'    => ['icon' => 'fa fa-th-large',   'label' => 'Dashboard',              'url' => BASE_URL . 'user/user-dashboard.php',         'section' => 'Main'],
     'appointments' => ['icon' => 'fa fa-stethoscope', 'label' => 'My Doctor Appointments', 'url' => BASE_URL . 'user/my-doctor-appointments.php', 'section' => 'Health'],
     'bookings'     => ['icon' => 'fa fa-calendar', 'label' => 'My Bookings',       'url' => BASE_URL . 'user/my-bookings.php',            'section' => 'Health'],
+    'health'       => ['icon' => 'fa fa-heartbeat', 'label' => 'My Health Profile',      'url' => BASE_URL . 'user/health-profile.php',         'section' => 'Health'],
     'abha'         => ['icon' => 'fa fa-id-card',    'label' => 'My ABHA Health ID',       'url' => BASE_URL . 'user/my-abha.php',                'section' => 'Health'],
     'reports'      => ['icon' => 'fa fa-chart-area', 'label' => 'My Reports',             'url' => BASE_URL . 'user/my-reports.php',             'section' => 'Health'],
     'orders'       => ['icon' => 'fa fa-shopping-bag', 'label' => 'My Supplement Order',   'url' => BASE_URL . 'user/my-supplement-order.php',    'section' => 'Shop'],

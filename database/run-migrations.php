@@ -70,6 +70,10 @@ $ORDER = [
     'migration_abdm_hi_consent.sql',
     'migration_whatsapp_automation.sql',
     'migration_school_subscription_referral.sql',
+    'migration_parent_consent_secure_link.sql',
+    'migration_parent_consent_identity.sql',
+    'migration_parent_consent_expiry_revoke.sql',
+    'migration_patient_health_profiles.sql',
     // 12. referential integrity — LAST (needs every table + type fix in place)
     'migration_core_foreign_keys.sql',
 ];

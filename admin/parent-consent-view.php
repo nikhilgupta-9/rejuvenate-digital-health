@@ -92,6 +92,13 @@ function rowline($label, $val, $cols = 'col-md-6')
                         <?php else: ?>
                             <span class="pill pill-danger"><i class="fas fa-times"></i>Declaration NOT agreed</span>
                         <?php endif; ?>
+                        <?php if (!empty($c['revoked'])): ?>
+                            <span class="pill pill-danger"><i class="fas fa-ban"></i>Revoked<?= $c['revoked_at'] ? ' ' . date('d M Y', strtotime($c['revoked_at'])) : '' ?></span>
+                        <?php elseif (!empty($c['expires_at']) && $c['expires_at'] < date('Y-m-d')): ?>
+                            <span class="pill pill-warn"><i class="fas fa-hourglass-end"></i>Expired <?= date('d M Y', strtotime($c['expires_at'])) ?></span>
+                        <?php elseif (!empty($c['academic_year'])): ?>
+                            <span class="pill pill-muted"><i class="fas fa-calendar me-1"></i>AY <?= htmlspecialchars($c['academic_year']) ?> · valid till <?= $c['expires_at'] ? date('d M Y', strtotime($c['expires_at'])) : '—' ?></span>
+                        <?php endif; ?>
                         <div class="ms-auto d-flex gap-2">
                             <?php if ($c['status'] !== 'reviewed'): ?>
                                 <a href="parent-consents.php?set_status=reviewed&id=<?= $c['id'] ?>" class="btn btn-success btn-sm"><i class="fas fa-check me-1"></i>Mark Reviewed</a>
@@ -111,9 +118,16 @@ function rowline($label, $val, $cols = 'col-md-6')
                                 <?php
                                 rowline('Name', $c['parent_name']);
                                 rowline('Relation', $c['relation']);
-                                rowline('Mobile', $c['parent_mobile']);
+                                $mobileBadge = !empty($c['mobile_otp_verified'])
+                                    ? ' <i class="fas fa-circle-check text-success ms-1" title="Verified via WhatsApp OTP' . ($c['mobile_otp_verified_at'] ? ' on ' . date('d M Y, h:i A', strtotime($c['mobile_otp_verified_at'])) : '') . '"></i>'
+                                    : ' <span class="text-muted" style="font-size:.78rem;">(not OTP-verified)</span>';
+                                echo '<div class="col-md-6 mb-3"><div class="detail-label">Mobile</div><div class="detail-val">' . htmlspecialchars($c['parent_mobile']) . $mobileBadge . '</div></div>';
                                 rowline('Email', $c['parent_email']);
                                 rowline('Aadhaar (last 4)', $c['parent_aadhar_last4'] ? 'XXXX-XXXX-' . $c['parent_aadhar_last4'] : '');
+                                if (($c['identity_check'] ?? 'not_applicable') !== 'not_applicable') {
+                                    $idOk = $c['identity_check'] === 'matched';
+                                    echo '<div class="col-md-6 mb-3"><div class="detail-label">Identity Check</div><div class="detail-val" style="color:' . ($idOk ? '#15803d' : '#b91c1c') . ';font-weight:600;"><i class="fas ' . ($idOk ? 'fa-shield-check' : 'fa-triangle-exclamation') . ' me-1"></i>' . ($idOk ? 'Aadhaar-linked mobile matches school records' : 'Mismatch — Aadhaar-linked mobile differs from the school\'s on-record parent mobile') . '</div></div>';
+                                }
                                 ?>
                             </div>
                         </div>
@@ -127,7 +141,7 @@ function rowline($label, $val, $cols = 'col-md-6')
                                 if ($c['member_uid']) {
                                     echo '<div class="col-md-6 mb-3"><div class="detail-label">Linked Member</div><div class="detail-val"><a href="' . htmlspecialchars(BASE_URL) . 'admin/school-view.php?id=' . (int) $c['school_id'] . '">' . htmlspecialchars($c['member_uid']) . '</a></div></div>';
                                 } else {
-                                    echo '<div class="col-md-6 mb-3"><div class="detail-label">Linked Member</div><div class="detail-val text-muted">Not linked to a school member yet</div></div>';
+                                    echo '<div class="col-md-6 mb-3"><div class="detail-label">Linked Member</div><div class="detail-val"><a href="parent-consent-link.php?id=' . (int) $c['id'] . '" class="btn btn-sm btn-warning"><i class="fas fa-link me-1"></i>Link to student</a></div></div>';
                                 }
                                 ?>
                             </div>

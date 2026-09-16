@@ -103,6 +103,15 @@
   background-color: var(--adm-primary) !important;
   color: #fff !important;
 }
+/* .btn-check + .btn-outline-primary toggle groups (e.g. "Record For" pickers) —
+   the !important color above would otherwise win over Bootstrap's own
+   checked-state text color, leaving blue-on-blue text when selected. */
+.btn-check:checked + .btn-outline-primary,
+.btn-check:active + .btn-outline-primary {
+  background-color: var(--adm-primary) !important;
+  border-color: var(--adm-primary) !important;
+  color: #fff !important;
+}
 a {
   color: var(--adm-primary);
 }

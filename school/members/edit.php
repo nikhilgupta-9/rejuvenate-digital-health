@@ -17,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name        = trim($_POST['name']   ?? '');
     $email       = trim($_POST['email']  ?? '');
     $phone       = trim($_POST['phone']  ?? '');
+    $parent_mobile = preg_replace('/\D/', '', trim($_POST['parent_mobile'] ?? '')) ?: null;
     $dob         = $_POST['dob']         ?? null;
     $gender      = $_POST['gender']      ?? '';
     $address     = trim($_POST['address'] ?? '');
@@ -33,6 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$name) { $error = "Name is required."; }
     elseif ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) { $error = "Invalid email."; }
+    elseif ($parent_mobile && !preg_match('/^[6-9]\d{9}$/', $parent_mobile)) { $error = "Parent/guardian mobile number must be a valid 10-digit number."; }
     else {
         if ($email) {
             $chk = $conn->prepare("SELECT id FROM school_members WHERE email=? AND school_id=? AND id!=?");
@@ -50,9 +52,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$error) {
         $dob_val = $dob ?: null;
-        $upd = $conn->prepare("UPDATE school_members SET name=?,email=?,phone=?,dob=?,gender=?,address=?,blood_group=?,status=?,class=?,section=?,roll_number=?,admission_number=?,employee_id=?,designation=?,assigned_class=? WHERE id=? AND school_id=?");
-        $upd->bind_param('sssssssssssssssii',
-            $name,$email,$phone,$dob_val,$gender,$address,$blood_group,$status,
+        $upd = $conn->prepare("UPDATE school_members SET name=?,email=?,phone=?,parent_mobile=?,dob=?,gender=?,address=?,blood_group=?,status=?,class=?,section=?,roll_number=?,admission_number=?,employee_id=?,designation=?,assigned_class=? WHERE id=? AND school_id=?");
+        $upd->bind_param('ssssssssssssssssii',
+            $name,$email,$phone,$parent_mobile,$dob_val,$gender,$address,$blood_group,$status,
             $class,$section,$roll_number,$admission_number,$employee_id,$designation,$assigned_class,
             $id,$school_id
         );
@@ -239,6 +241,11 @@ $ti = $type_icon[$m['type']] ?? 'fa-user';
           <div class="col-md-3">
             <label class="form-label">Admission No.</label>
             <input type="text" class="form-control" name="admission_number" value="<?= htmlspecialchars($m['admission_number'] ?? '') ?>" placeholder="ADM-001">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Parent / Guardian Mobile</label>
+            <input type="tel" class="form-control" name="parent_mobile" value="<?= htmlspecialchars($m['parent_mobile'] ?? '') ?>" placeholder="10-digit mobile" maxlength="10">
+            <div class="form-text">Used to send the personalized health-consent link.</div>
           </div>
         </div>
       </div>

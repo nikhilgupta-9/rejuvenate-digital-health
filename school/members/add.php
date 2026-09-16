@@ -9,6 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $name = trim($_POST['name'] ?? '');
   $email = trim($_POST['email'] ?? '');
   $phone = trim($_POST['phone'] ?? '');
+  $parent_mobile = preg_replace('/\D/', '', trim($_POST['parent_mobile'] ?? '')) ?: null;
   $dob = $_POST['dob'] ?? null;
   $gender = $_POST['gender'] ?? '';
   $blood_group = $_POST['blood_group'] ?? '';
@@ -39,6 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $error = "Invalid email address.";
   } elseif ($aadhar && !preg_match('/^\d{12}$/', $aadhar)) {
     $error = "Aadhar number must be exactly 12 digits.";
+  } elseif ($parent_mobile && !preg_match('/^[6-9]\d{9}$/', $parent_mobile)) {
+    $error = "Parent/guardian mobile number must be a valid 10-digit number.";
   } elseif ($set_password && strlen($set_password) < 6) {
     $error = "Password must be at least 6 characters.";
   } elseif ($set_password && $set_password !== $confirm_pw) {
@@ -96,17 +99,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dob_val = $dob ?: null;
     $aadhar_val = $aadhar ?: null;
     $stmt = $conn->prepare("INSERT INTO school_members
-            (school_id, type, name, email, phone, dob, gender, blood_group, aadhar_number, address, status,
+            (school_id, type, name, email, phone, parent_mobile, dob, gender, blood_group, aadhar_number, address, status,
              class, section, roll_number, admission_number,
              employee_id, designation, assigned_class, password, profile_pic, added_by)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
     $stmt->bind_param(
-      'isssssssssssssssssssi',
+      'issssssssssssssssssssi',
       $school_id,
       $type,
       $name,
       $email,
       $phone,
+      $parent_mobile,
       $dob_val,
       $gender,
       $blood_group,
@@ -599,6 +603,12 @@ $just_added = isset($_GET['added']);
                   <label class="form-label fw-semibold" style="font-size:.84rem;">Admission No.</label>
                   <input type="text" class="form-control" name="admission_number"
                     value="<?= htmlspecialchars($_POST['admission_number'] ?? '') ?>" placeholder="ADM-001">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label fw-semibold" style="font-size:.84rem;">Parent / Guardian Mobile</label>
+                  <input type="tel" class="form-control" name="parent_mobile"
+                    value="<?= htmlspecialchars($_POST['parent_mobile'] ?? '') ?>" placeholder="10-digit mobile" maxlength="10">
+                  <div class="form-text">Used to send the personalized health-consent link.</div>
                 </div>
               </div>
             </div>

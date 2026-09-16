@@ -27,7 +27,7 @@ const OTP_MAX_ATTEMPTS     = 5;
 const OTP_RESEND_COOLDOWN  = 60;    // seconds between sends
 const OTP_MAX_SENDS_PER_HR = 5;
 
-const OTP_ALLOWED_ROLES = ['patient', 'doctor', 'student', 'teacher', 'school_admin'];
+const OTP_ALLOWED_ROLES = ['patient', 'doctor', 'student', 'teacher', 'school_admin', 'parent_consent'];
 
 function otp_valid_role(string $role): bool
 {

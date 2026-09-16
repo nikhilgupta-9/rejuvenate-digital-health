@@ -13,6 +13,8 @@ include_once __DIR__ . "/../config/connect.php";
 require_once __DIR__ . '/../config/payment.php';   // RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET
 require_once __DIR__ . '/../util/mail_config.php'; // Mailer
 require_once __DIR__ . '/../util/function.php';    // contact_us()
+require_once __DIR__ . '/../util/otp-service.php'; // otp_send() / otp_verify() / otp_consume_token() — role 'parent_consent'
+require_once __DIR__ . '/../util/otp-widget.php';  // render_otp_widget()
 
 /**
  * Save one uploaded file from a public submission.
@@ -101,6 +103,22 @@ function pcf_plan_for_age(array $plans, ?int $age): ?array
 }
 
 /**
+ * Indian academic year (fixed Apr 1 – Mar 31) that a given timestamp falls
+ * in — computed once at submission time and stored, not recomputed on read.
+ * Returns ['academic_year' => '2026-2027', 'expires_at' => '2027-03-31'].
+ */
+function pcf_academic_year(string $when = 'now'): array
+{
+    $d = new DateTime($when);
+    $y = (int) $d->format('Y');
+    $start = ((int) $d->format('n') >= 4) ? $y : $y - 1;
+    return [
+        'academic_year' => $start . '-' . ($start + 1),
+        'expires_at'    => ($start + 1) . '-03-31',
+    ];
+}
+
+/**
  * Create a Razorpay order. Returns [orderArray|null, errorMessage].
  */
 function pcf_create_razorpay_order(int $amountPaise, string $receipt, array $notes): array
@@ -161,7 +179,77 @@ if (!empty($_GET['resume'])) {
     }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   Secure per-student consent link: ?ctoken=<signed token>
+   (database/migration_parent_consent_secure_link.sql)
+
+   Deliberately a different param/variable name from $token above —
+   that one is an unrelated post-submission payment-resume token.
+   Never trust the token's claims alone: the member row is re-fetched
+   fresh on every request (GET load AND the POST submit below), so a
+   deleted/moved/re-typed member can't be impersonated even with a
+   structurally-valid, correctly-signed, unexpired token.
+═══════════════════════════════════════════════════════════════ */
+require_once __DIR__ . '/../lib/ConsentToken.php';
+
+$consent_token   = trim($_GET['ctoken'] ?? $_POST['ctoken'] ?? '');
+$token_student   = null;
+$token_invalid   = false;
+$already_submitted = null;
+
+if ($consent_token !== '') {
+    $tokenData = consent_verify_token($consent_token);
+    if ($tokenData) {
+        $ms = $conn->prepare("SELECT m.*, s.school_name FROM school_members m
+                              JOIN schools s ON s.id = m.school_id
+                              WHERE m.id = ? AND m.school_id = ? AND m.type = 'Student' LIMIT 1");
+        $ms->bind_param('ii', $tokenData['member_id'], $tokenData['school_id']);
+        $ms->execute();
+        $token_student = $ms->get_result()->fetch_assoc() ?: null;
+    }
+    $token_invalid = $token_student === null;
+}
+$is_token_mode = $token_student !== null;
+
+if ($is_token_mode) {
+    $as = $conn->prepare("SELECT id, submitted_at, parent_mobile, academic_year, expires_at, revoked, revoked_at
+                          FROM parent_consent_forms WHERE member_id = ? AND consent_given = 1 ORDER BY submitted_at DESC LIMIT 1");
+    $as->bind_param('i', $token_student['id']);
+    $as->execute();
+    $already_submitted = $as->get_result()->fetch_assoc() ?: null;
+}
+
 $pcf_action = $_POST['pcf_action'] ?? '';
+
+/* ═══════════════════════════════════════════════════════════════
+   Revoke a previously-submitted consent (Phase 5) — parent-initiated,
+   only from their own signed per-student link. The OTP is consumed
+   against the mobile number fetched fresh from THIS consent row, never
+   a client-supplied one — a tampered request can't revoke someone
+   else's consent even if the attacker verifies OTP on their own phone.
+═══════════════════════════════════════════════════════════════ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $pcf_action === 'revoke') {
+    $revoke_redirect = 'parent-consent.php?ctoken=' . urlencode($consent_token);
+    if (!$is_token_mode || !$already_submitted) {
+        header('Location: ' . $revoke_redirect);
+        exit;
+    }
+    if ($already_submitted['revoked']) {
+        header('Location: ' . $revoke_redirect . '&revoke_err=already');
+        exit;
+    }
+    $on_file_mobile = preg_replace('/\D/', '', $already_submitted['parent_mobile']);
+    $otp_token = trim($_POST['revoke_otp_token'] ?? '');
+    if (!otp_consume_token('parent_consent', $on_file_mobile, $otp_token)) {
+        header('Location: ' . $revoke_redirect . '&revoke_err=otp');
+        exit;
+    }
+    $rupd = $conn->prepare("UPDATE parent_consent_forms SET revoked = 1, revoked_at = NOW() WHERE id = ? AND revoked = 0");
+    $rupd->bind_param('i', $already_submitted['id']);
+    $rupd->execute();
+    header('Location: ' . $revoke_redirect . '&revoked=1');
+    exit;
+}
 
 /* ═══════════════════════════════════════════════════════════════
    AJAX: verify a completed Razorpay payment → mark paid + email
@@ -329,6 +417,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $pcf_action === 'resume_pay') {
 ═══════════════════════════════════════════════════════════════ */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($pcf_action === 'create_order' || isset($_POST['submit_consent']))) {
     $is_ajax = $pcf_action === 'create_order';
+
+    // Token mode + a consent already recorded for this exact student — refuse
+    // to create a second row instead of silently duplicating (the "already
+    // submitted" check on page load only guards a fresh GET; a resubmit via
+    // this POST handler needs its own guard). A revoked consent doesn't
+    // count — the parent explicitly asked for it not to be valid, so a
+    // fresh submission is allowed.
+    if ($is_token_mode && $already_submitted && !$already_submitted['revoked']) {
+        $out = ['success' => false, 'message' => 'A consent form has already been submitted for this student.'];
+        if ($is_ajax) { header('Content-Type: application/json'); echo json_encode($out); exit; }
+        $error = $out['message'];
+        goto pcf_done;
+    }
+
     $resume_token = preg_replace('/[^a-f0-9]/', '', (string) ($_POST['resume_token'] ?? ''));
     $school_id = (int) ($_POST['school_id'] ?? 0) ?: null;
     $school_manual = trim($_POST['school_name_manual'] ?? '');
@@ -348,6 +450,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($pcf_action === 'create_order' || 
     $student_city = trim($_POST['student_city'] ?? '') ?: null;
     $student_state = trim($_POST['student_state'] ?? '') ?: null;
     $student_pincode = trim($_POST['student_pincode'] ?? '') ?: null;
+
+    /* Token mode: the student's identity is NOT trusted from the POST body —
+       even a tampered hidden field (or a resubmitted request with different
+       values) is overridden here with the freshly re-verified DB row. */
+    if ($is_token_mode) {
+        $school_id       = (int) $token_student['school_id'];
+        $school_manual   = '';
+        $student_name    = $token_student['name'];
+        $student_dob     = $token_student['dob'] ?: null;
+        $student_gender  = in_array($token_student['gender'] ?? '', ['Male', 'Female', 'Other'], true)
+            ? $token_student['gender']
+            : null;
+        $student_class   = (string) ($token_student['class'] ?? '');
+        $student_sec     = (string) ($token_student['section'] ?? '');
+        $student_roll    = (string) ($token_student['roll_number'] ?? '');
+    }
     $parent_aadhar_mobile = preg_replace('/\D/', '', trim($_POST['parent_aadhar_mobile'] ?? '')) ?: null;
     $blood_group = trim($_POST['blood_group'] ?? '') ?: null;
     $allergies = trim($_POST['known_allergies'] ?? '') ?: null;
@@ -463,7 +581,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($pcf_action === 'create_order' || 
        "fill all fields correctly" dead end.
     ───────────────────────────────────────────── */
     $raw_aadhar        = preg_replace('/\D/', '', trim($_POST['parent_aadhar'] ?? ''));
-    $raw_student_dob   = trim($_POST['student_dob'] ?? '');
+    $raw_student_dob   = $is_token_mode ? (string) ($student_dob ?? '') : trim($_POST['student_dob'] ?? '');
 
     // 1. School
     if (!empty($schools)) {
@@ -540,6 +658,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($pcf_action === 'create_order' || 
             . '. Please check the date of birth, or contact the school.';
     }
 
+    /* ── Parent mobile OTP gate (Phase 3 — identity strengthening) ──
+       Checked last, only once every other field is already valid, so a typo
+       elsewhere in the form doesn't burn the single-use verify token — the
+       parent would otherwise have to re-verify by WhatsApp OTP for no reason.
+       Reuses util/otp-service.php (registration_otps) — same mechanism as
+       student/teacher/doctor self-registration, role 'parent_consent'. */
+    if (!$errors) {
+        $otp_token = trim($_POST['parent_mobile_otp_token'] ?? '');
+        if (!otp_consume_token('parent_consent', $parent_mobile, $otp_token)) {
+            $errors['parent_mobile_otp_token'] = 'Please verify your mobile number with the OTP sent via WhatsApp before submitting.';
+        }
+    }
+
     if ($errors) {
         $msg = 'Please complete the highlighted field'
             . (count($errors) > 1 ? 's' : '') . ' — ' . count($errors) . ' item'
@@ -564,12 +695,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($pcf_action === 'create_order' || 
         $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
         $decl = "I, {$parent_name}, hereby give consent for the health checkup of my ward {$student_name}.";
 
+        /* ── Aadhaar-linked mobile vs the school's registered parent mobile ──
+           Only checkable in token mode (we have a real school_members row) and
+           only when the parent actually filled the Aadhaar-linked mobile field.
+           A mismatch is never blocking — school records go stale — it just
+           flags the row for a human to double-check (admin/parent-consents.php). */
+        $identity_check = 'not_applicable';
+        if ($is_token_mode && $parent_aadhar_mobile && !empty($token_student['parent_mobile'])) {
+            $school_parent_mobile = preg_replace('/\D/', '', $token_student['parent_mobile']);
+            $identity_check = ($parent_aadhar_mobile === $school_parent_mobile) ? 'matched' : 'mismatched';
+        }
+
         $plan_id    = $pcf_plan ? (int) $pcf_plan['id'] : null;
         $plan_name  = $pcf_plan['name'] ?? null;
         $plan_price = $pcf_plan ? (float) $pcf_plan['price'] : null;
+        $ay         = pcf_academic_year();
 
         $row = [
             'token'                => $token,
+            'member_id'            => $is_token_mode ? (int) $token_student['id'] : null,
+            'verified_via'         => $is_token_mode ? 'token' : 'manual',
             'school_id'            => $school_id,
             'school_name_manual'   => $school_manual ?: null,
             'plan_id'              => $plan_id,
@@ -582,6 +727,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($pcf_action === 'create_order' || 
             'parent_email'         => $parent_email,
             'parent_aadhar_last4'  => $aadhar_last4,
             'parent_aadhar_mobile' => $parent_aadhar_mobile,
+            'identity_check'       => $identity_check,
+            'mobile_otp_verified'  => 1,
+            'mobile_otp_verified_at' => date('Y-m-d H:i:s'),
             'student_name'         => $student_name,
             'student_dob'          => $student_dob,
             'student_gender'       => $student_gender,
@@ -611,6 +759,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($pcf_action === 'create_order' || 
             'file_medical_records' => pcf_save_upload('file_medical_records'),
             'consent_items'        => $consent_json,
             'consent_given'        => $consent_given,
+            'academic_year'        => $ay['academic_year'],
+            'expires_at'           => $ay['expires_at'],
             'declaration_text'     => $decl,
             'ip_address'           => $ip,
             'user_agent'           => $ua,
@@ -1286,6 +1436,12 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
 
     <div class="consent-wrapper">
 
+        <?php if (isset($_GET['revoked'])): ?>
+            <div class="alert alert-success mb-3" style="border-radius:10px;">
+                <i class="fas fa-check-circle me-1"></i> Your consent has been revoked. The school will no longer treat it as valid.
+            </div>
+        <?php endif; ?>
+
         <?php if ($resume_row): ?>
             <?php
             $rr_amount = number_format((float) $resume_row['plan_price']);
@@ -1331,7 +1487,96 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                         class="fas fa-plus me-1"></i>Submit another form</a>
             </div>
 
+        <?php elseif ($is_token_mode && $already_submitted && !$already_submitted['revoked']): ?>
+            <?php $pcf_expired = $already_submitted['expires_at'] && $already_submitted['expires_at'] < date('Y-m-d'); ?>
+            <div class="success-card">
+                <div class="success-icon"><i class="fas fa-check-double"></i></div>
+                <h4 style="font-weight:700;color:var(--primary);">Already Submitted</h4>
+                <p style="color:#64748b;font-size:.88rem;">
+                    A consent form for <strong><?= htmlspecialchars($token_student['name']) ?></strong> was already
+                    submitted on <?= date('d M Y, h:i A', strtotime($already_submitted['submitted_at'])) ?>.
+                </p>
+
+                <?php if ($already_submitted['academic_year']): ?>
+                <div style="display:flex;gap:8px;justify-content:center;align-items:center;margin:10px 0;flex-wrap:wrap;font-size:.82rem;">
+                    <span style="background:#f1f5f9;border-radius:20px;padding:4px 12px;color:#475569;">Academic year <?= htmlspecialchars($already_submitted['academic_year']) ?></span>
+                    <?php if ($pcf_expired): ?>
+                        <span style="background:#fee2e2;border-radius:20px;padding:4px 12px;color:#b91c1c;font-weight:600;"><i class="fas fa-triangle-exclamation me-1"></i>Expired <?= date('d M Y', strtotime($already_submitted['expires_at'])) ?></span>
+                    <?php else: ?>
+                        <span style="background:#dcfce7;border-radius:20px;padding:4px 12px;color:#15803d;font-weight:600;"><i class="fas fa-check me-1"></i>Valid till <?= date('d M Y', strtotime($already_submitted['expires_at'])) ?></span>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
+
+                <div
+                    style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;font-size:.81rem;color:#1e40af;margin-top:6px;text-align:left;">
+                    <i class="fas fa-info-circle me-1"></i> If you still need to complete a pending payment, use the
+                    payment link sent to you, or contact the school directly.
+                </div>
+
+                <?php if (isset($_GET['revoke_err'])): ?>
+                <div class="alert alert-danger mt-3 mb-0" style="border-radius:10px;font-size:.83rem;">
+                    <?= $_GET['revoke_err'] === 'otp' ? 'Mobile verification failed. Please verify the OTP and try again.' : 'This consent was already revoked.' ?>
+                </div>
+                <?php endif; ?>
+
+                <div id="pcfRevokeBox" style="margin-top:16px;border-top:1px solid #e5e7eb;padding-top:14px;">
+                    <button type="button" class="btn btn-outline-danger btn-sm" id="pcfRevokeToggle"><i class="fas fa-ban me-1"></i>Revoke this consent</button>
+                    <form method="POST" id="pcfRevokeForm" style="display:none;margin-top:12px;text-align:left;">
+                        <input type="hidden" name="pcf_action" value="revoke">
+                        <input type="hidden" name="ctoken" value="<?= htmlspecialchars($consent_token, ENT_QUOTES) ?>">
+                        <p style="font-size:.82rem;color:#64748b;">To revoke, verify the registered mobile number on file
+                            (<?= htmlspecialchars(substr($already_submitted['parent_mobile'], 0, 2) . str_repeat('X', max(0, strlen($already_submitted['parent_mobile']) - 4)) . substr($already_submitted['parent_mobile'], -2)) ?>)
+                            with a fresh WhatsApp OTP.</p>
+                        <input type="hidden" name="revoke_mobile" value="<?= htmlspecialchars($already_submitted['parent_mobile'], ENT_QUOTES) ?>" readonly>
+                        <?php render_otp_widget([
+                            'role'            => 'parent_consent',
+                            'mobile_field'    => 'revoke_mobile',
+                            'token_field'     => 'revoke_otp_token',
+                            'submit_selector' => '#pcfRevokeSubmit',
+                        ]); ?>
+                        <button type="submit" id="pcfRevokeSubmit" class="btn btn-danger btn-sm mt-2" disabled onclick="return confirm('Revoke this health-checkup consent? The school will be notified that consent is no longer valid.')"><i class="fas fa-ban me-1"></i>Confirm Revoke</button>
+                    </form>
+                </div>
+            </div>
+            <script>
+                (function () {
+                    var t = document.getElementById('pcfRevokeToggle'), f = document.getElementById('pcfRevokeForm');
+                    if (t && f) t.addEventListener('click', function () { f.style.display = f.style.display === 'none' ? '' : 'none'; t.style.display = 'none'; });
+                })();
+            </script>
+
         <?php else: ?>
+
+            <?php if ($token_invalid): ?>
+                <div class="alert alert-warning mb-3" style="border-radius:10px;">
+                    <div class="d-flex align-items-center gap-2 fw-semibold">
+                        <i class="fas fa-triangle-exclamation"></i> This personalized link has expired or is no longer
+                        valid.
+                    </div>
+                    <p class="mb-0 mt-1" style="font-size:.85rem;">Please contact the school for a fresh link, or
+                        continue below — your submission will need manual verification by the school.</p>
+                </div>
+            <?php elseif (!$is_token_mode): ?>
+                <div class="alert alert-info mb-3" style="border-radius:10px;">
+                    <div class="d-flex align-items-center gap-2 fw-semibold">
+                        <i class="fas fa-circle-info"></i> You're using the general school link.
+                    </div>
+                    <p class="mb-0 mt-1" style="font-size:.85rem;">Your submission will need manual verification by
+                        the school before it's linked to your child's record. For instant verification, ask the
+                        school for your child's personalized consent link instead.</p>
+                </div>
+            <?php else: ?>
+                <div class="alert alert-success mb-3 d-flex align-items-center gap-2" style="border-radius:10px;">
+                    <i class="fas fa-shield-check"></i>
+                    <span><strong>Verified link</strong> for <?= htmlspecialchars($token_student['name']) ?><?= $token_student['class'] ? ', Class ' . htmlspecialchars($token_student['class']) : '' ?> — student details below are locked.</span>
+                </div>
+                <?php if ($already_submitted && $already_submitted['revoked']): ?>
+                <div class="alert alert-warning mb-3" style="border-radius:10px;font-size:.85rem;">
+                    <i class="fas fa-info-circle me-1"></i> Your earlier consent (submitted <?= date('d M Y', strtotime($already_submitted['submitted_at'])) ?>) was revoked on <?= date('d M Y', strtotime($already_submitted['revoked_at'])) ?>. You can submit a fresh consent below.
+                </div>
+                <?php endif; ?>
+            <?php endif; ?>
 
             <?php if ($error): ?>
                 <div class="alert alert-danger mb-3" style="border-radius:10px;" id="errBox">
@@ -1398,6 +1643,7 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                 <input type="hidden" name="submit_consent" value="1">
                 <input type="hidden" name="pcf_action" id="pcfAction" value="create_order">
                 <input type="hidden" name="resume_token" value="<?= htmlspecialchars($resume_row['token'] ?? '', ENT_QUOTES) ?>">
+                <input type="hidden" name="ctoken" value="<?= htmlspecialchars($consent_token, ENT_QUOTES) ?>">
 
                 <div class="tab-pane active" data-step="0"><!-- STEP 1: School & Parent -->
 
@@ -1408,7 +1654,13 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                         <h5><i class="fas fa-school me-2" style="color:var(--primary)"></i>School Information</h5>
                     </div>
                     <div class="section-body">
-                        <?php if (!empty($schools)): ?>
+                        <?php if ($is_token_mode): ?>
+                            <input type="hidden" name="school_id" id="schoolSel" value="<?= (int) $token_student['school_id'] ?>">
+                            <div class="mb-0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;">
+                                <i class="fas fa-lock me-1" style="color:#94a3b8;"></i>
+                                <strong><?= htmlspecialchars($token_student['school_name']) ?></strong>
+                            </div>
+                        <?php elseif (!empty($schools)): ?>
                             <div class="mb-3">
                                 <label class="form-label">Select School <span class="req">*</span></label>
                                 <select name="school_id" class="form-select<?= pcf_inv('school') ?>" id="schoolSel">
@@ -1455,7 +1707,17 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                             <div class="col-md-6"><label class="form-label">Mobile Number <span
                                         class="req">*</span></label><input type="tel" name="parent_mobile"
                                     class="form-control<?= pcf_inv('parent_mobile') ?>" required placeholder="10-digit number" maxlength="10" inputmode="numeric"
-                                    value="<?= htmlspecialchars($_POST['parent_mobile'] ?? '') ?>"><?= pcf_err('parent_mobile') ?></div>
+                                    value="<?= htmlspecialchars($_POST['parent_mobile'] ?? '') ?>"><?= pcf_err('parent_mobile') ?>
+                                <?php render_otp_widget([
+                                    'role'            => 'parent_consent',
+                                    'mobile_field'    => 'parent_mobile',
+                                    'email_field'     => 'parent_email',
+                                    'name_field'      => 'parent_name',
+                                    'token_field'     => 'parent_mobile_otp_token',
+                                    'submit_selector' => '#btnSubmit',
+                                ]); ?>
+                                <?= pcf_err('parent_mobile_otp_token') ?>
+                            </div>
                             <div class="col-md-6"><label class="form-label">Email <span
                                         style="color:#94a3b8;font-weight:400">(optional)</span></label><input type="email"
                                     name="parent_email" class="form-control<?= pcf_inv('parent_email') ?>" placeholder="you@example.com"
@@ -1490,6 +1752,25 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                     </div>
                     <div class="section-body">
                         <div class="row g-3">
+                            <?php if ($is_token_mode): ?>
+                                <input type="hidden" name="student_name" value="<?= htmlspecialchars($token_student['name'], ENT_QUOTES) ?>">
+                                <input type="hidden" name="student_dob" value="<?= htmlspecialchars($token_student['dob'] ?? '', ENT_QUOTES) ?>">
+                                <input type="hidden" name="student_gender" value="<?= htmlspecialchars($token_student['gender'] ?? '', ENT_QUOTES) ?>">
+                                <input type="hidden" name="student_class" value="<?= htmlspecialchars($token_student['class'] ?? '', ENT_QUOTES) ?>">
+                                <input type="hidden" name="student_section" value="<?= htmlspecialchars($token_student['section'] ?? '', ENT_QUOTES) ?>">
+                                <input type="hidden" name="student_roll_no" value="<?= htmlspecialchars($token_student['roll_number'] ?? '', ENT_QUOTES) ?>">
+                                <div class="col-12">
+                                    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;font-size:.85rem;color:#334155;">
+                                        <i class="fas fa-lock me-1" style="color:#94a3b8;"></i>
+                                        <strong><?= htmlspecialchars($token_student['name']) ?></strong>
+                                        <?php if ($token_student['dob']): ?> &nbsp;·&nbsp; DOB <?= date('d M Y', strtotime($token_student['dob'])) ?><?php endif; ?>
+                                        <?php if ($token_student['gender']): ?> &nbsp;·&nbsp; <?= htmlspecialchars($token_student['gender']) ?><?php endif; ?>
+                                        <?php if ($token_student['class']): ?> &nbsp;·&nbsp; Class <?= htmlspecialchars($token_student['class']) ?><?php if ($token_student['section']): ?><?= htmlspecialchars($token_student['section']) ?><?php endif; ?><?php endif; ?>
+                                        <?php if ($token_student['roll_number']): ?> &nbsp;·&nbsp; Roll <?= htmlspecialchars($token_student['roll_number']) ?><?php endif; ?>
+                                    </div>
+                                    <div class="hint mt-1">These details come from the school's records and can't be edited here. If something looks wrong, contact the school.</div>
+                                </div>
+                            <?php else: ?>
                             <div class="col-md-6"><label class="form-label">Student Full Name <span
                                         class="req">*</span></label><input type="text" name="student_name"
                                     class="form-control<?= pcf_inv('student_name') ?>" required placeholder="e.g. Aryan Kumar"
@@ -1512,6 +1793,7 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                             <div class="col-md-6"><label class="form-label">Roll Number</label><input type="text"
                                     name="student_roll_no" class="form-control" placeholder="Roll / Admission No."
                                     value="<?= pcf_old('student_roll_no') ?>"></div>
+                            <?php endif; ?>
                             <div class="col-md-6"><label class="form-label">Student ID / APAAR ID</label><input type="text"
                                     name="student_apaar_id" class="form-control" placeholder="APAAR / Student ID"
                                     value="<?= pcf_old('student_apaar_id') ?>"></div>
@@ -1609,7 +1891,7 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                     </div>
                     <div class="section-body">
                         <div class="row g-3">
-                            <div class="col-12"><label class="q-label">Does the student use glasses?</label>
+                            <div class="col-12"><label class="q-label">Does the student use glasses? <span class="req">*</span></label>
                                 <?= pcf_radio('eye_uses_glasses', ['Yes', 'No']) ?></div>
                             <div class="col-12 cond" data-when="eye_uses_glasses" data-eq="Yes">
                                 <div class="row g-3">
@@ -1619,9 +1901,9 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                                         <input type="text" name="eye_glasses_power" class="form-control" value="<?= pcf_old('eye_glasses_power') ?>"></div>
                                 </div>
                             </div>
-                            <div class="col-12"><label class="q-label">Does the student have any type of the following conditions?</label>
+                            <div class="col-12"><label class="q-label">Does the student have any type of the following conditions? <span class="req">*</span></label>
                                 <?= pcf_radio('eye_conditions', ['Squint', 'Watery eyes / excessive tearing', 'Recurrent or excessive rubbing of eyes', 'Other', 'None']) ?></div>
-                            <div class="col-md-6"><label class="q-label">Last examined by an ophthalmologist?</label>
+                            <div class="col-md-6"><label class="q-label">Last examined by an ophthalmologist? <span class="req">*</span></label>
                                 <?= pcf_radio('eye_last_exam', ['Date confirmed', 'Date not confirmed']) ?></div>
                             <div class="col-md-6"><label class="form-label">Date / remarks</label>
                                 <input type="text" name="eye_exam_remarks" class="form-control" placeholder="e.g. Jan 2025 — normal" value="<?= pcf_old('eye_exam_remarks') ?>"></div>
@@ -1643,7 +1925,7 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                     </div>
                     <div class="section-body">
                         <div class="row g-3">
-                            <div class="col-12"><label class="q-label">Present dental condition</label>
+                            <div class="col-12"><label class="q-label">Present dental condition <span class="req">*</span></label>
                                 <?= pcf_radio('dental_condition', ['Normal', 'Abnormal']) ?></div>
                             <div class="col-12 cond" data-when="dental_condition" data-eq="Abnormal">
                                 <div class="row g-3">
@@ -1653,9 +1935,9 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                                     <div class="col-md-6"><label class="q-label">Toothache</label><?= pcf_radio('dental_toothache', ['Yes', 'No']) ?></div>
                                 </div>
                             </div>
-                            <div class="col-md-6"><label class="q-label">Proper alignment of teeth?</label><?= pcf_radio('dental_alignment', ['Yes', 'No']) ?></div>
-                            <div class="col-md-6"><label class="q-label">Dental hygiene habits</label><?= pcf_radio('dental_hygiene', ['Brushing', 'Flossing', 'Both', 'Neither']) ?></div>
-                            <div class="col-md-6"><label class="q-label">How many times does the student brush per day?</label><?= pcf_radio('dental_brush_freq', ['Once', 'Twice', 'Three or more']) ?></div>
+                            <div class="col-md-6"><label class="q-label">Proper alignment of teeth? <span class="req">*</span></label><?= pcf_radio('dental_alignment', ['Yes', 'No']) ?></div>
+                            <div class="col-md-6"><label class="q-label">Dental hygiene habits <span class="req">*</span></label><?= pcf_radio('dental_hygiene', ['Brushing', 'Flossing', 'Both', 'Neither']) ?></div>
+                            <div class="col-md-6"><label class="q-label">How many times does the student brush per day? <span class="req">*</span></label><?= pcf_radio('dental_brush_freq', ['Once', 'Twice', 'Three or more']) ?></div>
                             <div class="col-12">
                                 <div class="file-drop">
                                     <label class="q-label mb-1"><i class="fas fa-paperclip me-1" style="color:var(--primary)"></i>Dental examination report <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
@@ -1674,8 +1956,8 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                     </div>
                     <div class="section-body">
                         <div class="row g-3">
-                            <div class="col-md-6"><label class="q-label">Vaccination status</label><?= pcf_radio('imm_vaccination', ['Vaccinated', 'Not Vaccinated']) ?></div>
-                            <div class="col-md-6"><label class="q-label">Has the student taken deworming medicine?</label><?= pcf_radio('imm_deworming', ['Yes', 'No']) ?></div>
+                            <div class="col-md-6"><label class="q-label">Vaccination status <span class="req">*</span></label><?= pcf_radio('imm_vaccination', ['Vaccinated', 'Not Vaccinated']) ?></div>
+                            <div class="col-md-6"><label class="q-label">Has the student taken deworming medicine? <span class="req">*</span></label><?= pcf_radio('imm_deworming', ['Yes', 'No']) ?></div>
                             <div class="col-12 cond" data-when="imm_deworming" data-eq="Yes">
                                 <label class="q-label">If yes, given where?</label><?= pcf_radio('imm_deworming_where', ['In school', 'By local doctor']) ?>
                             </div>
@@ -1701,7 +1983,7 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                     </div>
                     <div class="section-body">
                         <div class="row g-3">
-                            <div class="col-12"><label class="q-label">Does the student have any known allergy?</label><?= pcf_radio('allergy_has', ['Yes', 'No']) ?></div>
+                            <div class="col-12"><label class="q-label">Does the student have any known allergy? <span class="req">*</span></label><?= pcf_radio('allergy_has', ['Yes', 'No']) ?></div>
                             <div class="col-12 cond" data-when="allergy_has" data-eq="Yes">
                                 <div class="row g-3">
                                     <div class="col-12"><label class="q-label">If yes, type of allergy</label><?= pcf_radio('allergy_types', ['Medicine', 'Dust', 'Smoke', 'Food', 'None', 'Other']) ?></div>
@@ -1709,7 +1991,7 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                                     <div class="col-md-6"><label class="form-label">Detail of allergy</label><input type="text" name="allergy_detail" class="form-control" value="<?= pcf_old('allergy_detail') ?>"></div>
                                 </div>
                             </div>
-                            <div class="col-12"><label class="q-label">Does the student have any chronic (long-duration) illness?</label><?= pcf_radio('chronic_has', ['Yes', 'No']) ?></div>
+                            <div class="col-12"><label class="q-label">Does the student have any chronic (long-duration) illness? <span class="req">*</span></label><?= pcf_radio('chronic_has', ['Yes', 'No']) ?></div>
                             <div class="col-12 cond" data-when="chronic_has" data-eq="Yes">
                                 <div class="row g-3">
                                     <div class="col-md-6"><label class="q-label">Type of chronic illness</label><?= pcf_radio('chronic_type', ['Asthma', 'Diabetes', 'Seizure', 'Other', 'None']) ?></div>
@@ -1732,17 +2014,17 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                     </div>
                     <div class="section-body">
                         <div class="row g-3">
-                            <div class="col-12"><label class="q-label">History of any surgery?</label><?= pcf_radio('surg_had', ['Yes', 'No']) ?></div>
+                            <div class="col-12"><label class="q-label">History of any surgery? <span class="req">*</span></label><?= pcf_radio('surg_had', ['Yes', 'No']) ?></div>
                             <div class="col-12 cond" data-when="surg_had" data-eq="Yes">
                                 <label class="form-label">Name / type of surgery <span style="font-weight:400;color:#94a3b8">(plain language is fine)</span></label>
                                 <input type="text" name="surg_detail" class="form-control" value="<?= pcf_old('surg_detail') ?>">
                             </div>
-                            <div class="col-12"><label class="q-label">Was the student ever admitted to a hospital?</label><?= pcf_radio('surg_hospitalized', ['Yes', 'No']) ?></div>
+                            <div class="col-12"><label class="q-label">Was the student ever admitted to a hospital? <span class="req">*</span></label><?= pcf_radio('surg_hospitalized', ['Yes', 'No']) ?></div>
                             <div class="col-12 cond" data-when="surg_hospitalized" data-eq="Yes">
                                 <label class="form-label">Reason for hospital admission</label>
                                 <textarea name="surg_hosp_reason" class="form-control" rows="2"><?= pcf_old('surg_hosp_reason') ?></textarea>
                             </div>
-                            <div class="col-12"><label class="q-label">Is a patient / medical record available?</label><?= pcf_radio('surg_record_available', ['Yes', 'No']) ?></div>
+                            <div class="col-12"><label class="q-label">Is a patient / medical record available? <span class="req">*</span></label><?= pcf_radio('surg_record_available', ['Yes', 'No']) ?></div>
                             <div class="col-12">
                                 <div class="file-drop">
                                     <label class="q-label mb-1"><i class="fas fa-paperclip me-1" style="color:var(--primary)"></i>Medical records <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
@@ -1761,10 +2043,10 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                     </div>
                     <div class="section-body">
                         <div class="row g-3">
-                            <div class="col-md-6"><label class="q-label">Dietary preference</label><?= pcf_radio('nut_diet', ['Vegetarian', 'Non vegetarian', 'Other']) ?></div>
-                            <div class="col-md-6"><label class="q-label">Is adequate food provided?</label><?= pcf_radio('nut_adequate', ['Yes', 'No']) ?></div>
-                            <div class="col-12"><label class="q-label">Daily physical activity</label><?= pcf_radio('nut_activity', ['Less than 30 minutes', '30 minutes to 60 minutes', 'More than 60 minutes', 'No regular physical activity']) ?></div>
-                            <div class="col-12"><label class="q-label">Daily screen time</label><?= pcf_radio('nut_screen', ['Less than 1 hour', '1 hour to 2 hours', '2 hours to 4 hours', 'More than 4 hours']) ?></div>
+                            <div class="col-md-6"><label class="q-label">Dietary preference <span class="req">*</span></label><?= pcf_radio('nut_diet', ['Vegetarian', 'Non vegetarian', 'Other']) ?></div>
+                            <div class="col-md-6"><label class="q-label">Is adequate food provided? <span class="req">*</span></label><?= pcf_radio('nut_adequate', ['Yes', 'No']) ?></div>
+                            <div class="col-12"><label class="q-label">Daily physical activity <span class="req">*</span></label><?= pcf_radio('nut_activity', ['Less than 30 minutes', '30 minutes to 60 minutes', 'More than 60 minutes', 'No regular physical activity']) ?></div>
+                            <div class="col-12"><label class="q-label">Daily screen time <span class="req">*</span></label><?= pcf_radio('nut_screen', ['Less than 1 hour', '1 hour to 2 hours', '2 hours to 4 hours', 'More than 4 hours']) ?></div>
                         </div>
                     </div>
                 </div>
@@ -2021,6 +2303,8 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
             const errs = [];
             const add = (name, msg) => { errs.push(name); setError(name, msg); };
             const val = n => { const e = fieldEl(n); return e ? e.value.trim() : ''; };
+            const radioVal = n => { const e = form.querySelector('input[name="' + n + '"]:checked'); return e ? e.value : ''; };
+            const reqRadio = (n, msg) => { if (!radioVal(n)) add(n, msg || 'Please select an option.'); };
 
             if (s === 0) {
                 if (schoolSel) {
@@ -2037,6 +2321,8 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                 if (a4 && a4.length !== 4) add('parent_aadhar', 'Enter only the last 4 digits of the Aadhaar number.');
                 const am = val('parent_aadhar_mobile');
                 if (am && !isMobile(am)) add('parent_aadhar_mobile', 'Enter a valid 10-digit number, or leave it blank.');
+                const otpTok = fieldEl('parent_mobile_otp_token');
+                if (!otpTok || !otpTok.value) add('parent_mobile_otp_token', 'Please verify your mobile number with the OTP sent via WhatsApp.');
             }
 
             if (s === 1) {
@@ -2065,6 +2351,43 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
                 if (val('height_cm') && (isNaN(h) || h < 30 || h > 250)) add('height_cm', 'Enter height in cm (30–250), or leave it blank.');
                 const w = parseFloat(val('weight_kg'));
                 if (val('weight_kg') && (isNaN(w) || w < 5 || w > 200)) add('weight_kg', 'Enter weight in kg (5–200), or leave it blank.');
+
+                reqRadio('eye_uses_glasses', 'Please answer whether the student uses glasses.');
+                if (radioVal('eye_uses_glasses') === 'Yes') reqRadio('eye_glasses_in_use', 'Please answer this question.');
+                reqRadio('eye_conditions', 'Please answer this question.');
+                reqRadio('eye_last_exam', 'Please answer this question.');
+
+                reqRadio('dental_condition', 'Please answer this question.');
+                if (radioVal('dental_condition') === 'Abnormal') {
+                    reqRadio('dental_cavities', 'Please answer this question.');
+                    reqRadio('dental_bleeding', 'Please answer this question.');
+                    reqRadio('dental_discolor', 'Please answer this question.');
+                    reqRadio('dental_toothache', 'Please answer this question.');
+                }
+                reqRadio('dental_alignment', 'Please answer this question.');
+                reqRadio('dental_hygiene', 'Please answer this question.');
+                reqRadio('dental_brush_freq', 'Please answer this question.');
+
+                reqRadio('imm_vaccination', 'Please answer this question.');
+                reqRadio('imm_deworming', 'Please answer this question.');
+                if (radioVal('imm_deworming') === 'Yes') reqRadio('imm_deworming_where', 'Please answer this question.');
+            }
+
+            if (s === 3) {
+                reqRadio('allergy_has', 'Please answer whether the student has any known allergy.');
+                if (radioVal('allergy_has') === 'Yes') reqRadio('allergy_types', 'Please select the type of allergy.');
+
+                reqRadio('chronic_has', 'Please answer whether the student has any chronic illness.');
+                if (radioVal('chronic_has') === 'Yes') reqRadio('chronic_type', 'Please select the type of chronic illness.');
+
+                reqRadio('surg_had', 'Please answer whether the student has had any surgery.');
+                reqRadio('surg_hospitalized', 'Please answer whether the student was ever hospitalized.');
+                reqRadio('surg_record_available', 'Please answer this question.');
+
+                reqRadio('nut_diet', 'Please select a dietary preference.');
+                reqRadio('nut_adequate', 'Please answer whether adequate food is provided.');
+                reqRadio('nut_activity', 'Please select the daily physical activity.');
+                reqRadio('nut_screen', 'Please select the daily screen time.');
             }
 
             if (s === 4) {
@@ -2229,7 +2552,7 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
         }
         function applyServerErrors(errs) {
             const stepMap = {
-                school: 0, parent_name: 0, parent_mobile: 0, parent_email: 0, parent_aadhar: 0, parent_aadhar_mobile: 0,
+                school: 0, parent_name: 0, parent_mobile: 0, parent_email: 0, parent_aadhar: 0, parent_aadhar_mobile: 0, parent_mobile_otp_token: 0,
                 student_name: 1, student_dob: 1, student_pincode: 1, student_abha: 1,
                 height_cm: 2, weight_kg: 2, consent: 4, i_agree: 4
             };
@@ -2359,7 +2682,7 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
             const name = a.dataset.field;
             // map server field keys → the step that contains them
             const stepOf = {
-                school: 0, parent_name: 0, parent_mobile: 0, parent_email: 0, parent_aadhar: 0, parent_aadhar_mobile: 0,
+                school: 0, parent_name: 0, parent_mobile: 0, parent_email: 0, parent_aadhar: 0, parent_aadhar_mobile: 0, parent_mobile_otp_token: 0,
                 student_name: 1, student_dob: 1, student_pincode: 1, student_abha: 1,
                 height_cm: 2, weight_kg: 2,
                 consent: 4, i_agree: 4
@@ -2371,7 +2694,7 @@ function pcf_select(string $name, array $opts, string $ph = '— Select —'): s
 
         // If the server bounced back with errors, open the first step that has one
         <?php if ($errors):
-            $stepMap = ['school'=>0,'parent_name'=>0,'parent_mobile'=>0,'parent_email'=>0,'parent_aadhar'=>0,'parent_aadhar_mobile'=>0,'student_name'=>1,'student_dob'=>1,'student_pincode'=>1,'student_abha'=>1,'height_cm'=>2,'weight_kg'=>2,'consent'=>4,'i_agree'=>4];
+            $stepMap = ['school'=>0,'parent_name'=>0,'parent_mobile'=>0,'parent_email'=>0,'parent_aadhar'=>0,'parent_aadhar_mobile'=>0,'parent_mobile_otp_token'=>0,'student_name'=>1,'student_dob'=>1,'student_pincode'=>1,'student_abha'=>1,'height_cm'=>2,'weight_kg'=>2,'consent'=>4,'i_agree'=>4];
             $firstBad = 0;
             foreach (array_keys($errors) as $k) { if (isset($stepMap[$k])) { $firstBad = $stepMap[$k]; break; } }
         ?>

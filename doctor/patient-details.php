@@ -2,10 +2,48 @@
 include_once(__DIR__ . "/../config/connect.php");
 include_once(__DIR__ . "/../util/function.php");
 require_once __DIR__ . "/auth/guard.php";
+require_once __DIR__ . "/../lib/PatientHealthProfile.php";
 doctor_jwt_guard();
 
 $doctor_id = $_SESSION['doctor_id'];
-$patient_id = intval($_GET['id'] ?? 0);
+$patient_id = intval($_GET['id'] ?? $_POST['patient_id'] ?? 0);
+
+// Health Profile save (doctor may only edit a patient they've actually treated —
+// same ownership check as the SELECT below: an appointment must already exist).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_type'] ?? '') === 'health') {
+    $owns = $conn->prepare("SELECT 1 FROM appointments WHERE user_id = ? AND doctor_id = ? LIMIT 1");
+    $owns->bind_param('ii', $patient_id, $doctor_id);
+    $owns->execute();
+    if ($owns->get_result()->fetch_row()) {
+        PatientHealthProfile::save($conn, $patient_id, [
+            'height_cm'                  => $_POST['height_cm'] ?? null,
+            'weight_kg'                  => $_POST['weight_kg'] ?? null,
+            'blood_group'                => $_POST['h_blood_group'] ?? null,
+            'blood_pressure'             => $_POST['blood_pressure'] ?? null,
+            'pulse_rate'                 => $_POST['pulse_rate'] ?? null,
+            'vision_left'                => $_POST['vision_left'] ?? null,
+            'vision_right'               => $_POST['vision_right'] ?? null,
+            'known_allergies'            => $_POST['known_allergies'] ?? null,
+            'chronic_conditions'         => $_POST['chronic_conditions'] ?? null,
+            'current_medications'        => $_POST['current_medications'] ?? null,
+            'past_surgeries'             => $_POST['past_surgeries'] ?? null,
+            'disability'                 => $_POST['disability'] ?? null,
+            'vaccination_details'        => $_POST['vaccination_details'] ?? null,
+            'is_vaccinated'              => isset($_POST['is_vaccinated']) ? 1 : 0,
+            'emergency_contact_name'     => $_POST['emergency_contact_name'] ?? null,
+            'emergency_contact_phone'    => $_POST['emergency_contact_phone'] ?? null,
+            'emergency_contact_relation' => $_POST['emergency_contact_relation'] ?? null,
+            'last_checkup_date'          => $_POST['last_checkup_date'] ?: null,
+            'next_checkup_date'          => $_POST['next_checkup_date'] ?: null,
+            'checkup_notes'              => $_POST['checkup_notes'] ?? null,
+            'insurance_provider'         => $_POST['insurance_provider'] ?? null,
+            'insurance_number'           => $_POST['insurance_number'] ?? null,
+        ], 'doctor', $doctor_id);
+        $_SESSION['health_profile_saved'] = 1;
+    }
+    header('Location: patient-details.php?id=' . $patient_id . '#health');
+    exit;
+}
 
 // Get patient full details with address
 $patient_sql = "
@@ -37,6 +75,10 @@ $patient = $patient_result->fetch_assoc();
 $dob = new DateTime($patient['dob']);
 $now = new DateTime();
 $age = $dob->diff($now)->y;
+
+$health = PatientHealthProfile::get($conn, $patient_id);
+$health_profile_saved = !empty($_SESSION['health_profile_saved']);
+unset($_SESSION['health_profile_saved']);
 
 // Get patient appointments history
 $appointments_sql = "
@@ -471,6 +513,11 @@ $doctor_phone = $doctor_data['phone'] ?? '';
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="health-tab" data-bs-toggle="tab" data-bs-target="#health" type="button">
+                                <i class="fa fa-heart-pulse me-1"></i> Health Profile
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
                             <button class="nav-link" id="appointments-tab" data-bs-toggle="tab" data-bs-target="#appointments" type="button">
                                 <i class="fa fa-calendar me-1"></i> Appointments (<?= $appointments_result->num_rows ?>)
                             </button>
@@ -670,6 +717,155 @@ $doctor_phone = $doctor_data['phone'] ?? '';
                             </div>
                         </div>
                         
+                        <!-- Health Profile Tab -->
+                        <div class="tab-pane fade" id="health" role="tabpanel">
+                            <div class="profile-card shadow">
+                                <?php if ($health_profile_saved): ?>
+                                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                                        Health profile updated successfully!
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                    </div>
+                                <?php endif; ?>
+                                <form method="POST" action="patient-details.php?id=<?= $patient_id ?>">
+                                    <input type="hidden" name="form_type" value="health">
+                                    <input type="hidden" name="patient_id" value="<?= $patient_id ?>">
+
+                                    <h5 class="mb-3"><i class="fa fa-heartbeat me-2"></i>Vitals</h5>
+                                    <div class="row mb-4">
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label">Height (cm)</label>
+                                            <input type="number" step="0.1" min="0" class="form-control" name="height_cm" id="dphHeight" value="<?= htmlspecialchars($health['height_cm'] ?? '') ?>">
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label">Weight (kg)</label>
+                                            <input type="number" step="0.1" min="0" class="form-control" name="weight_kg" id="dphWeight" value="<?= htmlspecialchars($health['weight_kg'] ?? '') ?>">
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label">BMI</label>
+                                            <input type="text" class="form-control" id="dphBmi" value="<?= $health['bmi'] ?? '' ?>" readonly placeholder="auto">
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label">Blood Group</label>
+                                            <select class="form-control" name="h_blood_group">
+                                                <option value="">Select</option>
+                                                <?php foreach (['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as $bg): ?>
+                                                    <option value="<?= $bg ?>" <?= ($health['blood_group'] ?? '') === $bg ? 'selected' : '' ?>><?= $bg ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label">Blood Pressure</label>
+                                            <input type="text" class="form-control" name="blood_pressure" placeholder="e.g. 120/80" value="<?= htmlspecialchars($health['blood_pressure'] ?? '') ?>">
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label">Pulse Rate (/min)</label>
+                                            <input type="number" class="form-control" name="pulse_rate" value="<?= htmlspecialchars($health['pulse_rate'] ?? '') ?>">
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label">Vision — Left</label>
+                                            <input type="text" class="form-control" name="vision_left" value="<?= htmlspecialchars($health['vision_left'] ?? '') ?>">
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label">Vision — Right</label>
+                                            <input type="text" class="form-control" name="vision_right" value="<?= htmlspecialchars($health['vision_right'] ?? '') ?>">
+                                        </div>
+                                    </div>
+
+                                    <h5 class="mb-3"><i class="fa fa-notes-medical me-2"></i>Medical History</h5>
+                                    <div class="row mb-4">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Known Allergies</label>
+                                            <textarea class="form-control" name="known_allergies" rows="2"><?= htmlspecialchars($health['known_allergies'] ?? '') ?></textarea>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Chronic Conditions</label>
+                                            <textarea class="form-control" name="chronic_conditions" rows="2" placeholder="e.g. Asthma, Diabetes"><?= htmlspecialchars($health['chronic_conditions'] ?? '') ?></textarea>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Current Medications</label>
+                                            <textarea class="form-control" name="current_medications" rows="2"><?= htmlspecialchars($health['current_medications'] ?? '') ?></textarea>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Past Surgeries</label>
+                                            <textarea class="form-control" name="past_surgeries" rows="2"><?= htmlspecialchars($health['past_surgeries'] ?? '') ?></textarea>
+                                        </div>
+                                        <div class="col-12 mb-3">
+                                            <label class="form-label">Disability</label>
+                                            <input type="text" class="form-control" name="disability" value="<?= htmlspecialchars($health['disability'] ?? '') ?>">
+                                        </div>
+                                    </div>
+
+                                    <h5 class="mb-3"><i class="fa fa-syringe me-2"></i>Vaccination</h5>
+                                    <div class="row mb-4">
+                                        <div class="col-md-4 mb-3">
+                                            <div class="form-check mt-4">
+                                                <input class="form-check-input" type="checkbox" name="is_vaccinated" id="dph_is_vaccinated" value="1" <?= !empty($health['is_vaccinated']) ? 'checked' : '' ?>>
+                                                <label class="form-check-label" for="dph_is_vaccinated">Vaccinated</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-8 mb-3">
+                                            <label class="form-label">Vaccination Details</label>
+                                            <input type="text" class="form-control" name="vaccination_details" value="<?= htmlspecialchars($health['vaccination_details'] ?? '') ?>">
+                                        </div>
+                                    </div>
+
+                                    <h5 class="mb-3"><i class="fa fa-phone me-2"></i>Emergency Contact</h5>
+                                    <div class="row mb-4">
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">Name</label>
+                                            <input type="text" class="form-control" name="emergency_contact_name" value="<?= htmlspecialchars($health['emergency_contact_name'] ?? '') ?>">
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">Phone</label>
+                                            <input type="text" class="form-control" name="emergency_contact_phone" maxlength="15" value="<?= htmlspecialchars($health['emergency_contact_phone'] ?? '') ?>">
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">Relation</label>
+                                            <input type="text" class="form-control" name="emergency_contact_relation" value="<?= htmlspecialchars($health['emergency_contact_relation'] ?? '') ?>">
+                                        </div>
+                                    </div>
+
+                                    <h5 class="mb-3"><i class="fa fa-calendar-check me-2"></i>Checkup Schedule</h5>
+                                    <div class="row mb-4">
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">Last Checkup</label>
+                                            <input type="date" class="form-control" name="last_checkup_date" value="<?= htmlspecialchars($health['last_checkup_date'] ?? '') ?>">
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">Next Checkup</label>
+                                            <input type="date" class="form-control" name="next_checkup_date" value="<?= htmlspecialchars($health['next_checkup_date'] ?? '') ?>">
+                                        </div>
+                                        <div class="col-12 mb-3">
+                                            <label class="form-label">Notes</label>
+                                            <textarea class="form-control" name="checkup_notes" rows="2"><?= htmlspecialchars($health['checkup_notes'] ?? '') ?></textarea>
+                                        </div>
+                                    </div>
+
+                                    <h5 class="mb-3"><i class="fa fa-shield-alt me-2"></i>Insurance</h5>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Provider</label>
+                                            <input type="text" class="form-control" name="insurance_provider" value="<?= htmlspecialchars($health['insurance_provider'] ?? '') ?>">
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Policy Number</label>
+                                            <input type="text" class="form-control" name="insurance_number" value="<?= htmlspecialchars($health['insurance_number'] ?? '') ?>">
+                                        </div>
+                                    </div>
+
+                                    <?php if ($health): ?>
+                                    <div class="text-muted mb-3" style="font-size:.78rem;">
+                                        <i class="fa fa-clock me-1"></i>Last updated <?= date('d M Y, h:i A', strtotime($health['updated_at'])) ?> by <?= ucfirst($health['last_updated_role'] ?: 'unknown') ?>
+                                    </div>
+                                    <?php endif; ?>
+
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fa fa-save me-2"></i>Save Health Profile
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
                         <!-- Appointments Tab -->
                         <div class="tab-pane fade" id="appointments" role="tabpanel">
                             <div class="profile-card shadow">
@@ -886,6 +1082,25 @@ $doctor_phone = $doctor_data['phone'] ?? '';
         function toggleMenu() {
             document.getElementById("sidebarMenu").classList.toggle("show");
         }
+
+        // Health Profile tab — BMI auto-calc + deep-link
+        (function () {
+            const ht = document.getElementById('dphHeight');
+            const wt = document.getElementById('dphWeight');
+            const bmiEl = document.getElementById('dphBmi');
+            if (ht && wt && bmiEl) {
+                const calc = () => {
+                    const h = parseFloat(ht.value), w = parseFloat(wt.value);
+                    bmiEl.value = (h > 0 && w > 0) ? (w / ((h / 100) ** 2)).toFixed(2) : '';
+                };
+                ht.addEventListener('input', calc);
+                wt.addEventListener('input', calc);
+            }
+            if (window.location.hash === '#health') {
+                const t = document.getElementById('health-tab');
+                if (t) new bootstrap.Tab(t).show();
+            }
+        })();
         function viewAppointmentDetails(appointmentId) {
             // Simple AJAX call to get appointment details
             fetch('get-appointment-details.php?id=' + appointmentId)

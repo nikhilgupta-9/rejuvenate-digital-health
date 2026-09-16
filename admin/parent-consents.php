@@ -22,16 +22,29 @@ $total    = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) c FROM
 $pending  = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) c FROM parent_consent_forms WHERE status='pending'"))['c'];
 $reviewed = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) c FROM parent_consent_forms WHERE status='reviewed'"))['c'];
 $month    = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) c FROM parent_consent_forms WHERE YEAR(submitted_at)=YEAR(CURDATE()) AND MONTH(submitted_at)=MONTH(CURDATE())"))['c'];
+/* Old school-wide generic-link submissions never got auto-linked to a real
+   school_members row (only the per-student secure link does that at submit
+   time) — these need a human to search + link once. See parent-consent-link.php. */
+$unlinked = (int) mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) c FROM parent_consent_forms WHERE member_id IS NULL"))['c'];
 
-$school_filter = (int) ($_GET['school_id'] ?? 0);
-$status_filter = $_GET['status'] ?? 'all';
-$source_filter = $_GET['source'] ?? 'all';
-$search        = trim($_GET['q'] ?? '');
+$school_filter   = (int) ($_GET['school_id'] ?? 0);
+$status_filter   = $_GET['status'] ?? 'all';
+$source_filter   = $_GET['source'] ?? 'all';
+$verified_filter = $_GET['verified_via'] ?? 'all';
+$linked_filter   = $_GET['linked'] ?? 'all';
+$validity_filter = $_GET['validity'] ?? 'all';
+$search          = trim($_GET['q'] ?? '');
 
 $where = "WHERE 1=1";
 if ($school_filter) $where .= " AND c.school_id = " . $school_filter;
 if (in_array($status_filter, ['pending', 'reviewed', 'archived'])) $where .= " AND c.status = '" . $status_filter . "'";
 if (in_array($source_filter, ['parent', 'doctor'])) $where .= " AND c.source = '" . $source_filter . "'";
+if (in_array($verified_filter, ['token', 'manual'])) $where .= " AND c.verified_via = '" . $verified_filter . "'";
+if ($linked_filter === 'unlinked') $where .= " AND c.member_id IS NULL";
+elseif ($linked_filter === 'linked') $where .= " AND c.member_id IS NOT NULL";
+if ($validity_filter === 'revoked') $where .= " AND c.revoked = 1";
+elseif ($validity_filter === 'expired') $where .= " AND c.revoked = 0 AND c.expires_at IS NOT NULL AND c.expires_at < CURDATE()";
+elseif ($validity_filter === 'active') $where .= " AND c.revoked = 0 AND (c.expires_at IS NULL OR c.expires_at >= CURDATE())";
 if ($search !== '') {
     $q = mysqli_real_escape_string($conn, $search);
     $where .= " AND (c.student_name LIKE '%$q%' OR c.parent_name LIKE '%$q%' OR c.parent_mobile LIKE '%$q%' OR c.token LIKE '%$q%')";
@@ -50,7 +63,7 @@ if ($sa) $schools_all = mysqli_fetch_all($sa, MYSQLI_ASSOC);
 $schools_dd = $schools_all; // filter dropdown reuses the same list
 
 $consent_form_url = rtrim(BASE_URL, '/') . '/school/parent-consent.php';
-$qs = http_build_query(array_filter(['school_id' => $school_filter ?: null, 'status' => $status_filter !== 'all' ? $status_filter : null, 'source' => $source_filter !== 'all' ? $source_filter : null, 'q' => $search ?: null]));
+$qs = http_build_query(array_filter(['school_id' => $school_filter ?: null, 'status' => $status_filter !== 'all' ? $status_filter : null, 'source' => $source_filter !== 'all' ? $source_filter : null, 'verified_via' => $verified_filter !== 'all' ? $verified_filter : null, 'linked' => $linked_filter !== 'all' ? $linked_filter : null, 'validity' => $validity_filter !== 'all' ? $validity_filter : null, 'q' => $search ?: null]));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -95,6 +108,14 @@ $qs = http_build_query(array_filter(['school_id' => $school_filter ?: null, 'sta
                 </div>
                 <?php unset($_SESSION['success_message']); endif; ?>
 
+                <?php if ($unlinked > 0): ?>
+                <div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2" role="alert">
+                    <div><i class="fas fa-link-slash me-2"></i><strong><?= $unlinked ?></strong> consent<?= $unlinked === 1 ? '' : 's' ?> submitted via the old generic school link
+                        <?= $unlinked === 1 ? "isn't" : "aren't" ?> linked to a real school member yet — one-time cleanup needed.</div>
+                    <a href="?linked=unlinked" class="btn btn-warning btn-sm"><i class="fas fa-user-plus me-1"></i>Review &amp; link now</a>
+                </div>
+                <?php endif; ?>
+
                 <div class="row g-3 mb-4">
                     <div class="col-6 col-lg-3"><div class="stat-box bg-stat-blue"><i class="fas fa-file-signature big-icon"></i><div class="num"><?= $total ?></div><div class="lbl">Total Consents</div></div></div>
                     <div class="col-6 col-lg-3"><div class="stat-box bg-stat-warn"><i class="fas fa-clock big-icon"></i><div class="num"><?= $pending ?></div><div class="lbl">Pending Review</div></div></div>
@@ -130,6 +151,30 @@ $qs = http_build_query(array_filter(['school_id' => $school_filter ?: null, 'sta
                             <select class="form-select form-select-sm" name="source">
                                 <?php foreach (['all' => 'All', 'parent' => 'Parent (online)', 'doctor' => 'Doctor (in person)'] as $v => $l): ?>
                                     <option value="<?= $v ?>" <?= $source_filter === $v ? 'selected' : '' ?>><?= $l ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <label class="form-label mb-1">Verification</label>
+                            <select class="form-select form-select-sm" name="verified_via">
+                                <?php foreach (['all' => 'All', 'token' => 'Verified link', 'manual' => 'Manual — needs review'] as $v => $l): ?>
+                                    <option value="<?= $v ?>" <?= $verified_filter === $v ? 'selected' : '' ?>><?= $l ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <label class="form-label mb-1">Linked to member</label>
+                            <select class="form-select form-select-sm" name="linked">
+                                <?php foreach (['all' => 'All', 'unlinked' => 'Unlinked (needs review)', 'linked' => 'Linked'] as $v => $l): ?>
+                                    <option value="<?= $v ?>" <?= $linked_filter === $v ? 'selected' : '' ?>><?= $l ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <label class="form-label mb-1">Validity</label>
+                            <select class="form-select form-select-sm" name="validity">
+                                <?php foreach (['all' => 'All', 'active' => 'Active', 'expired' => 'Expired (academic year)', 'revoked' => 'Revoked'] as $v => $l): ?>
+                                    <option value="<?= $v ?>" <?= $validity_filter === $v ? 'selected' : '' ?>><?= $l ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -177,11 +222,29 @@ $qs = http_build_query(array_filter(['school_id' => $school_filter ?: null, 'sta
                                     <td><span class="cell-sub"><?= $i++ ?></span></td>
                                     <td data-label="Student">
                                         <div class="cell-title"><?= htmlspecialchars($c['student_name']) ?></div>
-                                        <div class="cell-sub"><?= $c['member_uid'] ? htmlspecialchars($c['member_uid']) : 'Not linked to a member' ?></div>
+                                        <?php if ($c['member_uid']): ?>
+                                            <div class="cell-sub"><?= htmlspecialchars($c['member_uid']) ?></div>
+                                        <?php else: ?>
+                                            <div class="cell-sub"><a href="parent-consent-link.php?id=<?= $c['id'] ?>&ret=<?= urlencode($qs) ?>" class="text-danger" style="font-weight:600;"><i class="fas fa-link-slash me-1"></i>Not linked — link now</a></div>
+                                        <?php endif; ?>
+                                        <?php if (($c['verified_via'] ?? 'manual') === 'token'): ?>
+                                            <span class="pill pill-sq pill-success mt-1" title="Submitted via a verified per-student link"><i class="fas fa-shield-check"></i>Verified link</span>
+                                        <?php else: ?>
+                                            <span class="pill pill-sq pill-muted mt-1" title="Submitted via the generic school link">Manual — needs review</span>
+                                        <?php endif; ?>
                                     </td>
                                     <td data-label="Parent / Guardian">
                                         <div class="cell-title" style="font-weight:500;"><?= htmlspecialchars($c['parent_name']) ?> <span class="cell-sub">(<?= htmlspecialchars($c['relation'] ?? '') ?>)</span></div>
-                                        <div class="cell-sub"><?= htmlspecialchars($c['parent_mobile']) ?></div>
+                                        <div class="cell-sub"><?= htmlspecialchars($c['parent_mobile']) ?>
+                                            <?php if (!empty($c['mobile_otp_verified'])): ?>
+                                                <i class="fas fa-circle-check text-success ms-1" title="Mobile verified via WhatsApp OTP"></i>
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php if (($c['identity_check'] ?? 'not_applicable') === 'mismatched'): ?>
+                                            <span class="pill pill-sq pill-danger mt-1" title="Aadhaar-linked mobile does not match the school's on-record parent mobile"><i class="fas fa-triangle-exclamation"></i>Identity mismatch — review</span>
+                                        <?php elseif (($c['identity_check'] ?? 'not_applicable') === 'matched'): ?>
+                                            <span class="pill pill-sq pill-success mt-1" title="Aadhaar-linked mobile matches the school's on-record parent mobile"><i class="fas fa-shield-check"></i>Identity matched</span>
+                                        <?php endif; ?>
                                     </td>
                                     <td data-label="School"><span class="cell-title" style="font-weight:500;"><?= $c['school_name'] ? htmlspecialchars($c['school_name']) : htmlspecialchars($c['school_name_manual'] ?: '—') ?></span></td>
                                     <td data-label="Plan / Payment">
@@ -207,6 +270,13 @@ $qs = http_build_query(array_filter(['school_id' => $school_filter ?: null, 'sta
                                     <td data-label="Status">
                                         <span class="pill <?= $status_pill[$c['status']] ?? 'pill-muted' ?>"><?= ucfirst($c['status']) ?></span>
                                         <?php if (!$c['consent_given']): ?><div class="cell-sub mt-1" style="color:#b91c1c;">Not agreed</div><?php endif; ?>
+                                        <?php if (!empty($c['revoked'])): ?>
+                                            <div class="mt-1"><span class="pill pill-sq pill-danger" title="Revoked by the parent<?= $c['revoked_at'] ? ' on ' . date('d M Y', strtotime($c['revoked_at'])) : '' ?>"><i class="fas fa-ban"></i>Revoked</span></div>
+                                        <?php elseif (!empty($c['expires_at']) && $c['expires_at'] < date('Y-m-d')): ?>
+                                            <div class="mt-1"><span class="pill pill-sq pill-warn" title="Academic year <?= htmlspecialchars($c['academic_year'] ?? '') ?> ended"><i class="fas fa-hourglass-end"></i>Expired</span></div>
+                                        <?php elseif (!empty($c['academic_year'])): ?>
+                                            <div class="cell-sub mt-1"><?= htmlspecialchars($c['academic_year']) ?></div>
+                                        <?php endif; ?>
                                     </td>
                                     <td data-label="Actions">
                                         <div class="d-inline-flex flex-wrap gap-1 justify-content-end">
@@ -240,6 +310,9 @@ $qs = http_build_query(array_filter(['school_id' => $school_filter ?: null, 'sta
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <div class="alert alert-warning py-2 px-3 mb-3" style="font-size:.82rem;">
+                    <i class="fas fa-triangle-exclamation me-1"></i><strong>Legacy generic link.</strong> Anyone can submit through it, so the submission isn't pre-matched to a real student — it lands as "Manual — needs review" and has to be linked by hand afterwards (see the banner above). Prefer the personalized <strong>"Send Consent Link"</strong> button on a student's page instead (School panel → Members → student → Send Consent Link) — that link is signed to one specific student, so the submission links to their record automatically and never needs manual review.
+                </div>
                 <label class="form-label mb-1">Pre-fill a school <span class="text-muted">(optional)</span></label>
                 <select class="form-select form-select-sm mb-3" id="shareSchool">
                     <option value="">— parents pick the school themselves —</option>

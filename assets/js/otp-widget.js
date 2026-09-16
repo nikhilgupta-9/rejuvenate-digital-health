@@ -69,6 +69,7 @@
       verifyRow.style.display = 'none';
       msg('✓ Mobile number verified', 'ok');
       setSubmitEnabled(true);
+      if (tokenEl) tokenEl.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
     function reset() {

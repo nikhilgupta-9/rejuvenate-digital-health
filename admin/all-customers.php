@@ -150,24 +150,6 @@ $verified_customers = mysqli_fetch_assoc($verified_result)['verified'];
     <title>Customer Management | Admin Dashboard</title>
 
     <?php include "links.php"; ?>
-    <style>
-        /* page-specific only */
-        .customer-table   { box-shadow:0 .5rem 1.5rem rgba(0,0,0,.08); border-radius:10px; overflow:hidden; }
-        .table td         { vertical-align:middle; }
-        .table th         { font-size:.8rem; letter-spacing:.5px; text-transform:uppercase; }
-        .status-badge     { padding:5px 12px; border-radius:20px; font-size:.75rem; font-weight:600; cursor:pointer; }
-        .badge-active     { background:#e6f7ee; color:#16a34a; }
-        .badge-inactive   { background:#fef0f0; color:#dc2626; }
-        .badge-blocked    { background:#fff3cd; color:#856404; }
-        .verification-badge { padding:4px 8px; border-radius:12px; font-size:.7rem; font-weight:600; }
-        .badge-verified   { background:#e6f7ee; color:#16a34a; }
-        .badge-unverified { background:#fff3cd; color:#856404; }
-        .stats-card       { background:#eaf4fd; border:1px solid #b3d4f0; color:#1f2937; border-radius:10px; padding:20px; margin-bottom:20px; }
-        .stats-number     { font-size:2rem; font-weight:700; margin-bottom:5px; color:#0C74C5; }
-        .stats-label      { font-size:.9rem; opacity:.9; }
-        .customer-avatar  { width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid #e9ecef; }
-        .action-dropdown  { min-width:150px; }
-    </style>
 </head>
 
 <body class="crm_body_bg">
@@ -185,10 +167,20 @@ $verified_customers = mysqli_fetch_assoc($verified_result)['verified'];
 
         <div class="main_content_iner">
             <div class="container-fluid p-0 sm_padding_15px">
-                <!-- Success/Error Messages -->
+
+                <div class="list-page-head">
+                    <div class="page-heading">
+                        <h4 class="mb-0 fw-bold">Customer Management</h4>
+                        <small class="text-muted">All registered patient accounts — status, verification and records</small>
+                    </div>
+                    <a href="add-customer.php" class="btn btn-primary btn-sm">
+                        <i class="fas fa-plus me-1"></i> Add New Customer
+                    </a>
+                </div>
+
                 <?php if (isset($_SESSION['success_message'])): ?>
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
-                        <?= $_SESSION['success_message'] ?>
+                        <i class="fas fa-check-circle me-2"></i><?= $_SESSION['success_message'] ?>
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
                     <?php unset($_SESSION['success_message']); ?>
@@ -196,235 +188,138 @@ $verified_customers = mysqli_fetch_assoc($verified_result)['verified'];
 
                 <?php if (isset($_SESSION['error_message'])): ?>
                     <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                        <?= $_SESSION['error_message'] ?>
+                        <i class="fas fa-triangle-exclamation me-2"></i><?= $_SESSION['error_message'] ?>
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
                     <?php unset($_SESSION['error_message']); ?>
                 <?php endif; ?>
 
-                <!-- Statistics Cards -->
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="stats-card">
-                            <div class="stats-number"><?= $total_customers ?></div>
-                            <div class="stats-label">Total Customers</div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="stats-card">
-                            <div class="stats-number"><?= $active_customers ?></div>
-                            <div class="stats-label">Active Customers</div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="stats-card">
-                            <div class="stats-number"><?= $verified_customers ?></div>
-                            <div class="stats-label">Verified Customers</div>
-                        </div>
-                    </div>
+                <div class="row g-3 mb-4">
+                    <div class="col-6 col-lg-4"><div class="stat-box bg-stat-blue"><i class="fas fa-users big-icon"></i><div class="num"><?= $total_customers ?></div><div class="lbl">Total Customers</div></div></div>
+                    <div class="col-6 col-lg-4"><div class="stat-box bg-stat-green"><i class="fas fa-user-check big-icon"></i><div class="num"><?= $active_customers ?></div><div class="lbl">Active Customers</div></div></div>
+                    <div class="col-6 col-lg-4"><div class="stat-box bg-stat-teal"><i class="fas fa-shield-check big-icon"></i><div class="num"><?= $verified_customers ?></div><div class="lbl">Verified Customers</div></div></div>
                 </div>
 
-                <!-- Filters Section -->
-                <div class="filter-section">
-                    <form method="GET" action="">
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <input type="text" class="form-control" name="search" placeholder="Search by name, email, or phone..." value="<?= htmlspecialchars($search) ?>">
-                            </div>
-                            <div class="col-md-3">
-                                <select class="form-control" name="status">
-                                    <option value="">All Status</option>
-                                    <option value="Active" <?= $status_filter === 'Active' ? 'selected' : '' ?>>Active</option>
-                                    <option value="Inactive" <?= $status_filter === 'Inactive' ? 'selected' : '' ?>>Inactive</option>
-                                    <option value="Blocked" <?= $status_filter === 'Blocked' ? 'selected' : '' ?>>Blocked</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <select class="form-control" name="verification">
-                                    <option value="">All Verification</option>
-                                    <option value="verified" <?= $verification_filter === 'verified' ? 'selected' : '' ?>>Verified</option>
-                                    <option value="unverified" <?= $verification_filter === 'unverified' ? 'selected' : '' ?>>Unverified</option>
-                                </select>
-                            </div>
-                            <div class="col-md-2">
-                                <button type="submit" class="btn btn-primary w-100">Filter</button>
-                            </div>
+                <div class="filter-card">
+                    <form method="GET" class="row g-3 align-items-end">
+                        <div class="col-6 col-lg-5">
+                            <label class="form-label mb-1">Search</label>
+                            <input type="text" class="form-control form-control-sm" name="search" placeholder="Name, email or mobile..." value="<?= htmlspecialchars($search) ?>">
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <label class="form-label mb-1">Status</label>
+                            <select class="form-select form-select-sm" name="status">
+                                <option value="">All Status</option>
+                                <option value="Active" <?= $status_filter === 'Active' ? 'selected' : '' ?>>Active</option>
+                                <option value="Inactive" <?= $status_filter === 'Inactive' ? 'selected' : '' ?>>Inactive</option>
+                                <option value="Blocked" <?= $status_filter === 'Blocked' ? 'selected' : '' ?>>Blocked</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <label class="form-label mb-1">Verification</label>
+                            <select class="form-select form-select-sm" name="verification">
+                                <option value="">All</option>
+                                <option value="verified" <?= $verification_filter === 'verified' ? 'selected' : '' ?>>Verified</option>
+                                <option value="unverified" <?= $verification_filter === 'unverified' ? 'selected' : '' ?>>Unverified</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <button class="btn btn-primary btn-sm w-100"><i class="fas fa-search me-1"></i>Filter</button>
                         </div>
                     </form>
                 </div>
 
-                <div class="row justify-content-center">
-                    <div class="col-12">
-                        <div class="white_card card_height_100 mb_30">
-                            <div class="white_card_header">
-                                <div class="row align-items-center justify-content-between flex-wrap">
-                                    <div class="col-lg-4">
-                                        <h2 class="page-title">Customer Management</h2>
-                                    </div>
-                                    <div class="col-lg-4 text-lg-end">
-                                        <a href="add-customer.php" class="btn btn-primary">
-                                            <i class="fas fa-plus me-2"></i>Add New Customer
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="white_card_body">
-                                <div class="table-responsive customer-table">
-                                    <table class="table table-hover">
-                                        <thead class="table-header">
-                                            <tr>
-                                                <th scope="col">#</th>
-                                                <th scope="col">Customer</th>
-                                                <th scope="col">Contact</th>
-                                                <th scope="col">Email</th>
-                                                <th scope="col">Status</th>
-                                                <th scope="col">Verification</th>
-                                                <th scope="col">Joined</th>
-                                                <th scope="col" class="text-center">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php
-                                            $no = 1;
-                                            if (mysqli_num_rows($result) > 0) {
-                                                while ($row = mysqli_fetch_assoc($result)) {
-                                                    $profile_pic = !empty($row['profile_pic'])
-                                                        ? BASE_URL . 'assets/img/' . $row['profile_pic']
-                                                        : '';
-
-                                            ?>
-                                                    <tr>
-                                                        <th scope="row"><?= $no++ ?></th>
-                                                        <td>
-                                                            <div class="d-flex align-items-center">
-                                                                <div class="me-3">
-                                                                    <?php if (!empty($profile_pic)) { ?>
-                                                                        <img src="<?= $profile_pic ?>" class="img-fluid rounded-circle" style="width: 80px; height: 80px; object-fit: cover;">
-                                                                    <?php } else { ?>
-                                                                        <i class="fas fa-user-circle" style="font-size: 80px; color: #ccc;"></i>
-                                                                    <?php } ?>
-
-                                                                </div>
-                                                                <div>
-                                                                    <h6 class="mb-0"><?= htmlspecialchars($row['name'] . ' ' . $row['last_name']) ?></h6>
-                                                                    <small class="text-muted">ID: #<?= $row['id'] ?></small>
-                                                                </div>
-                                                            </div>
-                                                        </td>
-                                                        <td>
-                                                            <div><?= $row['mobile'] ?></div>
-                                                            <?php if (!empty($row['emergency_contact'])): ?>
-                                                                <small class="text-muted">Emergency: <?= $row['emergency_contact'] ?></small>
-                                                            <?php endif; ?>
-                                                        </td>
-                                                        <td>
-                                                            <div><?= $row['email'] ?></div>
-                                                            <small class="text-muted">
-                                                                Last Login: <?= !empty($row['last_login']) ? date('M j, Y', strtotime($row['last_login'])) : 'Never' ?>
-                                                            </small>
-                                                        </td>
-                                                        <td>
-                                                            <a href="?toggle_status=<?= $row['id'] ?>"
-                                                                class="status-badge <?= 'badge-' . strtolower($row['status']) ?>"
-                                                                onclick="return confirm('Change status to <?= $row['status'] === 'Active' ? 'Inactive' : 'Active' ?>?')">
-                                                                <?= $row['status'] ?>
-                                                            </a>
-                                                        </td>
-                                                        <td>
-                                                            <?php if ($row['email_verified']): ?>
-                                                                <span class="verification-badge badge-verified">
-                                                                    <i class="fas fa-check-circle me-1"></i>Verified
-                                                                </span>
-                                                            <?php else: ?>
-                                                                <a href="?verify_email=<?= $row['id'] ?>"
-                                                                    class="verification-badge badge-unverified"
-                                                                    onclick="return confirm('Mark email as verified?')">
-                                                                    <i class="fas fa-times-circle me-1"></i>Unverified
-                                                                </a>
-                                                            <?php endif; ?>
-                                                        </td>
-                                                        <td>
-                                                            <div><?= date('M j, Y', strtotime($row['created_at'])) ?></div>
-                                                            <small class="text-muted"><?= date('g:i A', strtotime($row['created_at'])) ?></small>
-                                                        </td>
-                                                        <td class="text-center">
-                                                            <div class="dropdown">
-                                                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                                                    type="button"
-                                                                    data-bs-toggle="dropdown"
-                                                                    aria-expanded="false">
-                                                                    Actions
-                                                                </button>
-                                                                <ul class="dropdown-menu action-dropdown">
-                                                                    <li>
-                                                                        <a class="dropdown-item" href="view-customer.php?id=<?= $row['id'] ?>">
-                                                                            <i class="fas fa-eye me-2"></i>View Details
-                                                                        </a>
-                                                                    </li>
-                                                                    <li>
-                                                                        <a class="dropdown-item" href="edit-customer.php?id=<?= $row['id'] ?>">
-                                                                            <i class="fas fa-edit me-2"></i>Edit Customer
-                                                                        </a>
-                                                                    </li>
-                                                                    <li>
-                                                                        <a class="dropdown-item" href="upload-medical-record.php?for=patient&patient_id=<?= $row['id'] ?>">
-                                                                            <i class="fas fa-file-medical me-2"></i>Upload Medical Record
-                                                                        </a>
-                                                                    </li>
-                                                                    <li>
-                                                                        <a class="dropdown-item" href="medical-records.php?tab=patients&q=<?= urlencode($row['name']) ?>">
-                                                                            <i class="fas fa-folder-open me-2"></i>View Medical Records
-                                                                        </a>
-                                                                    </li>
-                                                                    <li>
-                                                                        <hr class="dropdown-divider">
-                                                                    </li>
-                                                                    <li>
-                                                                        <a class="dropdown-item text-danger"
-                                                                            href="?delete=<?= $row['id'] ?>"
-                                                                            onclick="return confirm('Are you sure you want to delete this customer? This action cannot be undone.');">
-                                                                            <i class="fas fa-trash me-2"></i>Delete Customer
-                                                                        </a>
-                                                                    </li>
-                                                                </ul>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                <?php
-                                                }
-                                            } else {
-                                                ?>
-                                                <tr>
-                                                    <td colspan="8" class="text-center py-5">
-                                                        <div class="d-flex flex-column align-items-center">
-                                                            <img src="assets/img/no-data.svg" alt="No data" style="width: 120px; opacity: 0.7;">
-                                                            <h5 class="mt-3 text-muted">No customers found</h5>
-                                                            <p class="text-muted">Try adjusting your search filters</p>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            <?php
-                                            }
-                                            // mysqli_stmt_close($stmt);
-                                            ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+                <div class="white_card card_height_100 mb_30">
+                    <div class="white_card_header">
+                        <div class="box_header d-flex justify-content-between align-items-center">
+                            <div class="main-title"><h3 class="m-0">Customers <span class="badge bg-secondary ms-2"><?= mysqli_num_rows($result) ?></span></h3></div>
+                        </div>
+                    </div>
+                    <div class="white_card_body">
+                        <div class="table-responsive">
+                            <table class="table table-hover tbl-admin tbl-cards">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Customer</th>
+                                        <th>Contact</th>
+                                        <th>Email</th>
+                                        <th>Status</th>
+                                        <th>Verification</th>
+                                        <th>Joined</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (mysqli_num_rows($result) === 0): ?>
+                                        <tr class="empty-row"><td colspan="8">
+                                            <i class="fas fa-users fa-3x mb-3 d-block opacity-25"></i>No customers found. Try adjusting your search filters.
+                                        </td></tr>
+                                    <?php endif; ?>
+                                    <?php
+                                    $no = 1;
+                                    while ($row = mysqli_fetch_assoc($result)):
+                                        $profile_pic = !empty($row['profile_pic']) ? BASE_URL . 'assets/img/' . $row['profile_pic'] : '';
+                                        $status_pill = ['Active' => 'pill-success', 'Inactive' => 'pill-danger'][$row['status']] ?? 'pill-warn';
+                                    ?>
+                                    <tr>
+                                        <td><span class="cell-sub"><?= $no++ ?></span></td>
+                                        <td data-label="Customer">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <?php if ($profile_pic): ?>
+                                                    <img src="<?= htmlspecialchars($profile_pic) ?>" class="rounded-circle flex-shrink-0" style="width:38px;height:38px;object-fit:cover;">
+                                                <?php else: ?>
+                                                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center flex-shrink-0" style="width:38px;height:38px;color:var(--adm-primary);font-weight:700;font-size:.8rem;"><?= strtoupper(substr($row['name'], 0, 1)) ?></div>
+                                                <?php endif; ?>
+                                                <div>
+                                                    <div class="cell-title"><?= htmlspecialchars(trim($row['name'] . ' ' . $row['last_name'])) ?></div>
+                                                    <div class="cell-sub">ID #<?= $row['id'] ?></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td data-label="Contact">
+                                            <div class="cell-title" style="font-weight:500;"><?= htmlspecialchars($row['mobile']) ?></div>
+                                            <?php if (!empty($row['emergency_contact'])): ?><div class="cell-sub">Emergency: <?= htmlspecialchars($row['emergency_contact']) ?></div><?php endif; ?>
+                                        </td>
+                                        <td data-label="Email">
+                                            <div class="cell-title" style="font-weight:500;"><?= htmlspecialchars($row['email']) ?></div>
+                                            <div class="cell-sub">Last login: <?= !empty($row['last_login']) ? date('d M Y', strtotime($row['last_login'])) : 'Never' ?></div>
+                                        </td>
+                                        <td data-label="Status">
+                                            <a href="?toggle_status=<?= $row['id'] ?>" class="pill <?= $status_pill ?>" style="cursor:pointer;"
+                                                onclick="return confirm('Change status to <?= $row['status'] === 'Active' ? 'Inactive' : 'Active' ?>?')"><?= htmlspecialchars($row['status']) ?></a>
+                                        </td>
+                                        <td data-label="Verification">
+                                            <?php if ($row['email_verified']): ?>
+                                                <span class="pill pill-success"><i class="fas fa-check-circle"></i>Verified</span>
+                                            <?php else: ?>
+                                                <a href="?verify_email=<?= $row['id'] ?>" class="pill pill-warn" style="cursor:pointer;" onclick="return confirm('Mark email as verified?')"><i class="fas fa-times-circle"></i>Unverified</a>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td data-label="Joined"><span class="cell-sub"><?= date('d M Y', strtotime($row['created_at'])) ?> &middot; <?= date('h:i A', strtotime($row['created_at'])) ?></span></td>
+                                        <td data-label="Actions">
+                                            <div class="d-inline-flex flex-wrap gap-1 justify-content-end">
+                                                <a href="view-customer.php?id=<?= $row['id'] ?>" class="tbl-action-btn bg-primary text-white" title="View Details"><i class="fas fa-eye"></i></a>
+                                                <a href="edit-customer.php?id=<?= $row['id'] ?>" class="tbl-action-btn bg-info text-white" title="Edit Customer"><i class="fas fa-edit"></i></a>
+                                                <a href="upload-medical-record.php?for=patient&patient_id=<?= $row['id'] ?>" class="tbl-action-btn bg-success text-white" title="Upload Medical Record"><i class="fas fa-file-medical"></i></a>
+                                                <a href="medical-records.php?tab=patients&q=<?= urlencode($row['name']) ?>" class="tbl-action-btn bg-secondary text-white" title="View Medical Records"><i class="fas fa-folder-open"></i></a>
+                                                <a href="?delete=<?= $row['id'] ?>" class="tbl-action-btn bg-danger text-white" title="Delete Customer" onclick="return confirm('Are you sure you want to delete this customer? This action cannot be undone.');"><i class="fas fa-trash"></i></a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <?php endwhile; ?>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
+
             </div>
         </div>
 
         <?php include "footer.php"; ?>
 
         <script>
-            // Initialize tooltips
-            $(document).ready(function() {
-                $('[data-bs-toggle="tooltip"]').tooltip();
-            });
-
             // Auto-dismiss alerts after 5 seconds
             setTimeout(function() {
                 $('.alert').alert('close');

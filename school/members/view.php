@@ -321,7 +321,39 @@ $ti = $type_icon[$m['type']] ?? 'fa-user';
               </div>
             </div>
             <?php endif; ?>
+            <div class="col-12">
+              <div class="detail-row" style="padding-top:0;">
+                <div class="detail-icon" style="background:#eaf4fd;color:#0C74C5;"><i class="fas fa-phone"></i></div>
+                <div>
+                  <div class="detail-label">Parent / Guardian Mobile</div>
+                  <div class="detail-val"><?= htmlspecialchars($m['parent_mobile'] ?: '—') ?></div>
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Parent Consent Link -->
+      <div class="sec-card">
+        <div class="sec-card-head">
+          <div class="icon" style="background:#eaf4fd;color:#0C74C5;"><i class="fas fa-file-signature"></i></div>
+          <div>
+            <h6>Parent Consent Link</h6>
+            <p>Verified, per-student link for the health-checkup consent form</p>
+          </div>
+        </div>
+        <div class="sec-card-body">
+          <?php if (empty($m['parent_mobile'])): ?>
+            <div class="text-muted" style="font-size:.85rem;">
+              <i class="fas fa-circle-info me-1"></i>Add a parent/guardian mobile number above to send the consent link.
+            </div>
+          <?php else: ?>
+            <button type="button" class="btn btn-primary btn-sm" id="sendConsentBtn" data-member-id="<?= (int) $m['id'] ?>">
+              <i class="fas fa-paper-plane me-1"></i>Send Consent Link
+            </button>
+            <div id="sendConsentResult" class="mt-2" style="font-size:.84rem;"></div>
+          <?php endif; ?>
         </div>
       </div>
 
@@ -538,6 +570,52 @@ $ti = $type_icon[$m['type']] ?? 'fa-user';
     overlay && overlay.addEventListener('click', () => {
       sidebar.classList.remove('open');
       overlay.classList.remove('open');
+    });
+  }
+
+  const sendConsentBtn = document.getElementById('sendConsentBtn');
+  if (sendConsentBtn) {
+    sendConsentBtn.addEventListener('click', function () {
+      const btn = this;
+      const resultEl = document.getElementById('sendConsentResult');
+      btn.disabled = true;
+      const original = btn.innerHTML;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending…';
+      resultEl.innerHTML = '';
+
+      const fd = new FormData();
+      fd.append('member_id', btn.dataset.memberId);
+      fetch('../send-consent.php', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+          btn.disabled = false;
+          btn.innerHTML = original;
+          if (!data.success) {
+            resultEl.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>' + data.message + '</span>';
+            return;
+          }
+          const waNote = data.wa_sent
+            ? '<span class="text-success"><i class="fas fa-check-circle me-1"></i>Sent via WhatsApp.</span>'
+            : '<span class="text-muted"><i class="fas fa-info-circle me-1"></i>WhatsApp auto-send isn\'t active yet — copy the link below and share it directly.</span>';
+          resultEl.innerHTML = waNote +
+            '<div class="input-group input-group-sm mt-2">' +
+            '<input type="text" class="form-control" id="consentLinkInput" value="' + data.link + '" readonly>' +
+            '<button type="button" class="btn btn-outline-primary" id="copyConsentLinkBtn"><i class="fas fa-copy"></i></button>' +
+            '</div>';
+          document.getElementById('copyConsentLinkBtn').addEventListener('click', function () {
+            const input = document.getElementById('consentLinkInput');
+            input.select();
+            navigator.clipboard.writeText(input.value).then(() => {
+              this.innerHTML = '<i class="fas fa-check"></i>';
+              setTimeout(() => { this.innerHTML = '<i class="fas fa-copy"></i>'; }, 1500);
+            });
+          });
+        })
+        .catch(() => {
+          btn.disabled = false;
+          btn.innerHTML = original;
+          resultEl.innerHTML = '<span class="text-danger">Network error. Please try again.</span>';
+        });
     });
   }
 </script>

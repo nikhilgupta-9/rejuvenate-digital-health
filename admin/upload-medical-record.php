@@ -105,16 +105,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>Admin | Upload Medical Record</title>
     <?php include "links.php"; ?>
-    <style>
-        .doctor-form { background: #fff; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.05); padding: 30px; }
-        .form-label { font-weight: 500; color: #495057; margin-bottom: 8px; }
-        .form-control, .form-select { border-radius: 6px; padding: 10px 15px; border: 1px solid #e0e0e0; }
-        .form-control:focus, .form-select:focus { border-color: #0C74C5; box-shadow: 0 0 0 3px rgba(12,116,197,.15); }
-        .section-title { border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; margin-bottom: 20px; color: #495057; font-weight: 600; }
-        .type-pick { border: 2px solid #e5e7eb; border-radius: 10px; padding: 16px; text-align: center; cursor: pointer; transition: .15s; }
-        .type-pick.active { border-color: #0C74C5; background: #eaf4fd; }
-        .type-pick i { font-size: 1.6rem; display: block; margin-bottom: 8px; }
-    </style>
 </head>
 <body class="crm_body_bg">
     <?php include "header.php"; ?>
@@ -123,125 +113,109 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="row"><div class="col-lg-12 p-0"><?php include "top_nav.php"; ?></div></div>
         </div>
         <div class="main_content_iner">
-            <div class="container-fluid">
-                <div class="row justify-content-center">
-                    <div class="col-12">
-                        <div class="page-header mb-4">
-                            <div class="d-flex align-items-center justify-content-between">
-                                <h2 class="mb-0">Upload Medical Record</h2>
-                                <a href="medical-records.php" class="btn btn-outline-secondary">
-                                    <i class="fas fa-arrow-left me-2"></i> Back to Records
-                                </a>
+            <div class="container-fluid p-0 sm_padding_15px">
+
+                <div class="list-page-head">
+                    <div class="page-heading">
+                        <h4 class="mb-0 fw-bold">Upload Medical Record</h4>
+                        <small class="text-muted">Attach a document to a patient's or school member's record</small>
+                    </div>
+                    <a href="medical-records.php" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-arrow-left me-1"></i>Back to Records
+                    </a>
+                </div>
+
+                <?php if ($error): ?>
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="fas fa-triangle-exclamation me-2"></i><?= htmlspecialchars($error) ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                <?php endif; ?>
+
+                <form method="post" enctype="multipart/form-data" id="recordForm">
+
+                    <div class="detail-card">
+                        <h5><i class="fas fa-user-check me-2"></i>Record For</h5>
+                        <div class="btn-group w-100 mb-3" role="group">
+                            <input type="radio" class="btn-check" name="record_for" id="forPatient" value="patient" <?= ($old['record_for'] ?? 'patient') === 'patient' ? 'checked' : '' ?>>
+                            <label class="btn btn-outline-primary" for="forPatient"><i class="fas fa-user-injured me-1"></i>Patient</label>
+
+                            <input type="radio" class="btn-check" name="record_for" id="forMember" value="school_member" <?= ($old['record_for'] ?? '') === 'school_member' ? 'checked' : '' ?>>
+                            <label class="btn btn-outline-primary" for="forMember"><i class="fas fa-user-graduate me-1"></i>School Member <span class="d-none d-sm-inline">(Teacher / Student / Staff)</span></label>
+                        </div>
+
+                        <div id="patientField">
+                            <label class="form-label">Patient <span class="text-danger">*</span></label>
+                            <select class="form-select" name="patient_id">
+                                <option value="">Select Patient</option>
+                                <?php mysqli_data_seek($patients_res, 0); while ($p = mysqli_fetch_assoc($patients_res)): ?>
+                                    <option value="<?= $p['id'] ?>" <?= ($old['patient_id'] ?? '') == $p['id'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars(trim($p['name'] . ' ' . $p['last_name'])) ?>
+                                        <?= $p['mobile'] ? ' — ' . htmlspecialchars($p['mobile']) : '' ?>
+                                        <?= $p['email'] ? ' (' . htmlspecialchars($p['email']) . ')' : '' ?>
+                                    </option>
+                                <?php endwhile; ?>
+                            </select>
+                        </div>
+
+                        <div id="memberField">
+                            <label class="form-label">School Member <span class="text-danger">*</span></label>
+                            <select class="form-select" name="member_id">
+                                <option value="">Select Member</option>
+                                <?php mysqli_data_seek($members_res, 0); while ($m = mysqli_fetch_assoc($members_res)): ?>
+                                    <option value="<?= $m['id'] ?>" <?= ($old['member_id'] ?? '') == $m['id'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($m['name']) ?> — <?= $m['type'] ?> (<?= htmlspecialchars($m['member_uid']) ?>) — <?= htmlspecialchars($m['school_name']) ?>
+                                    </option>
+                                <?php endwhile; ?>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="detail-card">
+                        <h5><i class="fas fa-file-medical me-2"></i>Document Details</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Document Title <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="document_title" required placeholder="e.g. Blood Test Report - Jan 2026" value="<?= htmlspecialchars($old['document_title'] ?? '') ?>">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Document Type</label>
+                                <select class="form-select" name="document_type">
+                                    <?php foreach ($doc_types as $t): ?>
+                                        <option value="<?= $t ?>" <?= ($old['document_type'] ?? '') === $t ? 'selected' : '' ?>><?= $t ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-12 mb-3">
+                                <label class="form-label">Notes / Description</label>
+                                <textarea class="form-control" name="description" rows="3" placeholder="Optional notes about this record"><?= htmlspecialchars($old['description'] ?? '') ?></textarea>
+                            </div>
+                            <div class="col-12 mb-3">
+                                <label class="form-label d-block">File <span class="text-danger">*</span></label>
+                                <input type="file" name="document_file" class="form-control" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" required>
+                                <div class="hint" style="font-size:.75rem;color:#94a3b8;margin-top:4px;">PDF, DOC, DOCX, JPG or PNG. Max 10MB.</div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-lg-10">
-                        <div class="doctor-form">
-                            <?php if ($error): ?>
-                                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                                    <i class="fas fa-exclamation-circle me-2"></i><?= htmlspecialchars($error) ?>
-                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                                </div>
-                            <?php endif; ?>
-
-                            <form method="post" enctype="multipart/form-data" id="recordForm">
-
-                                <div class="row mb-4">
-                                    <div class="col-12"><h4 class="section-title">Record For</h4></div>
-                                    <div class="col-12 mb-3">
-                                        <input type="hidden" name="record_for" id="recordForInput" value="<?= htmlspecialchars($old['record_for'] ?? 'patient') ?>">
-                                        <div class="row g-2">
-                                            <div class="col-md-6">
-                                                <div class="type-pick" data-for="patient" onclick="pickFor('patient')">
-                                                    <i class="fas fa-user-injured" style="color:#c0392b;"></i> Patient
-                                                </div>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <div class="type-pick" data-for="school_member" onclick="pickFor('school_member')">
-                                                    <i class="fas fa-user-graduate" style="color:#0277bd;"></i> School Member <small class="d-block text-muted">(Teacher / Student / Staff)</small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="col-md-8 mb-3" id="patientField">
-                                        <label class="form-label">Patient <span class="text-danger">*</span></label>
-                                        <select class="form-select" name="patient_id">
-                                            <option value="">Select Patient</option>
-                                            <?php mysqli_data_seek($patients_res, 0); while ($p = mysqli_fetch_assoc($patients_res)): ?>
-                                                <option value="<?= $p['id'] ?>" <?= ($old['patient_id'] ?? '') == $p['id'] ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars(trim($p['name'] . ' ' . $p['last_name'])) ?>
-                                                    <?= $p['mobile'] ? ' — ' . htmlspecialchars($p['mobile']) : '' ?>
-                                                    <?= $p['email'] ? ' (' . htmlspecialchars($p['email']) . ')' : '' ?>
-                                                </option>
-                                            <?php endwhile; ?>
-                                        </select>
-                                    </div>
-
-                                    <div class="col-md-8 mb-3" id="memberField">
-                                        <label class="form-label">School Member <span class="text-danger">*</span></label>
-                                        <select class="form-select" name="member_id">
-                                            <option value="">Select Member</option>
-                                            <?php mysqli_data_seek($members_res, 0); while ($m = mysqli_fetch_assoc($members_res)): ?>
-                                                <option value="<?= $m['id'] ?>" <?= ($old['member_id'] ?? '') == $m['id'] ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars($m['name']) ?> — <?= $m['type'] ?> (<?= htmlspecialchars($m['member_uid']) ?>) — <?= htmlspecialchars($m['school_name']) ?>
-                                                </option>
-                                            <?php endwhile; ?>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div class="row mb-4">
-                                    <div class="col-12"><h4 class="section-title">Document Details</h4></div>
-
-                                    <div class="col-md-6 mb-3">
-                                        <label class="form-label">Document Title <span class="text-danger">*</span></label>
-                                        <input type="text" class="form-control" name="document_title" required placeholder="e.g. Blood Test Report - Jan 2026" value="<?= htmlspecialchars($old['document_title'] ?? '') ?>">
-                                    </div>
-                                    <div class="col-md-6 mb-3">
-                                        <label class="form-label">Document Type</label>
-                                        <select class="form-select" name="document_type">
-                                            <?php foreach ($doc_types as $t): ?>
-                                                <option value="<?= $t ?>" <?= ($old['document_type'] ?? '') === $t ? 'selected' : '' ?>><?= $t ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-
-                                    <div class="col-md-12 mb-3">
-                                        <label class="form-label">Notes / Description</label>
-                                        <textarea class="form-control" name="description" rows="3" placeholder="Optional notes about this record"><?= htmlspecialchars($old['description'] ?? '') ?></textarea>
-                                    </div>
-
-                                    <div class="col-md-12 mb-3">
-                                        <label class="form-label d-block">File <span class="text-danger">*</span></label>
-                                        <input type="file" name="document_file" class="form-control" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" required>
-                                        <small class="text-muted">PDF, DOC, DOCX, JPG or PNG. Max 10MB.</small>
-                                    </div>
-                                </div>
-
-                                <div class="row">
-                                    <div class="col-12 mt-2">
-                                        <button type="submit" class="btn btn-primary me-2"><i class="fas fa-upload me-2"></i> Upload Record</button>
-                                        <a href="medical-records.php" class="btn btn-outline-secondary"><i class="fas fa-times me-2"></i> Cancel</a>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
+                    <div class="d-flex justify-content-between flex-wrap gap-2 mb-4">
+                        <a href="medical-records.php" class="btn btn-outline-secondary"><i class="fas fa-times me-1"></i>Cancel</a>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-upload me-1"></i>Upload Record</button>
                     </div>
-                </div>
+                </form>
+
             </div>
         </div>
         <?php include "footer.php"; ?>
     </section>
     <script>
         function pickFor(type) {
-            document.getElementById('recordForInput').value = type;
-            document.querySelectorAll('.type-pick').forEach(el => el.classList.toggle('active', el.dataset.for === type));
             document.getElementById('patientField').style.display = type === 'patient' ? 'block' : 'none';
             document.getElementById('memberField').style.display = type === 'school_member' ? 'block' : 'none';
         }
-        pickFor(document.getElementById('recordForInput').value || 'patient');
+        document.getElementById('forPatient').addEventListener('change', () => pickFor('patient'));
+        document.getElementById('forMember').addEventListener('change', () => pickFor('school_member'));
+        pickFor(document.querySelector('input[name="record_for"]:checked').value);
     </script>
 </body>
 </html>
