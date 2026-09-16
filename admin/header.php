@@ -13,22 +13,33 @@ $is_doctor = isset($_SESSION['doctor_logged_in']) && $_SESSION['doctor_logged_in
 $user_name = $is_admin ? ($_SESSION['admin_user'] ?? 'Admin') : ($_SESSION['doctor_name'] ?? 'Doctor');
 
 // Pending-approval badge counts (admin only)
+// Wrapped in try/catch: PHP 8.1+ mysqli throws on SQL errors by default, and
+// header.php loads on every admin/doctor page — a single missing table or
+// column (e.g. a pending migration) must not blank the whole panel.
+function _header_count(mysqli $conn, string $sql): int
+{
+    try {
+        $res = mysqli_query($conn, $sql);
+        return $res ? (int) (mysqli_fetch_assoc($res)['c'] ?? 0) : 0;
+    } catch (\mysqli_sql_exception $e) {
+        error_log('admin/header.php badge query failed: ' . $e->getMessage() . ' | SQL: ' . $sql);
+        return 0;
+    }
+}
+
 $abha_pend = 0;
 $pending_schools = 0;
+$hpr_pending_count = 0;
+$consent_pending = 0;
+$school_sub_pending = 0;
 if ($is_admin && isset($conn)) {
-    $abha_pend = (int)(mysqli_fetch_assoc(mysqli_query($conn,
+    $abha_pend = _header_count($conn,
         "SELECT (SELECT COUNT(*) FROM user_abha_requests WHERE status='Pending')
-               + (SELECT COUNT(*) FROM abha_link_requests WHERE status='Pending') as c"))['c'] ?? 0);
-    $pending_schools = (int)(mysqli_fetch_assoc(mysqli_query($conn,
-        "SELECT COUNT(*) as c FROM schools WHERE status='Pending'"))['c'] ?? 0);
-    $hpr_pending_count = (int)(mysqli_fetch_assoc(mysqli_query($conn,
-        "SELECT COUNT(*) as c FROM hpr_verification_requests WHERE status='pending'"))['c'] ?? 0);
-    $consent_pending = 0;
-    $_cp = @mysqli_query($conn, "SELECT COUNT(*) as c FROM parent_consent_forms WHERE status='pending'");
-    if ($_cp) $consent_pending = (int)(mysqli_fetch_assoc($_cp)['c'] ?? 0);
-    $school_sub_pending = 0;
-    $_ssp = @mysqli_query($conn, "SELECT COUNT(*) as c FROM school_subscriptions WHERE status='pending_approval'");
-    if ($_ssp) $school_sub_pending = (int)(mysqli_fetch_assoc($_ssp)['c'] ?? 0);
+               + (SELECT COUNT(*) FROM abha_link_requests WHERE status='Pending') as c");
+    $pending_schools = _header_count($conn, "SELECT COUNT(*) as c FROM schools WHERE status='Pending'");
+    $hpr_pending_count = _header_count($conn, "SELECT COUNT(*) as c FROM hpr_verification_requests WHERE status='pending'");
+    $consent_pending = _header_count($conn, "SELECT COUNT(*) as c FROM parent_consent_forms WHERE status='pending'");
+    $school_sub_pending = _header_count($conn, "SELECT COUNT(*) as c FROM school_subscriptions WHERE status='pending_approval'");
 }
 ?>
 

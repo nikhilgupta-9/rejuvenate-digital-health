@@ -3,39 +3,65 @@ require_once __DIR__ . '/db-conn.php';
 require_once __DIR__ . '/auth/guard.php';
 admin_jwt_guard();
 
+/**
+ * PHP 8.1+ makes mysqli throw mysqli_sql_exception on any SQL error by
+ * default. A single missing/renamed table or column (e.g. a pending
+ * migration) would otherwise take down the whole dashboard with a blank
+ * page. Fall back to a safe default and log the real error instead.
+ */
+function dash_scalar(mysqli $conn, string $sql, string $col = 'c'): int
+{
+    try {
+        $res = mysqli_query($conn, $sql);
+        return $res ? (int) (mysqli_fetch_assoc($res)[$col] ?? 0) : 0;
+    } catch (\mysqli_sql_exception $e) {
+        error_log('admin/index.php dashboard query failed: ' . $e->getMessage() . ' | SQL: ' . $sql);
+        return 0;
+    }
+}
+
+function dash_row(mysqli $conn, string $sql): array
+{
+    try {
+        $res = mysqli_query($conn, $sql);
+        return $res ? (mysqli_fetch_assoc($res) ?: []) : [];
+    } catch (\mysqli_sql_exception $e) {
+        error_log('admin/index.php dashboard query failed: ' . $e->getMessage() . ' | SQL: ' . $sql);
+        return [];
+    }
+}
+
 // Core stats
-// $total_revenue   = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(order_total),0) as t FROM orders_new WHERE status='completed'"))['t'];
-// $total_orders    = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM orders_new"))['c'];
-$total_customers = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM users"))['c'];
-$total_doctors   = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM doctors WHERE status='Active'"))['c'];
-$total_schools   = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM schools WHERE status='Active'"))['c'];
-$total_members   = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM school_members"))['c'];
-$total_appts     = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM appointments"))['c'];
-$pending_schools = (int)(mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM schools WHERE status='Pending'"))['c'] ?? 0);
+$total_customers = dash_scalar($conn, "SELECT COUNT(*) as c FROM users");
+$total_doctors   = dash_scalar($conn, "SELECT COUNT(*) as c FROM doctors WHERE status='Active'");
+$total_schools   = dash_scalar($conn, "SELECT COUNT(*) as c FROM schools WHERE status='Active'");
+$total_members   = dash_scalar($conn, "SELECT COUNT(*) as c FROM school_members");
+$total_appts     = dash_scalar($conn, "SELECT COUNT(*) as c FROM appointments");
+$pending_schools = dash_scalar($conn, "SELECT COUNT(*) as c FROM schools WHERE status='Pending'");
 
 // ABHA stats — users (patients)
-$abha_stats = mysqli_fetch_assoc(mysqli_query($conn, "
+$abha_stats = dash_row($conn, "
     SELECT
       SUM(abha_linked=1)  as users_linked,
       SUM(abha_verified=1) as users_verified,
       COUNT(*) as users_total
     FROM users WHERE status='Active'
-"));
+");
 // ABHA stats — school members
-$abha_school = mysqli_fetch_assoc(mysqli_query($conn, "
+$abha_school = dash_row($conn, "
     SELECT
       SUM(abha_linked=1)   as members_linked,
       SUM(abha_verified=1) as members_verified,
       COUNT(*) as members_total
     FROM school_members WHERE status='Active'
-"));
+");
 $abha_total_linked   = (int)($abha_stats['users_linked']   ?? 0) + (int)($abha_school['members_linked']   ?? 0);
 $abha_total_verified = (int)($abha_stats['users_verified'] ?? 0) + (int)($abha_school['members_verified'] ?? 0);
 $abha_total_people   = (int)($abha_stats['users_total']    ?? 0) + (int)($abha_school['members_total']    ?? 0);
-$abha_pending_req    = (int)(mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM user_abha_requests WHERE status='Pending'"))['c'] ?? 0)
-                     + (int)(mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM abha_link_requests WHERE status='Pending'"))['c'] ?? 0);
+$abha_pending_req    = dash_scalar($conn, "SELECT COUNT(*) as c FROM user_abha_requests WHERE status='Pending'")
+                     + dash_scalar($conn, "SELECT COUNT(*) as c FROM abha_link_requests WHERE status='Pending'");
 // Pending appointments
-$pending_appts = (int)(mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM appointments WHERE status='Pending'"))['c'] ?? 0);
+$pending_appts = dash_scalar($conn, "SELECT COUNT(*) as c FROM appointments WHERE status='Pending'");
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -164,8 +190,8 @@ $pending_appts = (int)(mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) a
                     </p>
                     <?php
                       $abha_link_pct = $abha_total_people > 0 ? round($abha_total_linked/$abha_total_people*100) : 0;
-                      $user_link_pct = $abha_stats['users_total'] > 0 ? round($abha_stats['users_linked']/$abha_stats['users_total']*100) : 0;
-                      $memb_link_pct = $abha_school['members_total'] > 0 ? round($abha_school['members_linked']/$abha_school['members_total']*100) : 0;
+                      $user_link_pct = ($abha_stats['users_total'] ?? 0) > 0 ? round($abha_stats['users_linked']/$abha_stats['users_total']*100) : 0;
+                      $memb_link_pct = ($abha_school['members_total'] ?? 0) > 0 ? round($abha_school['members_linked']/$abha_school['members_total']*100) : 0;
                     ?>
                     <div class="row g-3 mb-3">
                         <!-- Big ABHA card -->
@@ -269,13 +295,18 @@ $pending_appts = (int)(mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) a
                                             </thead>
                                             <tbody>
                                                 <?php
-                                                $sr = mysqli_query($conn, "SELECT * FROM schools ORDER BY created_at DESC LIMIT 6");
-                                                if (mysqli_num_rows($sr) === 0): ?>
+                                                try {
+                                                    $sr = mysqli_query($conn, "SELECT * FROM schools ORDER BY created_at DESC LIMIT 6");
+                                                } catch (\mysqli_sql_exception $e) {
+                                                    error_log('admin/index.php recent-schools query failed: ' . $e->getMessage());
+                                                    $sr = false;
+                                                }
+                                                if (!$sr || mysqli_num_rows($sr) === 0): ?>
                                                     <tr>
                                                         <td colspan="3" class="text-center text-muted py-3">No schools registered yet</td>
                                                     </tr>
                                                 <?php endif;
-                                                while ($s = mysqli_fetch_assoc($sr)):
+                                                while ($sr && ($s = mysqli_fetch_assoc($sr))):
                                                     $sc2 = ['Active' => 'success', 'Pending' => 'warning', 'Rejected' => 'danger', 'Inactive' => 'secondary'][$s['status']] ?? 'secondary';
                                                 ?>
                                                     <tr>

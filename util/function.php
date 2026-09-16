@@ -82,13 +82,17 @@ function get_favicon()
 {
     global $conn;
 
-    $sql_logo = "SELECT * FROM `logos` where `location` = 'favicon' order by id desc limit 1";
-    $re_logo = mysqli_query($conn, $sql_logo);
-    if (mysqli_num_rows($re_logo)) {
-        $row = mysqli_fetch_assoc($re_logo);
-
-        return "admin/uploads/" . $row['logo_path'];
+    try {
+        $sql_logo = "SELECT * FROM `logos` where `location` = 'favicon' order by id desc limit 1";
+        $re_logo = mysqli_query($conn, $sql_logo);
+        if ($re_logo && mysqli_num_rows($re_logo)) {
+            $row = mysqli_fetch_assoc($re_logo);
+            return "admin/uploads/" . $row['logo_path'];
+        }
+    } catch (\mysqli_sql_exception $e) {
+        error_log('get_favicon() query failed: ' . $e->getMessage());
     }
+    return '';
 }
 // logo end 
 
