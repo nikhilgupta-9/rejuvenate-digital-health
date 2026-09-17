@@ -30,16 +30,17 @@ if (!$_u_abha_linked) {
 }
 
 $_page_titles = [
-    'dashboard'    => 'Dashboard',
-    'profile'      => 'My Profile',
-    'health'       => 'My Health Profile',
-    'abha'         => 'My ABHA Health ID',
-    'bookings'     => 'My Bookings',
-    'reports'      => 'My Reports',
-    'orders'       => 'My Supplement Order',
-    'appointments' => 'My Doctor Appointments',
-    'address'      => 'Manage Addresses',
-    'help'         => 'Help & Contact Us',
+    'dashboard'       => 'Dashboard',
+    'profile'         => 'My Profile',
+    'health'          => 'My Health Profile',
+    'abha'            => 'My ABHA Health ID',
+    'bookings'        => 'My Bookings',
+    'reports'         => 'My Reports',
+    'orders'          => 'My Supplement Order',
+    'appointments'    => 'My Doctor Appointments',
+    'medical-history' => 'Medical History',
+    'address'         => 'Manage Addresses',
+    'help'            => 'Help & Contact Us',
 ];
 $_page_title = $_page_titles[$sidebar_active] ?? 'Patient Portal';
 
@@ -47,6 +48,7 @@ $_menu = [
     'dashboard'    => ['icon' => 'fa fa-th-large',   'label' => 'Dashboard',              'url' => BASE_URL . 'user/user-dashboard.php',         'section' => 'Main'],
     'appointments' => ['icon' => 'fa fa-stethoscope', 'label' => 'My Doctor Appointments', 'url' => BASE_URL . 'user/my-doctor-appointments.php', 'section' => 'Health'],
     'bookings'     => ['icon' => 'fa fa-calendar', 'label' => 'My Bookings',       'url' => BASE_URL . 'user/my-bookings.php',            'section' => 'Health'],
+    'medical-history' => ['icon' => 'fa fa-file-medical', 'label' => 'Medical History', 'url' => BASE_URL . 'user/medical-history.php',    'section' => 'Health'],
     'health'       => ['icon' => 'fa fa-heartbeat', 'label' => 'My Health Profile',      'url' => BASE_URL . 'user/health-profile.php',         'section' => 'Health'],
     'abha'         => ['icon' => 'fa fa-id-card',    'label' => 'My ABHA Health ID',       'url' => BASE_URL . 'user/my-abha.php',                'section' => 'Health'],
     'reports'      => ['icon' => 'fa fa-chart-area', 'label' => 'My Reports',             'url' => BASE_URL . 'user/my-reports.php',             'section' => 'Health'],
@@ -124,16 +126,16 @@ $_menu = [
 
 <!-- Top Bar -->
 <div class="patient-topbar">
-    <div style="display:flex;align-items:center;">
+    <div class="topbar-left">
         <button class="sidebar-toggler" id="patientSidebarToggle">
             <i class="fa fa-bars"></i>
         </button>
-        <div>
-            <div style="font-size:.95rem;font-weight:600;color:#1f2937; line-height:5px; margin-top: 15px;" class=""><?= htmlspecialchars($_page_title) ?></div>
-            <div style="font-size:.72rem;color:#9ca3af;"><?= date('l, d M Y') ?></div>
+        <div class="topbar-title-wrap">
+            <div class="topbar-title"><?= htmlspecialchars($_page_title) ?></div>
+            <div class="topbar-date"><?= date('l, d M Y') ?></div>
         </div>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;">
+    <div class="topbar-right">
         <div style="text-align:right;display:none;" id="patientTopbarName">
             <span style="font-weight:600;font-size:.82rem;display:block;"><?= $_u_name ?></span>
             <span style="font-size:.7rem;color:#9ca3af;">Patient</span>
@@ -145,7 +147,7 @@ $_menu = [
                 <?= $_u_initial ?>
             <?php endif; ?>
         </div>
-        <a href="<?= BASE_URL ?>" class="btn btn-sm btn-outline-primary" title="Visit Site">
+        <a href="<?= BASE_URL ?>" class="btn btn-sm btn-outline-primary topbar-home-btn" title="Visit Site">
             <i class="fa fa-home"></i>
         </a>
         <a href="<?= BASE_URL ?>logout.php" class="btn btn-sm btn-outline-danger" title="Logout">

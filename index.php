@@ -961,6 +961,52 @@ $contact = contact_us();
         </div>
     </section>
 
+    <?php $home_blogs = get_blog_home(); ?>
+    <?php if (!empty($home_blogs)): ?>
+    <section class="cta-section section-padding pb-4 fix">
+        <div class="container">
+            <div class="section-title mb-4 text-center">
+                <span class="subtitle tz-sub-tilte tz-sub-anim text-uppercase tx-subTitle">OUR BLOG</span>
+                <h2 class="service-text">Latest From Our Health Blog</h2>
+                <p>Tips, guides and updates from our care team</p>
+            </div>
+            <div class="row g-4">
+                <?php foreach ($home_blogs as $post): ?>
+                    <?php $home_has_image = !empty($post['image']) && file_exists(__DIR__ . '/admin/uploads/blogs/' . $post['image']); ?>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="team-box-items mt-0">
+                            <a href="<?= BASE_URL ?>blogs/<?= htmlspecialchars($post['slug_url']) ?>/">
+                                <div class="team-image">
+                                    <?php if ($home_has_image): ?>
+                                        <img src="<?= BASE_URL ?>admin/uploads/blogs/<?= htmlspecialchars($post['image']) ?>" alt="<?= htmlspecialchars($post['title']) ?>">
+                                    <?php else: ?>
+                                        <div class="dept-icon-fallback" style="aspect-ratio:1.4/1;background:#f0f6fb;display:flex;align-items:center;justify-content:center;">
+                                            <i class="fas fa-notes-medical" style="font-size:2.6rem;color:#0C74C5;opacity:.55;"></i>
+                                        </div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($post['category'])): ?>
+                                        <span class="post-box"><?= htmlspecialchars($post['category']) ?></span>
+                                    <?php endif; ?>
+                                </div>
+                            </a>
+                            <div class="pt-3">
+                                <h5 class="mb-1"><a href="<?= BASE_URL ?>blogs/<?= htmlspecialchars($post['slug_url']) ?>/" class="text-dark"><?= htmlspecialchars($post['title']) ?></a></h5>
+                                <small class="text-muted"><?= date('d M Y', strtotime($post['created_at'])) ?></small>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+            <div class="text-center mt-4">
+                <a href="<?= BASE_URL ?>blogs/" class="theme-btn">
+                    <i class="far fa-chevron-right"></i>
+                    View All Articles
+                </a>
+            </div>
+        </div>
+    </section>
+    <?php endif; ?>
+
     <?php include("footer.php") ?>
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <script>

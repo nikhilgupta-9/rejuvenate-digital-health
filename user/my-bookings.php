@@ -3,236 +3,62 @@ session_start();
 include_once "../config/connect.php";
 include_once "../util/function.php";
 
-// session_start(); // Uncomment if not already started
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header("Location: ".BASE_URL."login.php");
+    header("Location: " . BASE_URL . "login.php");
     exit();
 }
 
-$contact = contact_us();
 $user_id = $_SESSION['user_id'];
-$user_name = $_SESSION['name'] ?? 'User';
 
-// Initialize variables
-$success_message = '';
-$error_message = '';
-$errors = [];
+// Pre-fill for step 4 — same fields book-appointment.php uses for a logged-in patient
+$stmt = $conn->prepare("SELECT name, last_name, email, mobile, abha_id FROM users WHERE id = ? LIMIT 1");
+$stmt->bind_param('i', $user_id);
+$stmt->execute();
+$logged_in_patient = $stmt->get_result()->fetch_assoc();
+$stmt->close();
 
-// Fetch user's upcoming appointments (next 7 days)
-$upcoming_appointments = [];
-$appointments_stmt = $conn->prepare("
-    SELECT 
-        a.*,
-        d.name as doctor_name,
-        d.specialization,
-        d.degrees,
-        d.consultation_fee,
-        d.profile_image,
-        TIME_FORMAT(a.appointment_time, '%h:%i %p') as formatted_time,
-        DATE_FORMAT(a.appointment_date, '%d/%m/%Y') as formatted_date,
-        DATE_FORMAT(a.appointment_date, '%W, %d %M %Y') as full_date,
-        CASE 
-            WHEN a.appointment_date > CURDATE() THEN 'upcoming'
-            WHEN a.appointment_date = CURDATE() AND a.appointment_time > CURTIME() THEN 'today'
-            ELSE 'past'
-        END as appointment_status
-    FROM appointments a
-    JOIN doctors d ON a.doctor_id = d.id
-    WHERE a.user_id = ? 
-    AND a.status IN ('confirmed', 'pending')
-    AND (a.appointment_date >= CURDATE())
-    ORDER BY a.appointment_date ASC, a.appointment_time ASC
-    LIMIT 5
-");
-$appointments_stmt->bind_param("i", $user_id);
-$appointments_stmt->execute();
-$appointments_result = $appointments_stmt->get_result();
-while ($row = $appointments_result->fetch_assoc()) {
-    $upcoming_appointments[] = $row;
-}
-$appointments_stmt->close();
+$departments = get_sub_category();
 
-// Fetch popular doctors (with highest ratings)
-$popular_doctors = [];
-$doctors_stmt = $conn->prepare("
-    SELECT id, name, specialization, consultation_fee, profile_image, 
-           experience_years, rating, languages,
-           IFNULL((
-               SELECT COUNT(*) FROM appointments 
-               WHERE doctor_id = doctors.id 
-               AND appointment_date > DATE_SUB(NOW(), INTERVAL 30 DAY)
-           ), 0) as recent_bookings
-    FROM doctors 
-    WHERE status = 'Active' AND is_verified = 1
-    ORDER BY rating DESC, recent_bookings DESC
-    LIMIT 6
-");
-$doctors_stmt->execute();
-$doctors_result = $doctors_stmt->get_result();
-while ($row = $doctors_result->fetch_assoc()) {
-    $popular_doctors[] = $row;
-}
-$doctors_stmt->close();
+// Deep-link support: preselect a doctor (and their department) either from
+// ?doctor_id=<id> directly, or from ?reschedule=<appointment_id> — the
+// "Reschedule" action on my-doctor-appointments.php sends patients here.
+$pre_doctor_id = intval($_GET['doctor_id'] ?? 0);
+$reschedule_id = intval($_GET['reschedule'] ?? 0);
+$reschedule_appointment = null;
 
-// Handle appointment booking via AJAX
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) {
-    header('Content-Type: application/json');
-    
-    // Sanitize and validate input data
-    $doctor_id = intval($_POST['doctor_id'] ?? 0);
-    $appointment_date = trim($_POST['appointment_date'] ?? '');
-    $appointment_time = trim($_POST['appointment_time'] ?? '');
-    $purpose = trim($_POST['purpose'] ?? '');
-    
-    // Validation
-    $validation_errors = [];
-    
-    if ($doctor_id <= 0) {
-        $validation_errors['doctor_id'] = "Please select a doctor";
+if ($reschedule_id) {
+    $r = $conn->prepare("
+        SELECT a.id, a.doctor_id, a.appointment_date, a.appointment_time, d.name AS doctor_name
+        FROM appointments a
+        JOIN doctors d ON d.id = a.doctor_id
+        WHERE a.id = ? AND a.user_id = ?
+        LIMIT 1
+    ");
+    $r->bind_param('ii', $reschedule_id, $user_id);
+    $r->execute();
+    $reschedule_appointment = $r->get_result()->fetch_assoc();
+    $r->close();
+
+    if ($reschedule_appointment) {
+        $pre_doctor_id = (int) $reschedule_appointment['doctor_id'];
     }
-    
-    if (empty($appointment_date)) {
-        $validation_errors['appointment_date'] = "Please select appointment date";
-    } elseif (strtotime($appointment_date) < strtotime(date('Y-m-d'))) {
-        $validation_errors['appointment_date'] = "Appointment date cannot be in the past";
-    }
-    
-    if (empty($appointment_time)) {
-        $validation_errors['appointment_time'] = "Please select appointment time";
-    }
-    
-    if (empty($purpose)) {
-        $validation_errors['purpose'] = "Please mention the purpose of visit";
-    } elseif (strlen($purpose) < 10) {
-        $validation_errors['purpose'] = "Please provide more details about your visit";
-    }
-    
-    // Check if time slot is available
-    if (empty($validation_errors)) {
-        $check_stmt = $conn->prepare("
-            SELECT id FROM appointments 
-            WHERE doctor_id = ? 
-            AND appointment_date = ? 
-            AND appointment_time = ? 
-            AND status NOT IN ('cancelled', 'rejected')
-        ");
-        $check_stmt->bind_param("iss", $doctor_id, $appointment_date, $appointment_time);
-        $check_stmt->execute();
-        $check_stmt->store_result();
-        
-        if ($check_stmt->num_rows > 0) {
-            $validation_errors['appointment_time'] = "This time slot is already booked. Please choose another time.";
-        }
-        $check_stmt->close();
-    }
-    
-    // If no errors, save appointment
-    if (empty($validation_errors)) {
-        $insert_stmt = $conn->prepare("
-            INSERT INTO appointments (user_id, doctor_id, appointment_date, appointment_time, purpose, status) 
-            VALUES (?, ?, ?, ?, ?, 'pending')
-        ");
-        $insert_stmt->bind_param("iisss", $user_id, $doctor_id, $appointment_date, $appointment_time, $purpose);
-        
-        if ($insert_stmt->execute()) {
-            $appointment_id = $insert_stmt->insert_id;
-            
-            // Get appointment details for response
-            $details_stmt = $conn->prepare("
-                SELECT 
-                    a.*,
-                    d.name as doctor_name,
-                    d.specialization,
-                    d.consultation_fee,
-                    TIME_FORMAT(a.appointment_time, '%h:%i %p') as formatted_time,
-                    DATE_FORMAT(a.appointment_date, '%d %M, %Y') as formatted_date
-                FROM appointments a
-                JOIN doctors d ON a.doctor_id = d.id
-                WHERE a.id = ?
-            ");
-            $details_stmt->bind_param("i", $appointment_id);
-            $details_stmt->execute();
-            $appointment_details = $details_stmt->get_result()->fetch_assoc();
-            $details_stmt->close();
-            
-            echo json_encode([
-                'success' => true,
-                'message' => 'Appointment booked successfully!',
-                'appointment_id' => $appointment_id,
-                'details' => $appointment_details
-            ]);
-        } else {
-            echo json_encode([
-                'success' => false,
-                'errors' => ['general' => 'Failed to book appointment. Please try again.']
-            ]);
-        }
-        $insert_stmt->close();
-    } else {
-        echo json_encode([
-            'success' => false,
-            'errors' => $validation_errors
-        ]);
-    }
-    exit();
 }
 
-// Handle appointment cancellation
-if (isset($_GET['cancel_id'])) {
-    $cancel_id = intval($_GET['cancel_id']);
-    
-    // Verify that the appointment belongs to the current user
-    $check_stmt = $conn->prepare("SELECT id FROM appointments WHERE id = ? AND user_id = ?");
-    $check_stmt->bind_param("ii", $cancel_id, $user_id);
-    $check_stmt->execute();
-    $check_stmt->store_result();
-    
-    if ($check_stmt->num_rows > 0) {
-        $cancel_stmt = $conn->prepare("UPDATE appointments SET status = 'cancelled' WHERE id = ?");
-        $cancel_stmt->bind_param("i", $cancel_id);
-        
-        if ($cancel_stmt->execute()) {
-            $success_message = "Appointment cancelled successfully!";
-        } else {
-            $error_message = "Failed to cancel appointment. Please try again.";
-        }
-        $cancel_stmt->close();
-    } else {
-        $error_message = "Appointment not found or you don't have permission to cancel it.";
-    }
-    $check_stmt->close();
-    
-    // Redirect to remove cancel_id from URL
-    header("Location: my-bookings.php");
-    exit();
+$pre_department = '';
+if ($pre_doctor_id) {
+    $d = $conn->prepare("
+        SELECT sc.slug_url, sc.categories
+        FROM doctor_departments dd
+        JOIN sub_categories sc ON sc.cate_id = dd.category_id
+        WHERE dd.doctor_id = ? AND sc.parent_id = 20873
+        LIMIT 1
+    ");
+    $d->bind_param('i', $pre_doctor_id);
+    $d->execute();
+    $dept_row = $d->get_result()->fetch_assoc();
+    $d->close();
+    $pre_department = $dept_row['slug_url'] ?? '';
 }
-
-// Get time slots for selected doctor and date (for AJAX)
-// Driven by the doctor's weekly schedule (doctor_schedules) — same source as
-// the public booking page — so a reschedule can't land outside consulting hours.
-if (isset($_GET['get_time_slots']) && isset($_GET['doctor_id']) && isset($_GET['date'])) {
-    $doctor_id = intval($_GET['doctor_id']);
-    $date      = trim($_GET['date']);
-
-    $available_slots = [];
-    if ($doctor_id && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-        foreach (generate_doctor_slots($conn, $doctor_id, $date) as $slot) {
-            if ($slot['booked']) continue;            // only offer open slots
-            $available_slots[] = [
-                'time'  => $slot['display'],
-                'value' => $slot['time'],
-            ];
-        }
-    }
-
-    header('Content-Type: application/json');
-    echo json_encode($available_slots);
-    exit();
-}
-
-// Calculate min and max dates for appointment
-$min_date = date('Y-m-d');
-$max_date = date('Y-m-d', strtotime('+30 days'));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -248,550 +74,540 @@ $max_date = date('Y-m-d', strtotime('+30 days'));
     <title>Book Appointment | REJUVENATE Digital Health</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/animate.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/magnific-popup.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/meanmenu.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/odometer.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/swiper-bundle.min.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/nice-select.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
     <style>
-        /* Global Styles */
-        * {
-            box-sizing: border-box;
+        /* Booking wizard — same design used on the public book-appointment.php
+           page, nested inside the patient panel's .profile-card shell so it
+           follows the same theme/template as my-doctor-appointments.php and
+           the doctor panel (--primary #0C74C5 / --accent #02c9b8). */
+        :root {
+            --bk-primary: #0C74C5;
+            --bk-primary-dk: #095e9f;
+            --bk-accent: #02c9b8;
+            --bk-ink: #1f2937;
+            --bk-muted: #6b7280;
+            --bk-border: #e5e7eb;
         }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: #f5f7fa;
-            line-height: 1.6;
-        }
-        
-        /* Sidebar Styles */
-        .sidebar {
-            background: white;
-            padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            height: fit-content;
-            position: sticky;
-            top: 20px;
-        }
-        
-        .sidebar a {
+
+        /* ── Stepper ── */
+        .bk-stepper {
             display: flex;
-            align-items: center;
-            padding: 12px 15px;
-            margin: 5px 0;
-            color: #333;
-            text-decoration: none;
-            border-radius: 8px;
-            transition: all 0.2s;
-            font-weight: 500;
+            justify-content: center;
+            gap: 6px;
+            max-width: 760px;
+            margin: 0 auto 30px;
+            padding: 0 12px;
         }
-        
-        .sidebar a i {
-            margin-right: 10px;
-            width: 20px;
+
+        .bk-step {
+            flex: 1;
             text-align: center;
+            position: relative;
         }
-        
-        .sidebar a:hover, .sidebar a.active {
-            background: #2c5aa0;
-            color: white;
-            transform: translateX(5px);
-        }
-        
-        .user-info {
-            text-align: center;
-            padding: 20px 0;
-            border-bottom: 1px solid #eee;
-            margin-bottom: 20px;
-        }
-        
-        .user-avatar {
-            width: 80px;
-            height: 80px;
+
+        .bk-step .dot {
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
-            object-fit: cover;
-            border: 3px solid #2c5aa0;
-            margin-bottom: 10px;
-        }
-        
-        .mobile-menu-btn {
-            display: none;
-            background: #2c5aa0;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            width: 100%;
-            font-size: 16px;
-            font-weight: 500;
-        }
-        
-        /* Main Content */
-        .main-content {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        }
-        
-        .page-title {
-            color: #2c5aa0;
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-        
-        .page-subtitle {
-            color: #666;
-            font-size: 14px;
-            margin-bottom: 25px;
-        }
-        
-        /* Quick Stats */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin-bottom: 25px;
-        }
-        
-        .stat-card {
-            background: linear-gradient(135deg, #2c5aa0, #4a7bc8);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-        }
-        
-        .stat-card h3 {
-            font-size: 32px;
-            margin: 0 0 5px 0;
-            font-weight: 700;
-        }
-        
-        .stat-card p {
-            margin: 0;
-            font-size: 13px;
-            opacity: 0.9;
-        }
-        
-        /* Quick Booking Form */
-        .booking-form-container {
-            /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
-            background:#e1e1e1;
-            border-radius: 12px;
-            padding: 25px;
-            margin-bottom: 25px;
-            color: white;
-        }
-        
-        .booking-form-title {
-            font-size: 22px;
-            font-weight: 600;
-            margin-bottom: 15px;
-            text-align: center;
-        }
-        
-        .booking-form {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-        }
-        
-        .form-group {
-            margin-bottom: 0;
-        }
-        
-        .form-label {
-            display: block;
-            font-size: 13px;
-            margin-bottom: 6px;
-            opacity: 0.9;
-        }
-        
-        .form-control {
-            width: 100%;
-            padding: 12px 15px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            background: rgba(255,255,255,0.95);
-            transition: all 0.2s;
-        }
-        
-        .form-control:focus {
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(255,255,255,0.3);
-        }
-        
-        .form-select {
-            appearance: none;
-            background: rgba(255,255,255,0.95) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%232c5aa0' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E") no-repeat right 15px center;
-            background-size: 12px;
-            padding-right: 40px;
-        }
-        
-        .time-slots-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-            gap: 10px;
-            margin-top: 10px;
-        }
-        
-        .time-slot {
-            background: rgba(255,255,255,0.95);
-            border: 2px solid transparent;
-            border-radius: 8px;
-            padding: 10px 5px;
-            text-align: center;
-            font-size: 13px;
-            font-weight: 500;
-            color: #2c5aa0;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .time-slot:hover {
-            background: white;
-            border-color: rgba(255,255,255,0.5);
-        }
-        
-        .time-slot.selected {
-            background: #ffcc00;
-            color: #333;
-            border-color: #ffcc00;
-        }
-        
-        .time-slot.booked {
-            background: rgba(255,255,255,0.5);
-            color: #999;
-            cursor: not-allowed;
-        }
-        
-        .btn-book {
-            grid-column: span 2;
-            background: #ffcc00;
-            color: #333;
-            border: none;
-            padding: 14px;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
+            background: #fff;
+            border: 2px solid var(--bk-border);
+            color: var(--bk-muted);
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
-        }
-        
-        .btn-book:hover {
-            background: #ffd633;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        
-        /* Doctor Cards */
-        .doctors-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 20px;
-            margin-bottom: 25px;
-        }
-        
-        .doctor-card {
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 3px 15px rgba(0,0,0,0.08);
-            transition: all 0.3s;
-            border: 1px solid #eee;
-        }
-        
-        .doctor-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
-        }
-        
-        .doctor-header {
-            padding: 20px;
-            text-align: center;
-            background: #0dcaf021;;
-        }
-        
-        .doctor-avatar {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 3px solid white;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
-            margin-bottom: 10px;
-        }
-        
-        .doctor-name {
-            font-size: 18px;
-            font-weight: 600;
-            color: #2c5aa0;
-            margin: 0 0 5px 0;
-        }
-        
-        .doctor-specialization {
-            font-size: 13px;
-            color: #666;
-            margin: 0 0 10px 0;
-        }
-        
-        .doctor-body {
-            padding: 15px;
-        }
-        
-        .doctor-info {
-            display: flex;
-            align-items: center;
-            margin-bottom: 8px;
-            font-size: 13px;
-            color: #555;
-        }
-        
-        .doctor-info i {
-            color: #2c5aa0;
-            margin-right: 8px;
-            width: 16px;
-            text-align: center;
-        }
-        
-        .doctor-footer {
-            padding: 15px;
-            background: #f8f9fa;
-            border-top: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .consultation-fee {
-            font-size: 18px;
-            font-weight: 600;
-            color: #28a745;
-        }
-        
-        .btn-select {
-            background: #2c5aa0;
-            color: white;
-            border: none;
-            padding: 8px 20px;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .btn-select:hover {
-            background: #4a7bc8;
-            transform: translateY(-1px);
-        }
-        
-        /* Appointments List */
-        .appointments-list {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin-top: 25px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        }
-        
-        .appointment-item {
-            display: flex;
-            align-items: center;
-            padding: 15px;
-            border-radius: 10px;
-            background: #f8f9fa;
-            margin-bottom: 15px;
-            transition: all 0.2s;
-        }
-        
-        .appointment-item:hover {
-            background: #e9ecef;
-        }
-        
-        .appointment-date {
-            text-align: center;
-            min-width: 70px;
-            margin-right: 15px;
-        }
-        
-        .appointment-day {
-            font-size: 24px;
             font-weight: 700;
-            color: #2c5aa0;
-            line-height: 1;
+            font-size: .85rem;
+            margin: 0 auto 6px;
+            transition: .2s;
         }
-        
-        .appointment-month {
-            font-size: 12px;
-            color: #666;
-            text-transform: uppercase;
-        }
-        
-        .appointment-details {
-            flex: 1;
-        }
-        
-        .appointment-doctor {
-            font-size: 16px;
-            font-weight: 600;
-            color: #333;
-            margin: 0 0 5px 0;
-        }
-        
-        .appointment-time {
-            font-size: 13px;
-            color: #666;
-            margin: 0 0 5px 0;
-        }
-        
-        .appointment-purpose {
-            font-size: 13px;
-            color: #555;
-            margin: 0;
-        }
-        
-        .appointment-status {
-            margin-left: 15px;
-        }
-        
-        .badge-status {
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 11px;
+
+        .bk-step .lbl {
+            font-size: .72rem;
+            color: var(--bk-muted);
             font-weight: 600;
             text-transform: uppercase;
+            letter-spacing: .3px;
         }
-        
-        .badge-pending { background: #fff3cd; color: #856404; }
-        .badge-confirmed { background: #d4edda; color: #155724; }
-        .badge-cancelled { background: #f8d7da; color: #721c24; }
-        
-        /* Modal Styles */
-        .modal-content {
-            border-radius: 12px;
-            border: none;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+
+        .bk-step::after {
+            content: '';
+            position: absolute;
+            top: 17px;
+            left: 50%;
+            width: 100%;
+            height: 2px;
+            background: var(--bk-border);
+            z-index: -1;
         }
-        
-        .modal-header {
-            background: linear-gradient(135deg, #2c5aa0 0%, #4a7bc8 100%);
-            color: white;
-            border-radius: 12px 12px 0 0;
-            border: none;
-            padding: 20px;
-        }
-        
-        .modal-title {
-            font-weight: 600;
-        }
-        
-        .btn-close-white {
-            filter: invert(1);
-        }
-        
-        /* Responsive Styles */
-        @media (max-width: 768px) {
-            .sidebar { 
-                display: none; 
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 280px;
-                height: 100vh;
-                z-index: 1050;
-                overflow-y: auto;
-                border-radius: 0;
-                box-shadow: 5px 0 15px rgba(0,0,0,0.1);
-            }
-            
-            .sidebar.show { display: block; }
-            
-            .mobile-menu-btn { display: block; }
-            
-            .main-content { padding: 15px; }
-            
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 10px;
-            }
-            
-            .booking-form {
-                grid-template-columns: 1fr;
-            }
-            
-            .btn-book {
-                grid-column: span 1;
-            }
-            
-            .doctors-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .appointment-item {
-                flex-direction: column;
-                text-align: center;
-            }
-            
-            .appointment-date {
-                margin-right: 0;
-                margin-bottom: 15px;
-            }
-            
-            .appointment-status {
-                margin-left: 0;
-                margin-top: 10px;
-            }
-        }
-        
-        @media (max-width: 576px) {
-            .stat-card h3 { font-size: 28px; }
-            .booking-form-title { font-size: 18px; }
-            .doctor-name { font-size: 16px; }
-            .consultation-fee { font-size: 16px; }
-        }
-        
-        /* Loading States */
-        .loading {
-            opacity: 0.7;
-            pointer-events: none;
-        }
-        
-        .loading-spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 1s ease-in-out infinite;
-            margin-right: 8px;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        /* Error States */
-        .error-message {
-            color: #dc3545;
-            font-size: 12px;
-            margin-top: 5px;
+
+        .bk-step:last-child::after {
             display: none;
         }
-        
-        .has-error .form-control {
-            border-color: #dc3545;
+
+        .bk-step.active .dot,
+        .bk-step.done .dot {
+            background: var(--bk-primary);
+            border-color: var(--bk-primary);
+            color: #fff;
         }
-        
-        .has-error .error-message {
+
+        .bk-step.active .lbl,
+        .bk-step.done .lbl {
+            color: var(--bk-primary);
+        }
+
+        .bk-step.done::after {
+            background: var(--bk-primary);
+        }
+
+        .bk-pane {
+            display: none;
+        }
+
+        .bk-pane.active {
             display: block;
+            animation: bkFade .25s ease;
+        }
+
+        @keyframes bkFade {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .bk-pane h4 {
+            font-weight: 700;
+            color: var(--bk-ink);
+            margin-bottom: 4px;
+        }
+
+        .bk-pane .sub {
+            color: var(--bk-muted);
+            font-size: .88rem;
+            margin-bottom: 22px;
+        }
+
+        /* ── Department grid ── */
+        .bk-dept-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 14px;
+        }
+
+        .bk-dept-card {
+            border: 2px solid var(--bk-border);
+            border-radius: 12px;
+            padding: 16px 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: .15s;
+            background: #fff;
+        }
+
+        .bk-dept-card:hover {
+            border-color: var(--bk-primary);
+            transform: translateY(-2px);
+        }
+
+        .bk-dept-card.selected {
+            border-color: var(--bk-primary);
+            background: #eaf4fd;
+        }
+
+        .bk-dept-card .ic {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: #eef6fd;
+            color: var(--bk-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 10px;
+            font-size: 1.15rem;
+            overflow: hidden;
+        }
+
+        .bk-dept-card .ic img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .bk-dept-card .name {
+            font-size: .85rem;
+            font-weight: 600;
+            color: var(--bk-ink);
+        }
+
+        /* ── Doctor cards ── */
+        .bk-doctor-card {
+            border: 2px solid var(--bk-border);
+            border-radius: 14px;
+            padding: 18px;
+            cursor: pointer;
+            transition: .15s;
+            background: #fff;
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+        }
+
+        .bk-doctor-card:hover {
+            border-color: var(--bk-primary);
+        }
+
+        .bk-doctor-card.selected {
+            border-color: var(--bk-primary);
+            background: #eaf4fd;
+        }
+
+        .bk-doctor-card .avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--bk-primary);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.3rem;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+
+        .bk-doctor-card .avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .bk-doctor-card .name {
+            font-weight: 700;
+            color: var(--bk-ink);
+            font-size: .95rem;
+        }
+
+        .bk-doctor-card .hpr-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            background: #e6f7ee;
+            color: #16a34a;
+            font-size: .65rem;
+            font-weight: 700;
+            border-radius: 20px;
+            padding: 2px 8px;
+            margin-left: 6px;
+        }
+
+        .bk-doctor-card .meta {
+            font-size: .78rem;
+            color: var(--bk-muted);
+            margin-top: 2px;
+        }
+
+        .bk-doctor-card .fee {
+            font-weight: 700;
+            color: var(--bk-primary);
+            font-size: .88rem;
+            margin-top: 6px;
+        }
+
+        /* ── Time slots ── */
+        .bk-slot-group-label {
+            font-size: .72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: var(--bk-muted);
+            margin: 16px 0 8px;
+        }
+
+        .bk-slot-group-label:first-child {
+            margin-top: 0;
+        }
+
+        .bk-slot-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
+        }
+
+        .bk-slot {
+            border: 1.5px solid var(--bk-border);
+            border-radius: 8px;
+            padding: 9px 6px;
+            text-align: center;
+            font-size: .82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: .15s;
+            color: var(--bk-ink);
+            background: #fff;
+        }
+
+        .bk-slot:hover {
+            border-color: var(--bk-primary);
+        }
+
+        .bk-slot.selected {
+            background: var(--bk-primary);
+            border-color: var(--bk-primary);
+            color: #fff;
+        }
+
+        .bk-slot.booked {
+            background: #f9fafb;
+            color: #c1c7d0;
+            cursor: not-allowed;
+            text-decoration: line-through;
+        }
+
+        /* ── Buttons / nav ── */
+        .bk-nav {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 28px;
+            padding-top: 20px;
+            border-top: 1px solid #f1f3f6;
+        }
+
+        .bk-btn {
+            padding: 11px 26px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: .9rem;
+            border: none;
+            cursor: pointer;
+            transition: .15s;
+        }
+
+        .bk-btn-primary {
+            background: var(--bk-primary);
+            color: #fff;
+        }
+
+        .bk-btn-primary:hover {
+            background: var(--bk-primary-dk);
+        }
+
+        .bk-btn-primary:disabled {
+            background: #b9d4ea;
+            cursor: not-allowed;
+        }
+
+        .bk-btn-outline {
+            background: #fff;
+            border: 1.5px solid var(--bk-border);
+            color: var(--bk-muted);
+        }
+
+        .bk-btn-outline:hover {
+            border-color: var(--bk-primary);
+            color: var(--bk-primary);
+        }
+
+        /* ── Summary strip (shown from step 3 onward) ── */
+        .bk-summary {
+            display: none;
+            background: #eaf4fd;
+            border-radius: 10px;
+            padding: 10px 16px;
+            font-size: .82rem;
+            color: var(--bk-ink);
+            margin-bottom: 22px;
+            flex-wrap: wrap;
+            gap: 4px 14px;
+        }
+
+        .bk-summary.show {
+            display: flex;
+        }
+
+        .bk-summary b {
+            color: var(--bk-primary);
+        }
+
+        /* ── Form fields (step 4) ── */
+        .bk-field label {
+            font-size: .82rem;
+            font-weight: 600;
+            color: var(--bk-ink);
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .bk-field .form-control,
+        .bk-field .form-select {
+            border-radius: 8px;
+            border: 1.5px solid var(--bk-border);
+            padding: 10px 14px;
+            font-size: .9rem;
+        }
+
+        .bk-field .form-control:focus,
+        .bk-field .form-select:focus {
+            border-color: var(--bk-primary);
+            box-shadow: 0 0 0 3px rgba(12, 116, 197, .12);
+        }
+
+        .bk-visit-toggle {
+            display: flex;
+            gap: 10px;
+        }
+
+        .bk-visit-toggle label {
+            flex: 1;
+            border: 1.5px solid var(--bk-border);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            font-size: .85rem;
+            font-weight: 600;
+            cursor: pointer;
+            color: var(--bk-muted);
+        }
+
+        .bk-visit-toggle input {
+            display: none;
+        }
+
+        .bk-visit-toggle input:checked+label {
+            border-color: var(--bk-primary);
+            background: #eaf4fd;
+            color: var(--bk-primary);
+        }
+
+        .bk-consent {
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: 10px;
+            padding: 14px 16px;
+            font-size: .8rem;
+            color: #92400e;
+            margin: 20px 0;
+        }
+
+        /* ── Success ── */
+        .bk-success {
+            display: none;
+            text-align: center;
+            padding: 20px 10px 10px;
+        }
+
+        .bk-success .tick {
+            width: 74px;
+            height: 74px;
+            border-radius: 50%;
+            background: #e6f7ee;
+            color: #16a34a;
+            font-size: 2.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 18px;
+        }
+
+        .bk-ref {
+            display: inline-block;
+            background: #f3f6fb;
+            border-radius: 8px;
+            padding: 6px 16px;
+            font-weight: 700;
+            color: var(--bk-primary);
+            letter-spacing: .5px;
+            margin: 10px 0 18px;
+        }
+
+        #bkFormError {
+            display: none;
+        }
+
+        .bk-empty {
+            text-align: center;
+            padding: 40px 10px;
+            color: var(--bk-muted);
+        }
+
+        /* ── Schedule sync: summary + date strip ── */
+        .bk-sched-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #eaf4fd;
+            border: 1px solid #cfe6fb;
+            border-radius: 10px;
+            padding: 9px 13px;
+            font-size: .8rem;
+            color: var(--bk-ink);
+            margin-bottom: 14px;
+        }
+        .bk-sched-info i { color: var(--bk-primary); }
+
+        .bk-date-strip {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 4px 2px 10px;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+        }
+        .bk-date-strip::-webkit-scrollbar { height: 5px; }
+        .bk-date-strip::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+        .bk-date-chip {
+            flex: 0 0 auto;
+            width: 62px;
+            border: 1.5px solid var(--bk-border);
+            border-radius: 12px;
+            padding: 8px 4px;
+            text-align: center;
+            cursor: pointer;
+            background: #fff;
+            transition: .15s;
+            user-select: none;
+        }
+        .bk-date-chip .d-dow { font-size: .66rem; font-weight: 700; text-transform: uppercase; color: var(--bk-muted); letter-spacing: .3px; }
+        .bk-date-chip .d-day { font-size: 1.15rem; font-weight: 700; color: var(--bk-ink); line-height: 1.15; }
+        .bk-date-chip .d-mon { font-size: .64rem; color: var(--bk-muted); text-transform: uppercase; }
+        .bk-date-chip:hover { border-color: var(--bk-primary); }
+        .bk-date-chip.selected { background: var(--bk-primary); border-color: var(--bk-primary); }
+        .bk-date-chip.selected .d-dow,
+        .bk-date-chip.selected .d-day,
+        .bk-date-chip.selected .d-mon { color: #fff; }
+        .bk-date-chip.disabled { opacity: .38; cursor: not-allowed; background: #f8fafc; }
+        .bk-date-chip.disabled:hover { border-color: var(--bk-border); }
+
+        .bk-more-date { margin-top: 12px; }
+        .bk-more-date summary { font-size: .82rem; color: var(--bk-primary); cursor: pointer; font-weight: 600; }
+        .bk-more-date[open] summary { margin-bottom: 8px; }
+
+        /* ── Collapsible consent ── */
+        .bk-consent details > summary { cursor: pointer; font-weight: 700; list-style: none; }
+        .bk-consent details > summary::-webkit-details-marker { display: none; }
+        .bk-consent details[open] { margin-top: 8px; }
+
+        @media (max-width: 576px) {
+            .bk-step .lbl { display: none; }
+            .bk-stepper { margin-bottom: 20px; }
+
+            .bk-dept-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .bk-dept-card { padding: 14px 8px; }
+            .bk-slot-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+            .bk-slot { padding: 12px 4px; font-size: .84rem; }
+            .bk-doctor-card { padding: 14px; gap: 11px; }
+            .bk-doctor-card .avatar { width: 48px; height: 48px; font-size: 1.05rem; }
+
+            .bk-pane h4 { font-size: 1.12rem; }
+            .bk-pane .sub { font-size: .82rem; margin-bottom: 16px; }
         }
     </style>
 </head>
@@ -799,517 +615,637 @@ $max_date = date('Y-m-d', strtotime('+30 days'));
 <body>
     <?php $sidebar_active = 'bookings'; include("sidebar.php"); ?>
     <main class="patient-content">
-                    <div class="main-content">
-                        <!-- Page Header -->
-                        <div class="mb-4">
-                            <h2 class="page-title">Book Appointment</h2>
-                            <p class="page-subtitle">Quick and easy appointment booking with top doctors</p>
-                        </div>
-                        
-                        <!-- Quick Stats -->
-                        <div class="stats-grid">
-                            <div class="stat-card">
-                                <h3><?= count($upcoming_appointments) ?></h3>
-                                <p>Upcoming Appointments</p>
-                            </div>
-                            <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
-                                <h3><?= count($popular_doctors) ?></h3>
-                                <p>Available Doctors</p>
-                            </div>
-                            <div class="stat-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
-                                <h3>24/7</h3>
-                                <p>Support Available</p>
-                            </div>
-                            <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
-                                <h3>30</h3>
-                                <p>Days in Advance</p>
-                            </div>
-                        </div>
-                        
-                        <!-- Quick Booking Form -->
-                        <div class="booking-form-container">
-                            <h5 class="booking-form-title">Quick Book Appointment</h5>
-                            <form id="quickBookingForm" class="booking-form">
-                                <div class="form-group">
-                                    <label class="form-label">Select Doctor</label>
-                                    <select class="form-control form-select" id="doctorSelect" required>
-                                        <option value="">Choose Doctor</option>
-                                        <?php foreach ($popular_doctors as $doctor): ?>
-                                            <option value="<?= $doctor['id'] ?>" data-fee="<?= $doctor['consultation_fee'] ?>">
-                                                Dr. <?= htmlspecialchars($doctor['name']) ?> - <?= $doctor['specialization'] ?> (₹<?= number_format($doctor['consultation_fee']) ?>)
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                    <div class="error-message" id="doctorError"></div>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label class="form-label">Appointment Date</label>
-                                    <input type="date" 
-                                           class="form-control" 
-                                           id="appointmentDate" 
-                                           min="<?= $min_date ?>" 
-                                           max="<?= $max_date ?>"
-                                           required>
-                                    <div class="error-message" id="dateError"></div>
-                                </div>
-                                
-                                <div class="form-group" style="grid-column: span 2;">
-                                    <label class="form-label">Available Time Slots</label>
-                                    <div id="timeSlotsContainer" class="time-slots-container">
-                                        <div class="time-slot booked" style="grid-column: span 4; cursor: default;">
-                                            Select doctor and date first
-                                        </div>
-                                    </div>
-                                    <input type="hidden" id="selectedTime">
-                                    <div class="error-message" id="timeError"></div>
-                                </div>
-                                
-                                <div class="form-group" style="grid-column: span 2;">
-                                    <label class="form-label">Purpose of Visit</label>
-                                    <textarea class="form-control" 
-                                              id="purpose" 
-                                              rows="2" 
-                                              placeholder="Briefly describe the reason for your appointment..."
-                                              required></textarea>
-                                    <div class="error-message" id="purposeError"></div>
-                                </div>
-                                
-                                <button type="submit" class="btn-book" id="bookBtn">
-                                    <i class="fa fa-calendar-check"></i> Book Appointment
-                                </button>
-                            </form>
-                        </div>
-                        
-                        <!-- Popular Doctors -->
-                        <div class="mb-4">
-                            <h4 class="mb-3" style="color: #2c5aa0;">Popular Doctors</h4>
-                            <div class="doctors-grid" id="doctorsGrid">
-                                <?php foreach ($popular_doctors as $doctor): ?>
-                                    <div class="doctor-card">
-                                        <div class="doctor-header">
-                                            <?php if (!empty($doctor['profile_image']) && file_exists('../admin/' . $doctor['profile_image'])): ?>
-                                                <img src="<?= BASE_URL . 'admin/' . htmlspecialchars($doctor['profile_image']) ?>" 
-                                                     alt="Dr. <?= htmlspecialchars($doctor['name']) ?>" 
-                                                     class="doctor-avatar">
-                                            <?php else: ?>
-                                                <div class="doctor-avatar bg-light d-flex align-items-center justify-content-center mx-auto">
-                                                    <i class="fa fa-user-md text-muted fa-2x"></i>
-                                                </div>
-                                            <?php endif; ?>
-                                            <h5 class="doctor-name">Dr. <?= htmlspecialchars($doctor['name']) ?></h5>
-                                            <p class="doctor-specialization"><?= htmlspecialchars($doctor['specialization']) ?></p>
-                                        </div>
-                                        
-                                        <div class="doctor-body">
-                                            <div class="doctor-info">
-                                                <i class="fa fa-graduation-cap"></i>
-                                                <span><?= $doctor['experience_years'] ?>+ years experience</span>
-                                            </div>
-                                            <div class="doctor-info">
-                                                <i class="fa fa-star"></i>
-                                                <span><?= $doctor['rating'] ? number_format($doctor['rating'], 1) : 'N/A'?> Rating</span>
-                                            </div>
-                                            <div class="doctor-info">
-                                                <i class="fa fa-language"></i>
-                                                <span><?= $doctor['languages'] ?: 'English' ?></span>
-                                            </div>
-                                            <div class="doctor-info">
-                                                <i class="fa fa-history"></i>
-                                                <span><?= $doctor['recent_bookings'] ?> recent bookings</span>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="doctor-footer">
-                                            <div class="consultation-fee">
-                                                ₹ <?= $doctor['consultation_fee'] ? number_format($doctor['consultation_fee']) : 'N/A' ?>
-                                            </div>
-                                            <button class="btn-select" onclick="selectDoctor(<?= $doctor['id'] ?>, '<?= htmlspecialchars($doctor['name']) ?>', <?= $doctor['consultation_fee'] ?$doctor['consultation_fee'] : 'N/A' ?>)">
-                                                <i class="fa fa-check"></i> Select
-                                            </button>
-                                        </div>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-                        
-                        <!-- Upcoming Appointments -->
-                        <?php if (!empty($upcoming_appointments)): ?>
-                            <div class="appointments-list">
-                                <h4 class="mb-3" style="color: #2c5aa0;">Upcoming Appointments</h4>
-                                <?php foreach ($upcoming_appointments as $appointment): 
-                                    $status_class = strtolower($appointment['status']);
-                                ?>
-                                    <div class="appointment-item">
-                                        <div class="appointment-date">
-                                            <div class="appointment-day">
-                                                <?= date('d', strtotime($appointment['appointment_date'])) ?>
-                                            </div>
-                                            <div class="appointment-month">
-                                                <?= date('M', strtotime($appointment['appointment_date'])) ?>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="appointment-details">
-                                            <h5 class="appointment-doctor">
-                                                Dr. <?= htmlspecialchars($appointment['doctor_name']) ?>
-                                            </h5>
-                                            <p class="appointment-time">
-                                                <i class="fa fa-clock"></i> <?= $appointment['formatted_time'] ?>
-                                            </p>
-                                            <p class="appointment-purpose">
-                                                <?= htmlspecialchars(substr($appointment['purpose'], 0, 50)) ?>
-                                                <?= strlen($appointment['purpose']) > 50 ? '...' : '' ?>
-                                            </p>
-                                        </div>
-                                        
-                                        <div class="appointment-status">
-                                            <span class="badge-status badge-<?= $status_class ?>">
-                                                <?= ucfirst($appointment['status']) ?>
-                                            </span>
-                                        </div>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-    </main>
-    <?php include("inc/scripts.php") ?>
 
-    <!-- Success Modal -->
-    <div class="modal fade" id="successModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Appointment Booked Successfully!</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <div class="profile-card shadow">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="mb-0">Book New Appointment</h4>
+                <a href="my-doctor-appointments.php" class="btn btn-outline-secondary btn-sm">
+                    <i class="fa fa-arrow-left me-1"></i> My Appointments
+                </a>
+            </div>
+
+            <?php if ($reschedule_appointment): ?>
+                <div class="alert alert-info" style="font-size:.88rem;">
+                    <i class="fa fa-info-circle me-1"></i>
+                    Booking a new slot with <strong>Dr. <?= htmlspecialchars($reschedule_appointment['doctor_name']) ?></strong>
+                    to replace your appointment on <?= date('d M Y', strtotime($reschedule_appointment['appointment_date'])) ?>
+                    at <?= date('h:i A', strtotime($reschedule_appointment['appointment_time'])) ?>.
+                    Once this new booking is confirmed, cancel the old one from
+                    <a href="my-doctor-appointments.php">My Appointments</a>.
                 </div>
-                <div class="modal-body text-center">
-                    <div class="mb-4">
-                        <i class="fa fa-check-circle text-success fa-4x"></i>
-                    </div>
-                    <h4 class="mb-3" id="successDoctorName"></h4>
-                    <p class="mb-2" id="successDate"></p>
-                    <p class="mb-2" id="successTime"></p>
-                    <p class="mb-3" id="successPurpose"></p>
-                    <div class="alert alert-info">
-                        <i class="fa fa-info-circle"></i> Appointment ID: <strong id="successAppointmentId"></strong>
-                    </div>
+            <?php endif; ?>
+
+            <!-- Stepper -->
+            <div class="bk-stepper" id="bkStepper">
+                <div class="bk-step active" data-step="1"><div class="dot">1</div><div class="lbl">Department</div></div>
+                <div class="bk-step" data-step="2"><div class="dot">2</div><div class="lbl">Doctor</div></div>
+                <div class="bk-step" data-step="3"><div class="dot">3</div><div class="lbl">Date &amp; Time</div></div>
+                <div class="bk-step" data-step="4"><div class="dot">4</div><div class="lbl">Confirm</div></div>
+            </div>
+
+            <div class="bk-summary" id="bkSummary"></div>
+
+            <!-- STEP 1: Department -->
+            <div class="bk-pane active" id="bkPane1">
+                <h4>Choose a department</h4>
+                <p class="sub">Pick the speciality that best matches what you need help with.</p>
+                <div class="bk-dept-grid">
+                    <?php foreach ($departments as $dept): ?>
+                        <div class="bk-dept-card" data-slug="<?= htmlspecialchars($dept['slug_url']) ?>" data-name="<?= htmlspecialchars(trim($dept['categories'])) ?>">
+                            <div class="ic">
+                                <?php if (!empty($dept['sub_cat_img'])): ?>
+                                    <img src="<?= BASE_URL ?>admin/uploads/sub-category/<?= htmlspecialchars($dept['sub_cat_img']) ?>" alt="">
+                                <?php else: ?>
+                                    <i class="fas fa-stethoscope"></i>
+                                <?php endif; ?>
+                            </div>
+                            <div class="name"><?= htmlspecialchars(trim($dept['categories'])) ?></div>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <a href="my-doctor-appointments.php" class="btn btn-primary">View All Appointments</a>
+                <div class="bk-nav">
+                    <span></span>
+                    <button type="button" class="bk-btn bk-btn-primary" id="bkNext1" disabled>Continue <i class="fas fa-arrow-right ms-1"></i></button>
                 </div>
             </div>
-        </div>
-    </div>
-    
-    <script>
-        let selectedDoctor = null;
-        let selectedTimeValue = null;
 
-        // Select doctor from popular doctors list
-        function selectDoctor(doctorId, doctorName, fee) {
-            const doctorSelect = document.getElementById('doctorSelect');
-            doctorSelect.value = doctorId;
-            selectedDoctor = doctorId;
-            
-            // Clear errors
-            clearError('doctorError');
-            document.getElementById('doctorSelect').parentElement.classList.remove('has-error');
-            
-            // Update UI to show selected doctor
-            document.querySelectorAll('.doctor-card').forEach(card => {
-                card.classList.remove('selected');
+            <!-- STEP 2: Doctor -->
+            <div class="bk-pane" id="bkPane2">
+                <h4>Choose a doctor</h4>
+                <p class="sub" id="bkDoctorSub">Available specialists in this department — tap one to continue.</p>
+                <div class="bk-field mb-3" id="bkDoctorSearchWrap" style="display:none;">
+                    <div class="position-relative">
+                        <input type="text" class="form-control" id="bkDoctorSearch" placeholder="Search by doctor name or specialization…" style="padding-right:36px;">
+                        <i class="fas fa-search" style="position:absolute;right:13px;top:50%;transform:translateY(-50%);color:var(--bk-muted);font-size:.85rem;"></i>
+                    </div>
+                </div>
+                <div id="bkDoctorList"></div>
+                <div class="bk-nav">
+                    <button type="button" class="bk-btn bk-btn-outline" data-back="1"><i class="fas fa-arrow-left me-1"></i> Back</button>
+                    <button type="button" class="bk-btn bk-btn-primary d-none" id="bkNext2" disabled>Continue <i class="fas fa-arrow-right ms-1"></i></button>
+                </div>
+            </div>
+
+            <!-- STEP 3: Date & Time -->
+            <div class="bk-pane" id="bkPane3">
+                <h4>Pick a date &amp; time</h4>
+                <p class="sub">Only the doctor's consulting days &amp; hours are shown. Booked slots are greyed out.</p>
+
+                <div class="bk-sched-info" id="bkSchedInfo" style="display:none;">
+                    <i class="fas fa-calendar-alt"></i> <span id="bkSchedText"></span>
+                </div>
+
+                <div class="bk-field mb-2">
+                    <label>Choose a day</label>
+                    <div class="bk-date-strip" id="bkDateStrip"></div>
+                    <details class="bk-more-date">
+                        <summary><i class="fas fa-calendar-day me-1"></i>Pick another date</summary>
+                        <input type="date" class="form-control" id="bkDate" min="<?= date('Y-m-d') ?>" value="<?= date('Y-m-d') ?>" style="max-width:220px;">
+                    </details>
+                </div>
+
+                <div class="bk-field mb-3">
+                    <label>Consultation Mode</label>
+                    <select class="form-select" id="bkMode" style="max-width:260px;">
+                        <option value="online">Online Consultation</option>
+                        <option value="clinic">In-Clinic Visit</option>
+                    </select>
+                </div>
+
+                <label class="bk-field" style="display:block;"><span style="font-size:.82rem;font-weight:600;color:var(--bk-ink);">Available time slots — tap one to continue</span></label>
+                <div id="bkSlotArea"></div>
+                <div class="bk-nav">
+                    <button type="button" class="bk-btn bk-btn-outline" data-back="2"><i class="fas fa-arrow-left me-1"></i> Back</button>
+                    <button type="button" class="bk-btn bk-btn-primary d-none" id="bkNext3" disabled>Continue <i class="fas fa-arrow-right ms-1"></i></button>
+                </div>
+            </div>
+
+            <!-- STEP 4: Details + submit -->
+            <div class="bk-pane" id="bkPane4">
+                <h4>Confirm your details</h4>
+                <p class="sub">We'll use this to confirm your appointment.</p>
+
+                <div id="bkFormError" class="alert alert-danger py-2" style="font-size:.85rem;"></div>
+
+                <form id="bkForm">
+                    <div class="row g-3">
+                        <div class="col-md-6 bk-field">
+                            <label>Full Name *</label>
+                            <input type="text" class="form-control" name="name" required
+                                value="<?= $logged_in_patient ? htmlspecialchars(trim($logged_in_patient['name'] . ' ' . $logged_in_patient['last_name'])) : '' ?>">
+                        </div>
+                        <div class="col-md-6 bk-field">
+                            <label>Email Address *</label>
+                            <input type="email" class="form-control" name="email" required
+                                value="<?= $logged_in_patient ? htmlspecialchars($logged_in_patient['email']) : '' ?>">
+                        </div>
+                        <div class="col-md-6 bk-field">
+                            <label>Mobile Number *</label>
+                            <input type="text" class="form-control" name="phone" inputmode="numeric" maxlength="10" required
+                                value="<?= $logged_in_patient ? htmlspecialchars($logged_in_patient['mobile']) : '' ?>">
+                        </div>
+                        <div class="col-md-6 bk-field">
+                            <label>ABHA Number <span class="text-muted fw-normal">(optional)</span></label>
+                            <input type="text" class="form-control" name="abha_number" placeholder="XX-XXXX-XXXX-XXXX"
+                                value="<?= $logged_in_patient && !empty($logged_in_patient['abha_id']) ? htmlspecialchars($logged_in_patient['abha_id']) : '' ?>">
+                        </div>
+
+                        <div class="col-12 bk-field">
+                            <label>Who is this appointment for?</label>
+                            <div class="bk-visit-toggle">
+                                <input type="radio" name="visit_person" id="bkVisitSelf" value="self" checked>
+                                <label for="bkVisitSelf"><i class="fas fa-user me-1"></i> Myself</label>
+                                <input type="radio" name="visit_person" id="bkVisitOther" value="other">
+                                <label for="bkVisitOther"><i class="fas fa-user-friends me-1"></i> Someone else</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 bk-field d-none" id="bkVisitedNameWrap">
+                            <label>Patient's Name *</label>
+                            <input type="text" class="form-control" name="visited_person_name">
+                        </div>
+
+                        <div class="col-12 bk-field">
+                            <label>Notes for the doctor <span class="text-muted fw-normal">(optional)</span></label>
+                            <textarea class="form-control" name="notes" rows="3" placeholder="Briefly describe your symptoms or reason for visit…"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="bk-consent">
+                        <label class="d-flex gap-2 mb-0" style="cursor:pointer;">
+                            <input type="checkbox" name="consent_given" id="bkConsent" required style="margin-top:3px;">
+                            <span>
+                                I agree to the telemedicine consultation terms and to my health records being created / linked / shared
+                                through ABHA/ABDM as per applicable guidelines, and confirm my details are correct.
+                                <a href="<?= BASE_URL ?>terms-and-condition/" class="text-danger">Terms &amp; Privacy Policy</a>. *
+                                <details class="mt-1">
+                                    <summary style="cursor:pointer;color:#92400e;font-size:.78rem;">Read full consent (English / हिन्दी)</summary>
+                                    <div style="margin-top:6px;">
+                                        I voluntarily consent to receive medical consultation through Telemedicine (Video Call, Audio Call, Chat or Digital Platform), understand that the doctor's advice will be based on the information and documents provided by me, agree to the secure storage and management of my digital health records, consent to the creation, linking, updating and sharing of my health records through ABHA/ABDM as per applicable guidelines, and confirm that the information provided by me is true and correct.
+                                    </div>
+                                    <div style="margin-top:8px;">
+                                        मैं स्वेच्छा से टेलीमेडिसिन (वीडियो कॉल, ऑडियो कॉल, चैट या डिजिटल प्लेटफॉर्म) के माध्यम से चिकित्सा परामर्श प्राप्त करने, यह समझने कि चिकित्सक की सलाह मेरे द्वारा प्रदान की गई जानकारी एवं दस्तावेजों के आधार पर होगी, अपने डिजिटल स्वास्थ्य रिकॉर्ड के सुरक्षित संग्रहण एवं प्रबंधन, लागू दिशानिर्देशों के अनुसार ABHA/ABDM के माध्यम से स्वास्थ्य रिकॉर्ड के निर्माण, लिंकिंग, अद्यतन एवं साझा किए जाने तथा मेरे द्वारा प्रदान की गई जानकारी के सही एवं सत्य होने की पुष्टि हेतु अपनी सहमति प्रदान करता/करती हूँ।
+                                    </div>
+                                </details>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="bk-consent" id="bkFeeNotice" style="display:none;background:#eaf4fd;border-color:#bcdcf5;color:var(--bk-ink);">
+                        <i class="fas fa-shield-alt me-1" style="color:var(--bk-primary);"></i>
+                        Consultation fee of <b id="bkFeeAmount"></b> is payable securely via Razorpay (cards / UPI / netbanking) on the next step, before your appointment is confirmed.
+                    </div>
+
+                    <input type="hidden" name="department" id="bkFieldDepartment">
+                    <input type="hidden" name="doctor_id" id="bkFieldDoctorId">
+                    <input type="hidden" name="doctor_name" id="bkFieldDoctorName">
+                    <input type="hidden" name="date" id="bkFieldDate">
+                    <input type="hidden" name="time" id="bkFieldTime">
+                    <input type="hidden" name="appointment_type" id="bkFieldMode">
+                    <input type="hidden" name="consent_required" value="1">
+
+                    <div class="bk-nav">
+                        <button type="button" class="bk-btn bk-btn-outline" data-back="3"><i class="fas fa-arrow-left me-1"></i> Back</button>
+                        <button type="submit" class="bk-btn bk-btn-primary" id="bkSubmitBtn">
+                            <span id="bkSubmitText">Confirm Booking</span>
+                            <span class="spinner-border spinner-border-sm d-none ms-1" id="bkSubmitSpinner"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- SUCCESS -->
+            <div class="bk-success" id="bkSuccess">
+                <div class="tick"><i class="fas fa-check"></i></div>
+                <h4>Appointment Requested!</h4>
+                <p class="text-muted mb-0">Your reference number is</p>
+                <div class="bk-ref" id="bkRefNumber"></div>
+                <p class="text-muted" style="max-width:420px;margin:0 auto;">
+                    We've sent the details to your email. Our team will confirm your slot shortly.
+                </p>
+                <a href="my-doctor-appointments.php" class="bk-btn bk-btn-primary mt-3" style="display:inline-block;text-decoration:none;">View My Appointments</a>
+            </div>
+
+        </div>
+    </main>
+    <?php include("inc/scripts.php") ?>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script>
+        (function () {
+            const BASE_URL = "<?= BASE_URL ?>";
+            const state = { department: null, departmentName: null, doctor: null, date: null, time: null, mode: 'online' };
+            let currentStep = 1;
+
+            const steps = document.querySelectorAll('.bk-step');
+            const panes = { 1: document.getElementById('bkPane1'), 2: document.getElementById('bkPane2'), 3: document.getElementById('bkPane3'), 4: document.getElementById('bkPane4') };
+            const summary = document.getElementById('bkSummary');
+
+            function goToStep(n) {
+                currentStep = n;
+                Object.keys(panes).forEach(k => panes[k].classList.toggle('active', Number(k) === n));
+                steps.forEach(s => {
+                    const sn = Number(s.dataset.step);
+                    s.classList.toggle('active', sn === n);
+                    s.classList.toggle('done', sn < n);
+                });
+                summary.classList.toggle('show', n >= 2);
+                renderSummary();
+                window.scrollTo({ top: document.querySelector('.profile-card').offsetTop - 20, behavior: 'smooth' });
+            }
+
+            function renderSummary() {
+                let html = '';
+                if (state.departmentName) html += `<span><i class="fas fa-stethoscope me-1"></i>${state.departmentName}</span>`;
+                if (state.doctor) html += `<span><i class="fas fa-user-md me-1"></i>Dr. ${state.doctor.name}</span>`;
+                if (state.date) html += `<span><i class="fas fa-calendar me-1"></i>${state.date}</span>`;
+                if (state.time) html += `<span><i class="fas fa-clock me-1"></i><b>${state.timeDisplay || state.time}</b></span>`;
+                summary.innerHTML = html;
+            }
+
+            document.querySelectorAll('[data-back]').forEach(btn => {
+                btn.addEventListener('click', () => goToStep(Number(btn.dataset.back)));
             });
-            
-            // Highlight the selected doctor card
-            const doctorCards = document.querySelectorAll('.btn-select');
-            doctorCards.forEach(btn => {
-                if (btn.getAttribute('onclick').includes(doctorId)) {
-                    btn.closest('.doctor-card').classList.add('selected');
-                    btn.innerHTML = '<i class="fa fa-check"></i> Selected';
-                    btn.classList.add('selected');
+
+            // ── STEP 1: department selection ──
+            document.querySelectorAll('.bk-dept-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    document.querySelectorAll('.bk-dept-card').forEach(c => c.classList.remove('selected'));
+                    card.classList.add('selected');
+                    state.department = card.dataset.slug;
+                    state.departmentName = card.dataset.name;
+                    document.getElementById('bkNext1').disabled = false;
+                });
+            });
+            document.getElementById('bkNext1').addEventListener('click', () => {
+                document.getElementById('bkFieldDepartment').value = state.departmentName;
+                loadDoctors();
+                goToStep(2);
+            });
+
+            // ── STEP 2: doctor selection ──
+            const doctorSearch = document.getElementById('bkDoctorSearch');
+            const doctorSearchWrap = document.getElementById('bkDoctorSearchWrap');
+
+            function loadDoctors() {
+                const list = document.getElementById('bkDoctorList');
+                list.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+                document.getElementById('bkNext2').disabled = true;
+                doctorSearchWrap.style.display = 'none';
+                doctorSearch.value = '';
+
+                fetch(BASE_URL + 'util/get-doctors-by-department.php?department=' + encodeURIComponent(state.department))
+                    .then(r => r.json())
+                    .then(data => {
+                        if (!data.success || !data.doctors.length) {
+                            list.innerHTML = `<div class="bk-empty"><i class="fas fa-user-md fa-2x mb-2 d-block" style="opacity:.3;"></i>No doctors are currently listed for ${state.departmentName}. Please choose another department or contact us directly.</div>`;
+                            return;
+                        }
+                        list.innerHTML = data.doctors.map(d => `
+              <div class="bk-doctor-card mb-3" data-id="${d.id}" data-name="${escHtml(d.name)}" data-fee="${Number(d.consultation_fee || 0)}">
+                <div class="avatar">${d.profile_image ? `<img src="${d.profile_image}" alt="">` : initials(d.name)}</div>
+                <div style="flex:1;">
+                  <div class="name">Dr. ${escHtml(d.name)} ${d.hpr_verified ? '<span class="hpr-badge"><i class="fas fa-check-circle"></i> HPR Verified</span>' : ''}</div>
+                  <div class="meta">${escHtml(d.degrees || '')}${d.specialization ? ' · ' + escHtml(d.specialization) : ''}</div>
+                  <div class="meta">${d.experience_years ? d.experience_years + ' yrs experience' : ''}${d.languages ? ' · ' + escHtml(d.languages) : ''}</div>
+                  <div class="fee">₹${Number(d.consultation_fee || 0).toLocaleString('en-IN')} consultation fee</div>
+                </div>
+              </div>
+            `).join('');
+
+                        // Search box only earns its place once there's enough to search through
+                        doctorSearchWrap.style.display = data.doctors.length > 4 ? 'block' : 'none';
+
+                        list.querySelectorAll('.bk-doctor-card').forEach(card => {
+                            card.addEventListener('click', () => {
+                                list.querySelectorAll('.bk-doctor-card').forEach(c => c.classList.remove('selected'));
+                                card.classList.add('selected');
+                                state.doctor = { id: card.dataset.id, name: card.dataset.name, fee: Number(card.dataset.fee || 0) };
+                                document.getElementById('bkNext2').disabled = false;
+                                // Auto-advance — one tap picks the doctor and moves on
+                                setTimeout(proceedToStep3, 220);
+                            });
+                        });
+
+                        // Deep-link: auto-select a specific doctor once the list has loaded
+                        if (window.__bkPreDoctorId) {
+                            const preCard = list.querySelector(`.bk-doctor-card[data-id="${window.__bkPreDoctorId}"]`);
+                            if (preCard) preCard.click();
+                            window.__bkPreDoctorId = null;
+                        }
+                    })
+                    .catch(() => {
+                        list.innerHTML = '<div class="bk-empty">Could not load doctors. Please try again.</div>';
+                    });
+            }
+
+            doctorSearch.addEventListener('input', function () {
+                const q = this.value.trim().toLowerCase();
+                document.querySelectorAll('#bkDoctorList .bk-doctor-card').forEach(card => {
+                    card.style.display = card.textContent.toLowerCase().includes(q) ? '' : 'none';
+                });
+            });
+
+            function proceedToStep3() {
+                document.getElementById('bkFieldDoctorId').value = state.doctor.id;
+                document.getElementById('bkFieldDoctorName').value = state.doctor.name;
+                loadSchedule();
+                goToStep(3);
+            }
+            document.getElementById('bkNext2').addEventListener('click', proceedToStep3);
+
+            // ── STEP 3: date & time ──
+            const dateInput = document.getElementById('bkDate');
+            const modeSelect = document.getElementById('bkMode');
+            const dateStrip = document.getElementById('bkDateStrip');
+            const schedInfo = document.getElementById('bkSchedInfo');
+            const schedText = document.getElementById('bkSchedText');
+            let scheduleData = null;
+
+            dateInput.addEventListener('change', () => {
+                dateStrip.querySelectorAll('.bk-date-chip').forEach(c => {
+                    c.classList.toggle('selected', c.dataset.date === dateInput.value && !c.classList.contains('disabled'));
+                });
+                loadSlots();
+            });
+            modeSelect.addEventListener('change', () => { state.mode = modeSelect.value; });
+
+            function loadSchedule() {
+                dateStrip.innerHTML = '<div class="text-muted small py-2">Loading the doctor\'s schedule…</div>';
+                schedInfo.style.display = 'none';
+                document.getElementById('bkSlotArea').innerHTML = '';
+                document.getElementById('bkNext3').disabled = true;
+
+                fetch(BASE_URL + 'util/get-doctor-schedule.php?doctor_id=' + state.doctor.id)
+                    .then(r => r.json())
+                    .then(data => {
+                        scheduleData = data;
+                        if (!data.success) { dateStrip.innerHTML = ''; loadSlots(); return; }
+
+                        if (data.summary) {
+                            schedText.textContent = data.summary;
+                            schedInfo.style.display = 'flex';
+                        }
+
+                        dateStrip.innerHTML = data.dates.map(d => `
+              <div class="bk-date-chip ${d.available ? '' : 'disabled'}" data-date="${d.date}">
+                <div class="d-dow">${d.is_today ? 'Today' : d.dow}</div>
+                <div class="d-day">${d.day}</div>
+                <div class="d-mon">${d.month}</div>
+              </div>`).join('');
+
+                        dateStrip.querySelectorAll('.bk-date-chip:not(.disabled)').forEach(chip => {
+                            chip.addEventListener('click', () => {
+                                dateStrip.querySelectorAll('.bk-date-chip').forEach(c => c.classList.remove('selected'));
+                                chip.classList.add('selected');
+                                dateInput.value = chip.dataset.date;
+                                loadSlots();
+                            });
+                        });
+
+                        const start = data.first_available || (data.dates[0] && data.dates[0].date);
+                        if (start) {
+                            const chip = dateStrip.querySelector(`.bk-date-chip[data-date="${start}"]:not(.disabled)`);
+                            if (chip) {
+                                chip.click();
+                                chip.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+                                const first = data.dates.find(d => d.date === start);
+                                if (first && !first.is_today) {
+                                    const nice = new Date(start + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' });
+                                    schedText.innerHTML = data.summary + ' &nbsp;·&nbsp; <b>Next open day: ' + nice + '</b>';
+                                    schedInfo.style.display = 'flex';
+                                }
+                            } else { dateInput.value = start; loadSlots(); }
+                        } else {
+                            document.getElementById('bkSlotArea').innerHTML =
+                                '<div class="bk-empty w-100"><i class="fas fa-calendar-times fa-2x mb-2 d-block" style="opacity:.3;"></i>This doctor isn\'t accepting bookings right now. Please choose another doctor.</div>';
+                        }
+                    })
+                    .catch(() => { dateStrip.innerHTML = ''; loadSlots(); });
+            }
+
+            // Buckets slots by time of day so a long list is easier to scan at a glance
+            function groupSlotsByPeriod(slots) {
+                const groups = [
+                    { label: 'Morning', items: [] },
+                    { label: 'Afternoon', items: [] },
+                    { label: 'Evening', items: [] },
+                ];
+                slots.forEach(s => {
+                    const hour = parseInt(s.time.split(':')[0], 10);
+                    if (hour < 12) groups[0].items.push(s);
+                    else if (hour < 17) groups[1].items.push(s);
+                    else groups[2].items.push(s);
+                });
+                return groups.filter(g => g.items.length);
+            }
+
+            function loadSlots() {
+                const area = document.getElementById('bkSlotArea');
+                state.date = dateInput.value;
+                state.time = null;
+                state.timeDisplay = null;
+                document.getElementById('bkNext3').disabled = true;
+                renderSummary();
+
+                area.innerHTML = '<div class="text-center py-4 w-100"><div class="spinner-border text-primary"></div></div>';
+
+                fetch(BASE_URL + `util/get-available-slots.php?doctor_id=${state.doctor.id}&date=${state.date}`)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (!data.success || !data.slots.length) {
+                            let why = 'No slots available for this date. Try another day.';
+                            if (scheduleData && scheduleData.success) {
+                                const dow = new Date(state.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+                                const wd = scheduleData.week && scheduleData.week[dow];
+                                if (wd && !wd.available) why = `Dr. ${state.doctor.name} doesn't consult on ${dow}s. Pick a highlighted day above.`;
+                                else why = 'No slots left for this day — they are booked or the consulting hours are over. Try another day.';
+                            }
+                            area.innerHTML = `<div class="bk-empty w-100"><i class="fas fa-calendar-times fa-2x mb-2 d-block" style="opacity:.3;"></i>${why}</div>`;
+                            return;
+                        }
+
+                        area.innerHTML = groupSlotsByPeriod(data.slots).map(g => `
+              <div class="bk-slot-group-label">${g.label}</div>
+              <div class="bk-slot-grid mb-2">
+                ${g.items.map(s => `<div class="bk-slot ${s.booked ? 'booked' : ''}" data-time="${s.time}" data-display="${s.display}">${s.display}</div>`).join('')}
+              </div>
+            `).join('');
+
+                        area.querySelectorAll('.bk-slot:not(.booked)').forEach(slot => {
+                            slot.addEventListener('click', () => {
+                                area.querySelectorAll('.bk-slot').forEach(s => s.classList.remove('selected'));
+                                slot.classList.add('selected');
+                                state.time = slot.dataset.time;
+                                state.timeDisplay = slot.dataset.display;
+                                document.getElementById('bkNext3').disabled = false;
+                                renderSummary();
+                                // Auto-advance — one tap picks the time and moves on
+                                setTimeout(proceedToStep4, 220);
+                            });
+                        });
+                    })
+                    .catch(() => {
+                        area.innerHTML = '<div class="bk-empty w-100">Could not load time slots. Please try again.</div>';
+                    });
+            }
+
+            function proceedToStep4() {
+                document.getElementById('bkFieldDate').value = state.date;
+                document.getElementById('bkFieldTime').value = state.time;
+                document.getElementById('bkFieldMode').value = modeSelect.value;
+
+                const feeNotice = document.getElementById('bkFeeNotice');
+                if (state.doctor.fee > 0) {
+                    document.getElementById('bkFeeAmount').textContent = '₹' + state.doctor.fee.toLocaleString('en-IN');
+                    feeNotice.style.display = 'block';
+                } else {
+                    feeNotice.style.display = 'none';
                 }
+
+                goToStep(4);
+            }
+            document.getElementById('bkNext3').addEventListener('click', proceedToStep4);
+
+            // ── STEP 4: visit-for toggle ──
+            document.querySelectorAll('input[name="visit_person"]').forEach(r => {
+                r.addEventListener('change', function () {
+                    const wrap = document.getElementById('bkVisitedNameWrap');
+                    const input = wrap.querySelector('input');
+                    if (this.value === 'other') {
+                        wrap.classList.remove('d-none');
+                        input.setAttribute('required', 'required');
+                    } else {
+                        wrap.classList.add('d-none');
+                        input.removeAttribute('required');
+                    }
+                });
             });
-            
-            // Clear time slots if date is selected
-            const dateInput = document.getElementById('appointmentDate');
-            if (dateInput.value) {
-                loadTimeSlots();
+
+            // ── STEP 4: submit (with Razorpay payment step when the doctor has a fee) ──
+            const errorBox = document.getElementById('bkFormError');
+            const submitBtn = document.getElementById('bkSubmitBtn');
+            const submitText = document.getElementById('bkSubmitText');
+            const submitSpinner = document.getElementById('bkSubmitSpinner');
+
+            function showError(msg) {
+                resetSubmitBtn();
+                errorBox.textContent = msg;
+                errorBox.style.display = 'block';
+                errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
-            
-            // Show a toast notification
-            showToast(`Dr. ${doctorName} selected`);
-        }
-        
-        // Load time slots when date is selected
-        document.getElementById('appointmentDate').addEventListener('change', loadTimeSlots);
-        
-        // Load available time slots
-        async function loadTimeSlots() {
-            const doctorId = document.getElementById('doctorSelect').value;
-            const date = document.getElementById('appointmentDate').value;
-            
-            if (!doctorId || !date) {
-                return;
+
+            function resetSubmitBtn() {
+                submitBtn.disabled = false;
+                submitText.textContent = 'Confirm Booking';
+                submitSpinner.classList.add('d-none');
             }
-            
-            // Show loading state
-            const container = document.getElementById('timeSlotsContainer');
-            container.innerHTML = '<div class="time-slot booked" style="grid-column: span 4;">Loading time slots...</div>';
-            
-            try {
-                const response = await fetch(`my-bookings.php?get_time_slots=1&doctor_id=${doctorId}&date=${date}`);
-                const timeSlots = await response.json();
-                
-                if (timeSlots.length === 0) {
-                    container.innerHTML = '<div class="time-slot booked" style="grid-column: span 4;">No available slots for this date</div>';
+
+            function busy(label) {
+                submitBtn.disabled = true;
+                submitText.textContent = label;
+                submitSpinner.classList.remove('d-none');
+            }
+
+            function finalizeBooking(formData) {
+                fetch(BASE_URL + 'util/appointment-handler.php', { method: 'POST', body: formData })
+                    .then(r => r.json())
+                    .then(data => {
+                        resetSubmitBtn();
+                        if (data.status === 'success') {
+                            document.getElementById('bkRefNumber').textContent = data.appointment_id || '';
+                            document.querySelector('.bk-stepper').style.display = 'none';
+                            summary.classList.remove('show');
+                            panes[4].classList.remove('active');
+                            document.getElementById('bkSuccess').style.display = 'block';
+                        } else {
+                            showError(data.message || 'Something went wrong. Please try again.');
+                        }
+                    })
+                    .catch(() => showError('Network error. Please check your connection and try again.'));
+            }
+
+            document.getElementById('bkForm').addEventListener('submit', function (e) {
+                e.preventDefault();
+                errorBox.style.display = 'none';
+                busy('Booking…');
+
+                const formData = new FormData(this);
+
+                if (!state.doctor || !state.doctor.fee) {
+                    finalizeBooking(formData);
                     return;
                 }
-                
-                container.innerHTML = '';
-                timeSlots.forEach(slot => {
-                    const timeSlot = document.createElement('div');
-                    timeSlot.className = 'time-slot';
-                    timeSlot.textContent = slot.time;
-                    timeSlot.dataset.value = slot.value;
-                    timeSlot.onclick = () => selectTimeSlot(timeSlot, slot.value);
-                    container.appendChild(timeSlot);
-                });
-                
-                // Clear previous selection
-                selectedTimeValue = null;
-                document.getElementById('selectedTime').value = '';
-                clearError('timeError');
-                
-            } catch (error) {
-                console.error('Error loading time slots:', error);
-                container.innerHTML = '<div class="time-slot booked" style="grid-column: span 4;">Error loading slots</div>';
-            }
-        }
-        
-        // Select time slot
-        function selectTimeSlot(element, timeValue) {
-            // Remove selected class from all time slots
-            document.querySelectorAll('.time-slot').forEach(slot => {
-                slot.classList.remove('selected');
-            });
-            
-            // Add selected class to clicked slot
-            element.classList.add('selected');
-            selectedTimeValue = timeValue;
-            document.getElementById('selectedTime').value = selectedTimeValue;
-            
-            // Clear error
-            clearError('timeError');
-        }
-        
-        // Clear error message
-        function clearError(errorId) {
-            const errorElement = document.getElementById(errorId);
-            if (errorElement) {
-                errorElement.textContent = '';
-                errorElement.parentElement.classList.remove('has-error');
-            }
-        }
-        
-        // Show error message
-        function showError(fieldId, message) {
-            const field = document.getElementById(fieldId);
-            if (field) {
-                field.textContent = message;
-                field.parentElement.classList.add('has-error');
-            }
-        }
-        
-        // Show toast notification
-        function showToast(message, type = 'success') {
-            const toast = document.createElement('div');
-            toast.className = `toast-notification toast-${type}`;
-            toast.textContent = message;
-            toast.style.cssText = `
-                position: fixed;
-                bottom: 20px;
-                right: 20px;
-                background: ${type === 'success' ? '#28a745' : '#dc3545'};
-                color: white;
-                padding: 12px 20px;
-                border-radius: 8px;
-                z-index: 1000;
-                animation: slideIn 0.3s ease;
-            `;
-            
-            document.body.appendChild(toast);
-            
-            setTimeout(() => {
-                toast.style.animation = 'slideOut 0.3s ease';
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
-        }
-        
-        // Handle form submission
-        document.getElementById('quickBookingForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            // Get form data
-            const doctorId = document.getElementById('doctorSelect').value;
-            const appointmentDate = document.getElementById('appointmentDate').value;
-            const appointmentTime = document.getElementById('selectedTime').value;
-            const purpose = document.getElementById('purpose').value.trim();
-            
-            // Clear previous errors
-            ['doctorError', 'dateError', 'timeError', 'purposeError'].forEach(clearError);
-            
-            // Validate form
-            let isValid = true;
-            
-            if (!doctorId) {
-                showError('doctorError', 'Please select a doctor');
-                isValid = false;
-            }
-            
-            if (!appointmentDate) {
-                showError('dateError', 'Please select appointment date');
-                isValid = false;
-            }
-            
-            if (!appointmentTime) {
-                showError('timeError', 'Please select appointment time');
-                isValid = false;
-            }
-            
-            if (!purpose) {
-                showError('purposeError', 'Please mention the purpose of visit');
-                isValid = false;
-            } else if (purpose.length < 10) {
-                showError('purposeError', 'Please provide more details (minimum 10 characters)');
-                isValid = false;
-            }
-            
-            if (!isValid) {
-                return;
-            }
-            
-            // Disable submit button and show loading
-            const submitBtn = document.getElementById('bookBtn');
-            const originalText = submitBtn.innerHTML;
-            submitBtn.innerHTML = '<span class="loading-spinner"></span> Booking...';
-            submitBtn.disabled = true;
-            
-            try {
-                const formData = new FormData();
-                formData.append('doctor_id', doctorId);
-                formData.append('appointment_date', appointmentDate);
-                formData.append('appointment_time', appointmentTime);
-                formData.append('purpose', purpose);
-                formData.append('book_appointment', '1');
-                
-                const response = await fetch('my-bookings.php', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    // Show success modal
-                    document.getElementById('successDoctorName').textContent = 
-                        `Appointment with Dr. ${result.details.doctor_name}`;
-                    document.getElementById('successDate').textContent = 
-                        `Date: ${result.details.formatted_date}`;
-                    document.getElementById('successTime').textContent = 
-                        `Time: ${result.details.formatted_time}`;
-                    document.getElementById('successPurpose').textContent = 
-                        `Purpose: ${result.details.purpose.substring(0, 50)}${result.details.purpose.length > 50 ? '...' : ''}`;
-                    document.getElementById('successAppointmentId').textContent = 
-                        `AP${String(result.appointment_id).padStart(6, '0')}`;
-                    
-                    const successModal = new bootstrap.Modal(document.getElementById('successModal'));
-                    successModal.show();
-                    
-                    // Reset form
-                    this.reset();
-                    selectedDoctor = null;
-                    selectedTimeValue = null;
-                    document.getElementById('timeSlotsContainer').innerHTML = 
-                        '<div class="time-slot booked" style="grid-column: span 4;">Select doctor and date first</div>';
-                    
-                    // Reset doctor cards
-                    document.querySelectorAll('.doctor-card').forEach(card => {
-                        card.classList.remove('selected');
-                    });
-                    document.querySelectorAll('.btn-select').forEach(btn => {
-                        btn.innerHTML = '<i class="fa fa-check"></i> Select';
-                        btn.classList.remove('selected');
-                    });
-                    
-                } else {
-                    // Show validation errors
-                    if (result.errors) {
-                        Object.entries(result.errors).forEach(([field, message]) => {
-                            const fieldMap = {
-                                'doctor_id': 'doctorError',
-                                'appointment_date': 'dateError',
-                                'appointment_time': 'timeError',
-                                'purpose': 'purposeError',
-                                'general': null
-                            };
-                            
-                            if (fieldMap[field]) {
-                                showError(fieldMap[field], message);
-                            } else if (field === 'general') {
-                                showToast(message, 'error');
-                            }
+
+                busy('Preparing payment…');
+                const orderData = new FormData();
+                orderData.append('doctor_id', state.doctor.id);
+
+                fetch(BASE_URL + 'util/create-razorpay-order.php', { method: 'POST', body: orderData })
+                    .then(r => r.json())
+                    .then(order => {
+                        if (!order.success) {
+                            showError(order.message || 'Could not start the payment. Please try again.');
+                            return;
+                        }
+                        if (!order.payment_required) {
+                            finalizeBooking(formData);
+                            return;
+                        }
+
+                        resetSubmitBtn();
+
+                        const rzp = new Razorpay({
+                            key: order.key_id,
+                            order_id: order.order_id,
+                            amount: order.amount,
+                            currency: order.currency,
+                            name: 'Rejuvenate Digital Health',
+                            description: 'Consultation with Dr. ' + (order.doctor_name || state.doctor.name),
+                            prefill: {
+                                name: formData.get('name') || '',
+                                email: formData.get('email') || '',
+                                contact: formData.get('phone') || '',
+                            },
+                            theme: { color: '#0C74C5' },
+                            handler: function (response) {
+                                formData.append('razorpay_order_id', response.razorpay_order_id);
+                                formData.append('razorpay_payment_id', response.razorpay_payment_id);
+                                formData.append('razorpay_signature', response.razorpay_signature);
+                                busy('Booking…');
+                                finalizeBooking(formData);
+                            },
+                            modal: {
+                                ondismiss: function () {
+                                    showError('Payment was cancelled. Your appointment was not booked.');
+                                },
+                            },
                         });
-                    }
-                }
-                
-            } catch (error) {
-                console.error('Error:', error);
-                showToast('Network error. Please try again.', 'error');
-            } finally {
-                // Restore submit button
-                submitBtn.innerHTML = originalText;
-                submitBtn.disabled = false;
+                        rzp.on('payment.failed', function () {
+                            showError('Payment failed. Please try again.');
+                        });
+                        rzp.open();
+                    })
+                    .catch(() => showError('Network error while starting payment. Please try again.'));
+            });
+
+            function escHtml(s) {
+                if (!s) return '';
+                return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             }
-        });
-        
-        // Auto-select today's date
-        document.getElementById('appointmentDate').value = '<?= date('Y-m-d') ?>';
-        
-        // Close modal and refresh page
-        document.getElementById('successModal').addEventListener('hidden.bs.modal', function () {
-            location.reload();
-        });
-        
-        // Add CSS animations
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes slideIn {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
+            function initials(name) {
+                return (name || '').trim().charAt(0).toUpperCase() || '?';
             }
-            
-            @keyframes slideOut {
-                from { transform: translateX(0); opacity: 1; }
-                to { transform: translateX(100%); opacity: 0; }
-            }
-            
-            .doctor-card.selected {
-                border-color: #2c5aa0;
-                box-shadow: 0 5px 20px rgba(44, 90, 160, 0.2);
-            }
-            
-            .btn-select.selected {
-                background: #28a745;
-            }
-            
-            .toast-notification {
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            }
-        `;
-        document.head.appendChild(style);
+
+            // ── Deep-link support: ?doctor_id=<id> (or resolved from ?reschedule=<id>) ──
+            <?php if ($pre_doctor_id): ?>
+                window.__bkPreDoctorId = <?= (int) $pre_doctor_id ?>;
+            <?php endif; ?>
+            <?php if ($pre_department): ?>
+                (function () {
+                    const preCard = document.querySelector('.bk-dept-card[data-slug="<?= addslashes($pre_department) ?>"]');
+                    if (preCard) preCard.click();
+                })();
+            <?php endif; ?>
+        })();
     </script>
 </body>
 </html>

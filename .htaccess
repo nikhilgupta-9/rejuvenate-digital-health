@@ -34,7 +34,8 @@ RewriteRule ^products/([^/]+)/?$ products.php?alias=$1 [L,QSA]
 
 RewriteRule ^brand/([^/]+)/?$ brand.php?alias=$1 [L,QSA]
 
-# Rewrite Blog Details URL
+# Rewrite Blog URLs
+RewriteRule ^blogs/?$ blog.php? [L,QSA]
 RewriteRule ^blogs/([^/]+)/?$ blog-details.php?alias=$1 [L,QSA]
 
 RewriteRule ^doctor-login/?$ doctor-login.php? [L,QSA]

@@ -375,59 +375,12 @@ function get_trending_product(){
     return $trendingProducts; // ✅ Return the result
 }
 
-// blog fetch for home page 
+// blog fetch for home page — latest 3 published posts
 function get_blog_home()
 {
     global $conn;
 
-    $sql_blog = "SELECT * FROM `blogs` limit 3";
-    $res_blog = mysqli_query($conn, $sql_blog);
-
-    if (!$res_blog) {
-        header("Location: 500.php"); // ✅ Remove spaces around colon
-        exit(); // ✅ Always add exit after header redirect
-    }
-
-    $blog = []; // ✅ Initialize the array before using
-    while ($row = mysqli_fetch_assoc($res_blog)) {
-        $blog[] = $row;
-    }
-
-    return $blog; // ✅ Return the result
-}
-
-
-// blog fetch for blog page 
-function get_blog()
-{
-    global $conn;
-
-    $sql_blog = "SELECT * FROM `blogs` ";
-    $res_blog = mysqli_query($conn, $sql_blog);
-
-    if (!$res_blog) {
-        header("Location: 500.php"); // ✅ Remove spaces around colon
-        exit(); // ✅ Always add exit after header redirect
-    }
-
-    $blog = []; // ✅ Initialize the array before using
-    while ($row = mysqli_fetch_assoc($res_blog)) {
-        $blog[] = $row;
-    }
-
-    return $blog; // ✅ Return the result
-}
-
-// blog details fetch 
-function fetch_blog_detail($slug)
-{
-    global $conn;
-    // global $site;
-
-    $blog_slug = mysqli_real_escape_string($conn, $slug);
-    // die($slug);
-
-    $sql_blog = "SELECT * FROM `blogs` WHERE `slug_url` = '$blog_slug' LIMIT 1";
+    $sql_blog = "SELECT * FROM `blogs` WHERE `status` = 'published' ORDER BY `created_at` DESC LIMIT 3";
     $res_blog = mysqli_query($conn, $sql_blog);
 
     if (!$res_blog) {
@@ -435,14 +388,172 @@ function fetch_blog_detail($slug)
         exit();
     }
 
-    $blog_det = mysqli_fetch_assoc($res_blog);
+    $blog = [];
+    while ($row = mysqli_fetch_assoc($res_blog)) {
+        $blog[] = $row;
+    }
+
+    return $blog;
+}
+
+
+// blog fetch for public blog listing page — paginated, published only,
+// optionally filtered by category
+function get_blog($page = 1, $perPage = 9, $category = '')
+{
+    global $conn;
+
+    $page = max(1, (int) $page);
+    $perPage = max(1, (int) $perPage);
+    $offset = ($page - 1) * $perPage;
+    $category = trim((string) $category);
+
+    $where = "WHERE `status` = 'published'";
+    $params = [];
+    $types = '';
+    if ($category !== '') {
+        $where .= " AND `category` = ?";
+        $params[] = $category;
+        $types .= 's';
+    }
+
+    $countStmt = mysqli_prepare($conn, "SELECT COUNT(*) AS total FROM `blogs` $where");
+    if ($types !== '') {
+        mysqli_stmt_bind_param($countStmt, $types, ...$params);
+    }
+    mysqli_stmt_execute($countStmt);
+    $total = (int) (mysqli_stmt_get_result($countStmt)->fetch_assoc()['total'] ?? 0);
+
+    $stmt = mysqli_prepare($conn, "SELECT * FROM `blogs` $where ORDER BY `created_at` DESC LIMIT ? OFFSET ?");
+    $listParams = array_merge($params, [$perPage, $offset]);
+    mysqli_stmt_bind_param($stmt, $types . 'ii', ...$listParams);
+    mysqli_stmt_execute($stmt);
+    $res_blog = mysqli_stmt_get_result($stmt);
+
+    $blog = [];
+    while ($row = mysqli_fetch_assoc($res_blog)) {
+        $blog[] = $row;
+    }
+
+    return [
+        'items'       => $blog,
+        'total'       => $total,
+        'page'        => $page,
+        'per_page'    => $perPage,
+        'total_pages' => (int) max(1, ceil($total / $perPage)),
+    ];
+}
+
+// distinct categories in use among published posts — powers the blog filter
+function get_blog_categories()
+{
+    global $conn;
+
+    $res = mysqli_query($conn, "SELECT DISTINCT `category` FROM `blogs`
+        WHERE `status` = 'published' AND `category` IS NOT NULL AND `category` <> ''
+        ORDER BY `category` ASC");
+
+    $categories = [];
+    while ($row = mysqli_fetch_assoc($res)) {
+        $categories[] = $row['category'];
+    }
+
+    return $categories;
+}
+
+// blog details fetch by slug — published only
+function fetch_blog_detail($slug)
+{
+    global $conn;
+
+    $stmt = mysqli_prepare($conn, "SELECT * FROM `blogs` WHERE `slug_url` = ? AND `status` = 'published' LIMIT 1");
+    mysqli_stmt_bind_param($stmt, "s", $slug);
+    mysqli_stmt_execute($stmt);
+    $blog_det = mysqli_stmt_get_result($stmt)->fetch_assoc();
 
     if (!$blog_det) {
-        header("Location: ".BASE_URL."404.php");
+        header("Location: " . BASE_URL . "404.php");
         exit();
     }
 
     return $blog_det;
+}
+
+// related posts for the blog detail page — same category first, excludes current post
+function get_related_blogs($category, $exclude_id, $limit = 3)
+{
+    global $conn;
+
+    $category = trim((string) $category);
+    $exclude_id = (int) $exclude_id;
+    $limit = max(1, (int) $limit);
+
+    if ($category !== '') {
+        $stmt = mysqli_prepare($conn, "SELECT * FROM `blogs`
+            WHERE `status` = 'published' AND `category` = ? AND `id` <> ?
+            ORDER BY `created_at` DESC LIMIT ?");
+        mysqli_stmt_bind_param($stmt, "sii", $category, $exclude_id, $limit);
+    } else {
+        $stmt = mysqli_prepare($conn, "SELECT * FROM `blogs`
+            WHERE `status` = 'published' AND `id` <> ?
+            ORDER BY `created_at` DESC LIMIT ?");
+        mysqli_stmt_bind_param($stmt, "ii", $exclude_id, $limit);
+    }
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+
+    $related = [];
+    while ($row = mysqli_fetch_assoc($res)) {
+        $related[] = $row;
+    }
+
+    // Backfill with recent posts from other categories if the category didn't have enough
+    if (count($related) < $limit && $category !== '') {
+        $have = count($related);
+        $excludeIds = array_merge([$exclude_id], array_column($related, 'id'));
+        $placeholders = implode(',', array_fill(0, count($excludeIds), '?'));
+        $need = $limit - $have;
+        $stmt2 = mysqli_prepare($conn, "SELECT * FROM `blogs`
+            WHERE `status` = 'published' AND `id` NOT IN ($placeholders)
+            ORDER BY `created_at` DESC LIMIT ?");
+        $types2 = str_repeat('i', count($excludeIds)) . 'i';
+        $params2 = array_merge($excludeIds, [$need]);
+        mysqli_stmt_bind_param($stmt2, $types2, ...$params2);
+        mysqli_stmt_execute($stmt2);
+        $res2 = mysqli_stmt_get_result($stmt2);
+        while ($row = mysqli_fetch_assoc($res2)) {
+            $related[] = $row;
+        }
+    }
+
+    return $related;
+}
+
+// Generates a URL-safe slug from a blog title and disambiguates it against
+// `blogs.slug_url` (now UNIQUE) by appending -2, -3, … on collision.
+// Used by both admin/add-blog.php (exclude_id = 0) and admin/edit-blog.php.
+function generate_unique_blog_slug($conn, $title, $exclude_id = 0)
+{
+    $base = trim(preg_replace('/[^a-z0-9]+/', '-', strtolower($title)), '-');
+    if ($base === '') {
+        $base = 'post';
+    }
+    $exclude_id = (int) $exclude_id;
+
+    $slug = $base;
+    $suffix = 2;
+    while (true) {
+        $stmt = mysqli_prepare($conn, "SELECT id FROM `blogs` WHERE `slug_url` = ? AND `id` <> ? LIMIT 1");
+        mysqli_stmt_bind_param($stmt, "si", $slug, $exclude_id);
+        mysqli_stmt_execute($stmt);
+        if (!mysqli_stmt_get_result($stmt)->fetch_assoc()) {
+            break;
+        }
+        $slug = $base . '-' . $suffix;
+        $suffix++;
+    }
+
+    return $slug;
 }
 
 // product page fetch product 

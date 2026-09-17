@@ -72,7 +72,7 @@ if ($res) {
 }
 
 /* ── Blog posts ── */
-$res = $conn->query("SELECT slug_url FROM blogs WHERE status = 1 ORDER BY id DESC");
+$res = $conn->query("SELECT slug_url FROM blogs WHERE status = 'published' ORDER BY id DESC");
 if ($res) {
     while ($row = $res->fetch_assoc()) {
         if (empty($row['slug_url'])) continue;

@@ -127,7 +127,13 @@ dump / phpMyAdmin: `doctors`, `users`, `admin_user`, `appointments`,
 | 38 | `migration_parent_consent_expiry_revoke.sql` | Phase 5 — expiry + revoke. `academic_year` / `expires_at` — fixed Indian academic year (Apr 1–Mar 31), computed once from `submitted_at` at submit time (and backfilled here for existing rows); soft display-only expiry, nothing is blocked. `revoked` / `revoked_at` — a parent revokes from their own signed per-student link (`?ctoken=`) after re-verifying the on-file `parent_mobile` with a fresh WhatsApp OTP (role `parent_consent`, same infra as #37) — the OTP is consumed against the DB-fetched mobile, never a client-supplied one, so a tampered request can't revoke someone else's consent. |
 | 39 | `migration_patient_health_profiles.sql` | **`patient_health_profiles`** — one row per patient (`users.id`, FK RESTRICT), mirrors `member_health_profiles` (school students): vitals (height/weight/BMI/BP/pulse/vision), medical history (allergies/chronic/medications/surgeries/disability — the `users.allergies/existing_condition/current_medication/medical_history` flat columns were never read or written by any page), vaccination, emergency contact, checkup schedule, insurance. Editable from all three sides — `admin/edit-customer.php`, `doctor/patient-details.php`, `user/health-profile.php` — via `lib/PatientHealthProfile.php`; `admin/view-customer.php` shows it read-only. |
 
-## 12. Referential integrity — run LAST
+## 12. Content
+
+| # | File | Notes |
+|---|------|-------|
+| 40 | `migration_blog_enhancements.sql` | Adds `excerpt`, `category`, `tags`, `meta_title`, `meta_description` to the base-schema `blogs` table, plus a UNIQUE index on `slug_url` (so `fetch_blog_detail()`'s `LIMIT 1` lookup is unambiguous) and lookup indexes on `(status, created_at)` / `category`. Backs the public `blog.php` (listing) / `blog-details.php` (detail, routed via `/blogs/{slug}`) pages and the admin blog editor's new fields. |
+
+## 13. Referential integrity — run LAST
 
 | # | File | Notes |
 |---|------|-------|

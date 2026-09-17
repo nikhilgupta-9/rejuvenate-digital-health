@@ -299,6 +299,19 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
     }
 
     /* ── Time slots ── */
+    .bk-slot-group-label {
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--bk-muted);
+      margin: 16px 0 8px;
+    }
+
+    .bk-slot-group-label:first-child {
+      margin-top: 0;
+    }
+
     .bk-slot-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
@@ -657,11 +670,17 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
         <!-- STEP 2: Doctor -->
         <div class="bk-pane" id="bkPane2">
           <h4>Choose a doctor</h4>
-          <p class="sub" id="bkDoctorSub">Available specialists in this department.</p>
+          <p class="sub" id="bkDoctorSub">Available specialists in this department — tap one to continue.</p>
+          <div class="bk-field mb-3" id="bkDoctorSearchWrap" style="display:none;">
+            <div class="position-relative">
+              <input type="text" class="form-control" id="bkDoctorSearch" placeholder="Search by doctor name or specialization…" style="padding-right:36px;">
+              <i class="fas fa-search" style="position:absolute;right:13px;top:50%;transform:translateY(-50%);color:var(--bk-muted);font-size:.85rem;"></i>
+            </div>
+          </div>
           <div id="bkDoctorList"></div>
           <div class="bk-nav">
             <button type="button" class="bk-btn bk-btn-outline" data-back="1"><i class="fas fa-arrow-left me-1"></i> Back</button>
-            <button type="button" class="bk-btn bk-btn-primary" id="bkNext2" disabled>Continue <i class="fas fa-arrow-right ms-1"></i></button>
+            <button type="button" class="bk-btn bk-btn-primary d-none" id="bkNext2" disabled>Continue <i class="fas fa-arrow-right ms-1"></i></button>
           </div>
         </div>
 
@@ -691,13 +710,11 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
             </select>
           </div>
 
-          <label class="bk-field" style="display:block;"><span style="font-size:.82rem;font-weight:600;color:var(--bk-ink);">Available time slots</span></label>
-          <div id="bkSlotArea">
-            <div class="bk-slot-grid" id="bkSlotGrid"></div>
-          </div>
+          <label class="bk-field" style="display:block;"><span style="font-size:.82rem;font-weight:600;color:var(--bk-ink);">Available time slots — tap one to continue</span></label>
+          <div id="bkSlotArea"></div>
           <div class="bk-nav">
             <button type="button" class="bk-btn bk-btn-outline" data-back="2"><i class="fas fa-arrow-left me-1"></i> Back</button>
-            <button type="button" class="bk-btn bk-btn-primary" id="bkNext3" disabled>Continue <i class="fas fa-arrow-right ms-1"></i></button>
+            <button type="button" class="bk-btn bk-btn-primary d-none" id="bkNext3" disabled>Continue <i class="fas fa-arrow-right ms-1"></i></button>
           </div>
         </div>
 
@@ -866,10 +883,15 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
       });
 
       // ── STEP 2: doctor selection ──
+      const doctorSearch = document.getElementById('bkDoctorSearch');
+      const doctorSearchWrap = document.getElementById('bkDoctorSearchWrap');
+
       function loadDoctors() {
         const list = document.getElementById('bkDoctorList');
         list.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
         document.getElementById('bkNext2').disabled = true;
+        doctorSearchWrap.style.display = 'none';
+        doctorSearch.value = '';
 
         fetch(BASE_URL + 'util/get-doctors-by-department.php?department=' + encodeURIComponent(state.department))
           .then(r => r.json())
@@ -890,12 +912,17 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
               </div>
             `).join('');
 
+            // Search box only earns its place once there's enough to search through
+            doctorSearchWrap.style.display = data.doctors.length > 4 ? 'block' : 'none';
+
             list.querySelectorAll('.bk-doctor-card').forEach(card => {
               card.addEventListener('click', () => {
                 list.querySelectorAll('.bk-doctor-card').forEach(c => c.classList.remove('selected'));
                 card.classList.add('selected');
                 state.doctor = { id: card.dataset.id, name: card.dataset.name, fee: Number(card.dataset.fee || 0) };
                 document.getElementById('bkNext2').disabled = false;
+                // Auto-advance — one tap picks the doctor and moves on
+                setTimeout(proceedToStep3, 220);
               });
             });
 
@@ -911,12 +938,20 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
           });
       }
 
-      document.getElementById('bkNext2').addEventListener('click', () => {
+      doctorSearch.addEventListener('input', function () {
+        const q = this.value.trim().toLowerCase();
+        document.querySelectorAll('#bkDoctorList .bk-doctor-card').forEach(card => {
+          card.style.display = card.textContent.toLowerCase().includes(q) ? '' : 'none';
+        });
+      });
+
+      function proceedToStep3() {
         document.getElementById('bkFieldDoctorId').value = state.doctor.id;
         document.getElementById('bkFieldDoctorName').value = state.doctor.name;
         loadSchedule();
         goToStep(3);
-      });
+      }
+      document.getElementById('bkNext2').addEventListener('click', proceedToStep3);
 
       // ── STEP 3: date & time ──
       const dateInput = document.getElementById('bkDate');
@@ -938,7 +973,7 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
       function loadSchedule() {
         dateStrip.innerHTML = '<div class="text-muted small py-2">Loading the doctor\'s schedule…</div>';
         schedInfo.style.display = 'none';
-        document.getElementById('bkSlotGrid').innerHTML = '';
+        document.getElementById('bkSlotArea').innerHTML = '';
         document.getElementById('bkNext3').disabled = true;
 
         fetch(BASE_URL + 'util/get-doctor-schedule.php?doctor_id=' + state.doctor.id)
@@ -984,22 +1019,38 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
                 }
               } else { dateInput.value = start; loadSlots(); }
             } else {
-              document.getElementById('bkSlotGrid').innerHTML =
+              document.getElementById('bkSlotArea').innerHTML =
                 '<div class="bk-empty w-100"><i class="fas fa-calendar-times fa-2x mb-2 d-block" style="opacity:.3;"></i>This doctor isn\'t accepting bookings right now. Please choose another doctor.</div>';
             }
           })
           .catch(() => { dateStrip.innerHTML = ''; loadSlots(); });
       }
 
+      // Buckets slots by time of day so a long list is easier to scan at a glance
+      function groupSlotsByPeriod(slots) {
+        const groups = [
+          { label: 'Morning', items: [] },
+          { label: 'Afternoon', items: [] },
+          { label: 'Evening', items: [] },
+        ];
+        slots.forEach(s => {
+          const hour = parseInt(s.time.split(':')[0], 10);
+          if (hour < 12) groups[0].items.push(s);
+          else if (hour < 17) groups[1].items.push(s);
+          else groups[2].items.push(s);
+        });
+        return groups.filter(g => g.items.length);
+      }
+
       function loadSlots() {
-        const grid = document.getElementById('bkSlotGrid');
+        const area = document.getElementById('bkSlotArea');
         state.date = dateInput.value;
         state.time = null;
         state.timeDisplay = null;
         document.getElementById('bkNext3').disabled = true;
         renderSummary();
 
-        grid.innerHTML = '<div class="text-center py-4 w-100"><div class="spinner-border text-primary"></div></div>';
+        area.innerHTML = '<div class="text-center py-4 w-100"><div class="spinner-border text-primary"></div></div>';
 
         fetch(BASE_URL + `util/get-available-slots.php?doctor_id=${state.doctor.id}&date=${state.date}`)
           .then(r => r.json())
@@ -1012,30 +1063,36 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
                 if (wd && !wd.available) why = `Dr. ${state.doctor.name} doesn't consult on ${dow}s. Pick a highlighted day above.`;
                 else why = 'No slots left for this day — they are booked or the consulting hours are over. Try another day.';
               }
-              grid.innerHTML = `<div class="bk-empty w-100"><i class="fas fa-calendar-times fa-2x mb-2 d-block" style="opacity:.3;"></i>${why}</div>`;
+              area.innerHTML = `<div class="bk-empty w-100"><i class="fas fa-calendar-times fa-2x mb-2 d-block" style="opacity:.3;"></i>${why}</div>`;
               return;
             }
-            grid.innerHTML = data.slots.map(s => `
-              <div class="bk-slot ${s.booked ? 'booked' : ''}" data-time="${s.time}" data-display="${s.display}">${s.display}</div>
+
+            area.innerHTML = groupSlotsByPeriod(data.slots).map(g => `
+              <div class="bk-slot-group-label">${g.label}</div>
+              <div class="bk-slot-grid mb-2">
+                ${g.items.map(s => `<div class="bk-slot ${s.booked ? 'booked' : ''}" data-time="${s.time}" data-display="${s.display}">${s.display}</div>`).join('')}
+              </div>
             `).join('');
 
-            grid.querySelectorAll('.bk-slot:not(.booked)').forEach(slot => {
+            area.querySelectorAll('.bk-slot:not(.booked)').forEach(slot => {
               slot.addEventListener('click', () => {
-                grid.querySelectorAll('.bk-slot').forEach(s => s.classList.remove('selected'));
+                area.querySelectorAll('.bk-slot').forEach(s => s.classList.remove('selected'));
                 slot.classList.add('selected');
                 state.time = slot.dataset.time;
                 state.timeDisplay = slot.dataset.display;
                 document.getElementById('bkNext3').disabled = false;
                 renderSummary();
+                // Auto-advance — one tap picks the time and moves on
+                setTimeout(proceedToStep4, 220);
               });
             });
           })
           .catch(() => {
-            grid.innerHTML = '<div class="bk-empty w-100">Could not load time slots. Please try again.</div>';
+            area.innerHTML = '<div class="bk-empty w-100">Could not load time slots. Please try again.</div>';
           });
       }
 
-      document.getElementById('bkNext3').addEventListener('click', () => {
+      function proceedToStep4() {
         document.getElementById('bkFieldDate').value = state.date;
         document.getElementById('bkFieldTime').value = state.time;
         document.getElementById('bkFieldMode').value = modeSelect.value;
@@ -1049,7 +1106,8 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
         }
 
         goToStep(4);
-      });
+      }
+      document.getElementById('bkNext3').addEventListener('click', proceedToStep4);
 
       // ── STEP 4: visit-for toggle ──
       document.querySelectorAll('input[name="visit_person"]').forEach(r => {
