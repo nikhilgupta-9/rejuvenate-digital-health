@@ -2367,6 +2367,62 @@ button {
   padding: 30px 30px;
 }
 
+.drawer-link-directory {
+  margin: 24px 0 20px;
+}
+
+.drawer-link-group + .drawer-link-group {
+  margin-top: 22px;
+}
+
+.drawer-link-group h3 {
+  color: var(--theme-color-2);
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.drawer-link-group a {
+  align-items: center;
+  border-bottom: 1px solid #edf0f4;
+  color: var(--header);
+  display: flex;
+  font-size: 15px;
+  gap: 11px;
+  padding: 9px 0;
+  text-decoration: none;
+  transition: color 0.2s ease, padding-left 0.2s ease;
+}
+
+.drawer-link-group a:hover,
+.drawer-link-group a:focus {
+  color: var(--theme-color-2);
+  padding-left: 4px;
+}
+
+.drawer-link-group a i {
+  color: var(--theme-color-2);
+  width: 18px;
+  text-align: center;
+}
+
+.header__hamburger .sidebar__toggle {
+  background: transparent;
+  border: 0;
+  color: var(--header);
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+  padding: 8px;
+}
+
+.header__hamburger .sidebar__toggle:hover,
+.header__hamburger .sidebar__toggle:focus {
+  color: var(--theme-color-2);
+}
+
 .offcanvas__wrapper .offcanvas-title {
   font-size: 28px;
   margin-bottom: 15px;

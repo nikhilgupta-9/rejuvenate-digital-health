@@ -237,6 +237,8 @@ if ($is_admin && isset($conn)) {
                 <li><a href="school-members.php">School Members</a></li>
                 <li><a href="school-plans.php"><i class="fas fa-layer-group me-1 text-primary"></i> Health Plans &amp; Pricing</a></li>
                 <li><a href="parent-consents.php"><i class="fas fa-file-signature me-1 text-primary"></i> Parent Consents <?php if (($consent_pending ?? 0) > 0): ?><span class="badge bg-danger ms-1" style="font-size:9px;"><?= $consent_pending ?></span><?php endif; ?></a></li>
+                <li><a href="school-memberships.php"><i class="fas fa-id-card me-1 text-primary"></i> Student Memberships</a></li>
+                <li><a href="school-doctor-assignments.php"><i class="fas fa-user-md me-1 text-primary"></i> Doctor Assignments</a></li>
                 <li><a href="school-subscription-plans.php"><i class="fas fa-cubes me-1 text-primary"></i> Subscription Plans</a></li>
                 <li><a href="school-subscriptions.php?status=pending_approval"><i class="fas fa-file-invoice-dollar me-1 text-primary"></i> Subscriptions <?php if (($school_sub_pending ?? 0) > 0): ?><span class="badge bg-danger ms-1" style="font-size:9px;"><?= $school_sub_pending ?></span><?php endif; ?></a></li>
                 <li><a href="school-referrals.php"><i class="fas fa-hand-holding-usd me-1 text-primary"></i> Referral Earnings</a></li>
@@ -302,6 +304,7 @@ if ($is_admin && isset($conn)) {
                 <li><a href="payment-settings.php">Payment Settings</a></li>
                 <li><a href="email-settings.php">Email Settings</a></li>
                 <li><a href="telemedicine-settings.php">Telemedicine Settings</a></li>
+                <li><a href="platform-settings.php">Platform Settings</a></li>
             </ul>
         </li>
 

@@ -107,82 +107,60 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <title>REJUVENATE Digital Health - Forgot Password</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/animate.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
-    <style>
-        .forgot-password-card {
-            max-width: 500px;
-            margin: 50px auto;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.1);
-            background: white;
-        }
-        .alert {
-            border-radius: 8px;
-            border: none;
-        }
-        .back-to-login {
-            text-align: center;
-            margin-top: 20px;
-        }
-        .login-logo img {
-            max-height: 60px;
-        }
-        .form-text {
-            font-size: 0.875em;
-            color: #6c757d;
-        }
-    </style>
 </head>
 <body>
     <?php include("header.php") ?>
-    
+
     <section class="contact-appointment-section section-padding fix">
         <div class="container">
             <div class="row justify-content-center">
-                <div class="col-md-6">
-                    <div class="forgot-password-card">
-                        <div class="login-logo text-center mb-4">
-                            <img src="<?= BASE_URL . $logo ?>" class="img-fluid">
+                <div class="col-lg-5 col-md-7">
+                    <div class="reg-card">
+
+                        <div class="text-center mb-4">
+                            <img src="<?= BASE_URL . $logo ?>" class="img-fluid mb-3" style="max-height:48px;">
+                            <h4 class="fw-bold mb-1">Forgot Your Password?</h4>
+                            <p class="text-muted" style="font-size:.83rem;">Enter your registered email and we'll send you a link to reset your password.</p>
                         </div>
-                        <h3 class="text-center mb-4">Forgot Your Password?</h3>
-                        <p class="text-center text-muted mb-4">Enter your email address and we'll send you a link to reset your password.</p>
-                        
+
                         <?php if (!empty($error_message)): ?>
-                            <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                                <?= htmlspecialchars($error_message) ?>
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            <div class="alert alert-danger" style="border-radius:10px;font-size:.85rem;">
+                                <i class="fa fa-exclamation-circle me-2"></i><?= htmlspecialchars($error_message) ?>
                             </div>
                         <?php endif; ?>
-                        
+
                         <?php if (!empty($success_message)): ?>
-                            <div class="alert alert-success alert-dismissible fade show" role="alert">
-                                <?= htmlspecialchars($success_message) ?>
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            <div class="alert alert-success" style="border-radius:10px;font-size:.85rem;">
+                                <i class="fa fa-check-circle me-2"></i><?= htmlspecialchars($success_message) ?>
                             </div>
                         <?php endif; ?>
-                        
+
                         <form method="POST" action="">
-                            <div class="mb-3">
-                                <label for="email" class="form-label">Email address</label>
-                                <input type="email" class="form-control" id="email" name="email" 
-                                       placeholder="Enter your registered email" required 
+                            <div class="field-group">
+                                <label for="email">Email address <span class="text-danger">*</span></label>
+                                <input type="email" class="form-control" id="email" name="email"
+                                       placeholder="Enter your registered email" required
                                        value="<?= htmlspecialchars($_POST['email'] ?? '') ?>">
-                                <div class="form-text">Make sure this is the email you used to register your doctor account.</div>
+                                <div class="form-text" style="font-size:.75rem;">Make sure this is the email you used to register your doctor account.</div>
                             </div>
-                            
-                            <button type="submit" class="btn btn-primary w-100">Send Reset Link</button>
+
+                            <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold"
+                                    style="border-radius:10px;font-size:.95rem;">
+                                <i class="fa fa-paper-plane me-2"></i>Send Reset Link
+                            </button>
                         </form>
-                        
-                        <div class="back-to-login">
-                            <p class="mb-0">Remember your password? <a href="<?= BASE_URL ?>doctor-login/">Back to Login</a></p>
+
+                        <div class="text-center mt-3">
+                            <p class="mb-0" style="font-size:13px;">Remember your password? <a href="<?= BASE_URL ?>doctor-login/">Back to Login</a></p>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </section>
-    
+
     <?php include("footer.php") ?>
 </body>
 </html>

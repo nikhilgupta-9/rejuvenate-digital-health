@@ -18,10 +18,16 @@
         $(".offcanvas__close,.offcanvas__overlay").on("click", function() {
             $(".offcanvas__info").removeClass("info-open");
             $(".offcanvas__overlay").removeClass("overlay-open");
+            $(".offcanvas__info").attr("aria-hidden", "true");
         });
         $(".sidebar__toggle").on("click", function() {
             $(".offcanvas__info").addClass("info-open");
             $(".offcanvas__overlay").addClass("overlay-open");
+            $(this).attr("aria-expanded", "true");
+            $(".offcanvas__info").attr("aria-hidden", "false");
+        });
+        $(".offcanvas__close,.offcanvas__overlay,.drawer-link-directory a").on("click", function() {
+            $(".sidebar__toggle").attr("aria-expanded", "false");
         });
 
         // Sidebar Area Start <<//

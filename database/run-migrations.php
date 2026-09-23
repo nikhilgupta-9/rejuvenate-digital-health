@@ -75,6 +75,7 @@ $ORDER = [
     'migration_parent_consent_expiry_revoke.sql',
     'migration_patient_health_profiles.sql',
     'migration_blog_enhancements.sql',
+    'migration_school_membership_phase2.sql',
     // 12. referential integrity — LAST (needs every table + type fix in place)
     'migration_core_foreign_keys.sql',
 ];

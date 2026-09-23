@@ -16,6 +16,14 @@ if (!$jwt) {
     echo json_encode(['success' => false, 'error' => 'Unauthorized']);
     exit;
 }
+$doctor_id = (int) ($jwt['doctor_id'] ?? $jwt['sub'] ?? 0);
+
+/* Scope every lookup to schools this doctor is actively assigned to
+ * (database/migration_school_membership_phase2.sql, admin/school-doctor-assignments.php) —
+ * a doctor with no assignments can't search any student. Always the LAST
+ * bound param on every query below (appended after the search value). */
+$assignedScopeSql = "EXISTS (SELECT 1 FROM school_doctor_assignments sda
+    WHERE sda.school_id = sm.school_id AND sda.doctor_id = ? AND sda.status = 'active')";
 
 $input = json_decode(file_get_contents('php://input'), true) ?: [];
 $type  = trim($input['type'] ?? '');
@@ -57,8 +65,8 @@ switch ($type) {
         $hit = Abha::find($conn, $value);
         if ($hit && $hit['entity_type'] === 'school_member') {
             $stmt = $conn->prepare("SELECT sm.*, s.school_name FROM school_members sm JOIN schools s ON s.id=sm.school_id
-                WHERE sm.id=? AND sm.type='Student' AND sm.status='Active' LIMIT 1");
-            $stmt->bind_param('i', $hit['entity_id']);
+                WHERE sm.id=? AND sm.type='Student' AND sm.status='Active' AND $assignedScopeSql LIMIT 1");
+            $stmt->bind_param('ii', $hit['entity_id'], $doctor_id);
             $stmt->execute();
             $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         } else {
@@ -83,8 +91,8 @@ switch ($type) {
 
 if ($col !== null) {
     $stmt = $conn->prepare("SELECT sm.*, s.school_name FROM school_members sm JOIN schools s ON s.id=sm.school_id
-        WHERE sm.type='Student' AND sm.status='Active' AND $col=? LIMIT 2");
-    $stmt->bind_param('s', $bindVal);
+        WHERE sm.type='Student' AND sm.status='Active' AND $col=? AND $assignedScopeSql LIMIT 2");
+    $stmt->bind_param('si', $bindVal, $doctor_id);
     $stmt->execute();
     $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 }

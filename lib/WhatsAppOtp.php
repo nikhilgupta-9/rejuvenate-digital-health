@@ -251,6 +251,34 @@ function wa_send_account_credentials(string $mobile, string $name, string $login
 }
 
 /**
+ * Notify a parent that their child has requested a doctor booking and it's
+ * waiting on them — school/student/book-appointment.php ->
+ * school/parent-booking-approval.php (database/migration_school_membership_phase2.sql).
+ *
+ * Business-initiated, so reliable delivery needs an approved utility
+ * template in WHATSAPP_BOOKING_TEMPLATE with four body parameters, in
+ * order: {{1}} student name, {{2}} doctor name, {{3}} date & time,
+ * {{4}} approval link. Without that env var (or outside the 24h window)
+ * this falls back to plain text, and in dev/no-config mode it's logged —
+ * see wa_send_text()'s error_log fallback, which is how this link can be
+ * retrieved for testing before a template is approved (Phase 6).
+ */
+function wa_send_booking_approval_link(string $mobile, string $studentName, string $doctorName, string $whenText, string $approvalUrl): array
+{
+    $tpl = trim((string) ($_ENV['WHATSAPP_BOOKING_TEMPLATE'] ?? ''));
+    if ($tpl !== '') {
+        return wa_send_template($mobile, $tpl, [$studentName, $doctorName, $whenText, $approvalUrl]);
+    }
+
+    $msg = "*REJUVENATE Digital Health*\n\n"
+         . "{$studentName} has requested a doctor appointment with {$doctorName} on {$whenText}.\n\n"
+         . "Please confirm consent and complete payment to approve this booking:\n{$approvalUrl}\n\n"
+         . "This request expires in 72 hours if not approved.";
+
+    return wa_send_text($mobile, $msg);
+}
+
+/**
  * Send a document by public URL (e.g. an already-hosted PDF). Only lands
  * inside the 24h customer-service window (recipient messaged this number
  * recently) — a cold, business-initiated document needs a document-header

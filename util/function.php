@@ -1113,6 +1113,11 @@ function send_appointment_email( $data) {
  *           consent_given (bool), payment_status, payment_amount,
  *           razorpay_order_id, razorpay_payment_id, razorpay_signature
  *           (payment_* set by appointment-handler.php after verifying Razorpay)
+ *           school_member_id, membership_id, booking_source
+ *           ('public'|'patient_panel'|'school_student_self'|'school_parent',
+ *           default 'public') — set by school/parent-booking-approval.php
+ *           when a school student's OPD booking clears the parent hold gate;
+ *           every other caller leaves these null/'public' unchanged.
  */
 function insert_appointment($data) {
     global $conn;
@@ -1141,6 +1146,11 @@ function insert_appointment($data) {
     $consentGiven = !empty($data['consent_given']) ? 1 : 0;
     $consentAt    = $consentGiven ? date('Y-m-d H:i:s') : null;
 
+    $schoolMemberId = !empty($data['school_member_id']) ? (int) $data['school_member_id'] : null;
+    $membershipId   = !empty($data['membership_id']) ? (int) $data['membership_id'] : null;
+    $bookingSource  = in_array($data['booking_source'] ?? 'public', ['public', 'patient_panel', 'school_student_self', 'school_parent'], true)
+        ? $data['booking_source'] : 'public';
+
     // Payment — set by appointment-handler.php after verifying the Razorpay
     // signature (or 'not_required' when the doctor has no consultation_fee).
     $paymentStatus  = $data['payment_status'] ?? 'not_required';
@@ -1164,6 +1174,9 @@ function insert_appointment($data) {
                 appointment_type,
                 visit_person,
                 visited_person_name,
+                school_member_id,
+                membership_id,
+                booking_source,
                 consent_given,
                 consent_at,
                 status,
@@ -1174,7 +1187,7 @@ function insert_appointment($data) {
                 razorpay_signature,
                 paid_at,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, NOW())";
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, NOW())";
 
     $stmt = mysqli_prepare($conn, $sql);
 
@@ -1197,7 +1210,7 @@ function insert_appointment($data) {
     // ✅ THEN BIND
     mysqli_stmt_bind_param(
         $stmt,
-        "ssssiisssssssissdssss",
+        "ssssiisssssssiisissdssss",
         $name,
         $email,
         $phone,
@@ -1211,6 +1224,9 @@ function insert_appointment($data) {
         $appointmentType,
         $visitPerson,
         $visitedPersonName,
+        $schoolMemberId,
+        $membershipId,
+        $bookingSource,
         $consentGiven,
         $consentAt,
         $paymentStatus,

@@ -34,13 +34,53 @@ function get_student_consent(mysqli $conn, int $member_id): ?array
     return $s->get_result()->fetch_assoc() ?: null;
 }
 
-/** True when an affirmative consent is on file for this member. */
+/**
+ * True when a currently-valid consent is on file: given, not revoked, not
+ * past its academic-year expiry, and — when it's tied to a paid plan —
+ * that plan payment has gone through. A doctor-captured, point-of-care
+ * consent (no plan_id) is not payment-gated.
+ */
 function student_has_consent(mysqli $conn, int $member_id): bool
 {
-    $s = $conn->prepare("SELECT id FROM parent_consent_forms WHERE member_id = ? AND consent_given = 1 LIMIT 1");
+    $s = $conn->prepare("SELECT id FROM parent_consent_forms
+        WHERE member_id = ?
+          AND consent_given = 1
+          AND revoked = 0
+          AND (expires_at IS NULL OR expires_at >= CURDATE())
+          AND (plan_id IS NULL OR payment_status = 'paid')
+        LIMIT 1");
     $s->bind_param('i', $member_id);
     $s->execute();
     return (bool) $s->get_result()->fetch_assoc();
+}
+
+/**
+ * Human-readable reason the most recent consent on file (if any) isn't
+ * currently valid — used to give the doctor a specific message instead of
+ * a generic "consent required". Returns null when a valid consent exists.
+ */
+function student_consent_block_reason(mysqli $conn, int $member_id): ?string
+{
+    if (student_has_consent($conn, $member_id)) {
+        return null;
+    }
+    $consent = get_student_consent($conn, $member_id);
+    if (!$consent) {
+        return 'No parent consent has been recorded for this student yet.';
+    }
+    if (!(int) $consent['consent_given']) {
+        return 'The parent/guardian did not agree to the consent declaration.';
+    }
+    if ((int) $consent['revoked']) {
+        return 'The parent/guardian has revoked this consent. A fresh consent is required before you can proceed.';
+    }
+    if (!empty($consent['expires_at']) && $consent['expires_at'] < date('Y-m-d')) {
+        return 'This consent expired on ' . date('d M Y', strtotime($consent['expires_at'])) . ' (end of academic year). A fresh consent is required.';
+    }
+    if (!empty($consent['plan_id']) && $consent['payment_status'] !== 'paid') {
+        return 'The school-health plan payment linked to this consent has not been completed yet.';
+    }
+    return 'Parent consent on file is not currently valid.';
 }
 
 /**
@@ -58,13 +98,14 @@ function find_unlinked_consent(mysqli $conn, int $school_id, string $student_nam
     return $s->get_result()->fetch_assoc() ?: null;
 }
 
-/** Redirect a blocked save back to the consent tab with a message. */
+/** Redirect a blocked save back to the consent tab with a specific reason. */
 function consent_gate_or_redirect(mysqli $conn, int $member_id): void
 {
-    if (student_has_consent($conn, $member_id)) {
+    $reason = student_consent_block_reason($conn, $member_id);
+    if ($reason === null) {
         return;
     }
-    $_SESSION['consent_required'] = 'Parent consent is required before you can record a checkup for this student. Please record the consent first.';
+    $_SESSION['consent_required'] = $reason;
     header('Location: ' . BASE_URL . 'doctor/student-profile.php?id=' . $member_id . '#consent');
     exit;
 }

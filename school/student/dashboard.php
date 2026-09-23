@@ -18,6 +18,9 @@ $pq->bind_param('i', $student_id);
 $pq->execute();
 $has_pending_abha = (bool)$pq->get_result()->fetch_assoc();
 
+require_once __DIR__ . '/../../lib/SchoolMembership.php';
+$active_membership = school_active_membership($conn, $student_id);
+
 $bmi = null; $bmi_lbl = ''; $bmi_col = '#6b7280';
 if (!empty($hp['height_cm']) && !empty($hp['weight_kg'])) {
     $bmi = round($hp['weight_kg'] / (($hp['height_cm']/100)**2), 1);
@@ -251,6 +254,35 @@ if (!empty($hp['height_cm']) && !empty($hp['weight_kg'])) {
   </a>
   <?php endif; ?>
 
+  <!-- Membership Status -->
+  <?php if ($active_membership): ?>
+  <a href="membership.php" class="d-block text-decoration-none mb-3">
+    <div style="background:#0C74C5;border-radius:14px;padding:14px 18px;display:flex;align-items:center;gap:12px;color:#fff;">
+      <div style="width:38px;height:38px;background:rgba(255,255,255,.18);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.05rem;flex-shrink:0;">
+        <i class="fas fa-id-card"></i>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:.83rem;font-weight:700;"><?= htmlspecialchars($active_membership['plan_name'] ?: 'Health Membership') ?> — Active</div>
+        <div style="font-size:.71rem;opacity:.85;">Valid till <?= date('d M Y', strtotime($active_membership['end_date'])) ?></div>
+      </div>
+      <i class="fas fa-chevron-right" style="opacity:.7;"></i>
+    </div>
+  </a>
+  <?php else: ?>
+  <a href="membership.php" class="d-block text-decoration-none mb-3">
+    <div style="background:#fff;border:2px dashed #93c5fd;border-radius:14px;padding:14px 18px;display:flex;align-items:center;gap:12px;">
+      <div style="width:38px;height:38px;background:#eff6ff;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.05rem;flex-shrink:0;color:#0C74C5;">
+        <i class="fas fa-id-card"></i>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:.83rem;font-weight:700;color:#374151;">Get Your Health Membership</div>
+        <div style="font-size:.71rem;color:#6b7280;">12-month plan — unlock discounted doctor consultations</div>
+      </div>
+      <i class="fas fa-chevron-right" style="color:#9ca3af;"></i>
+    </div>
+  </a>
+  <?php endif; ?>
+
   <?php if ($hp): ?>
 
     <!-- BMI -->
@@ -350,6 +382,7 @@ if (!empty($hp['height_cm']) && !empty($hp['weight_kg'])) {
   <a href="health.php"><i class="fas fa-heartbeat"></i>Health</a>
   <a href="records.php"><i class="fas fa-file-medical"></i>Records</a>
   <a href="abha.php"><i class="fas fa-id-card"></i>ABHA</a>
+  <a href="book-appointment.php"><i class="fas fa-stethoscope"></i>Book</a>
   <a href="profile.php"><i class="fas fa-user-circle"></i>Profile</a>
 </nav>
 

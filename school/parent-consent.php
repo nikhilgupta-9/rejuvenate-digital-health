@@ -15,6 +15,7 @@ require_once __DIR__ . '/../util/mail_config.php'; // Mailer
 require_once __DIR__ . '/../util/function.php';    // contact_us()
 require_once __DIR__ . '/../util/otp-service.php'; // otp_send() / otp_verify() / otp_consume_token() — role 'parent_consent'
 require_once __DIR__ . '/../util/otp-widget.php';  // render_otp_widget()
+require_once __DIR__ . '/../lib/SchoolMembership.php'; // school_create_membership()
 
 /**
  * Save one uploaded file from a public submission.
@@ -297,6 +298,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $pcf_action === 'verify_payment') {
     $upd->bind_param('si', $rpPaymentId, $pcf['id']);
     $upd->execute();
 
+    $membershipId = school_create_membership(
+        $conn, $pcf['member_id'] ? (int) $pcf['member_id'] : null, (int) $pcf['school_id'],
+        $pcf['plan_id'] ? (int) $pcf['plan_id'] : null, $pcf['plan_name'], (float) $pcf['plan_price'], $rpPaymentId
+    );
+    if ($membershipId) {
+        $mu = $conn->prepare("UPDATE parent_consent_forms SET membership_id = ? WHERE id = ?");
+        $mu->bind_param('ii', $membershipId, $pcf['id']);
+        $mu->execute();
+    }
+
     /* ── School name for the emails ── */
     $schoolName = $pcf['school_name_manual'] ?: 'your school';
     if (!empty($pcf['school_id'])) {
@@ -381,6 +392,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $pcf_action === 'resume_pay') {
     }
     if ((float) $pr['plan_price'] <= 0) {
         $conn->query("UPDATE parent_consent_forms SET payment_status='paid', paid_at=NOW() WHERE id=" . (int) $pr['id']);
+        $membershipId = school_create_membership(
+            $conn, $pr['member_id'] ? (int) $pr['member_id'] : null, (int) $pr['school_id'],
+            $pr['plan_id'] ? (int) $pr['plan_id'] : null, $pr['plan_name'], (float) $pr['plan_price'], null
+        );
+        if ($membershipId) {
+            $conn->query("UPDATE parent_consent_forms SET membership_id=$membershipId WHERE id=" . (int) $pr['id']);
+        }
         echo json_encode(['success' => true, 'free' => true, 'ref' => strtoupper(substr($rt, 0, 8))]);
         exit;
     }
@@ -802,6 +820,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($pcf_action === 'create_order' || 
         /* ── Free plan (₹0) — nothing to charge, mark paid straight away ── */
         if ($plan_price !== null && $plan_price <= 0) {
             $conn->query("UPDATE parent_consent_forms SET payment_status='paid', paid_at=NOW() WHERE id=" . $consent_id);
+            $membershipId = school_create_membership($conn, $row['member_id'] ?? null, $school_id, $plan_id, $plan_name, (float) $plan_price, null);
+            if ($membershipId) {
+                $conn->query("UPDATE parent_consent_forms SET membership_id=$membershipId WHERE id=" . $consent_id);
+            }
             if ($is_ajax) {
                 header('Content-Type: application/json');
                 echo json_encode(['success' => true, 'free' => true, 'ref' => strtoupper(substr($token, 0, 8))]);

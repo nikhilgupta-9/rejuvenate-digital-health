@@ -628,6 +628,7 @@ if ($student['dob']) {
   <a href="health.php"><i class="fas fa-heartbeat"></i>Health</a>
   <a href="records.php"><i class="fas fa-file-medical"></i>Records</a>
   <a href="abha.php" class="active"><i class="fas fa-id-card"></i>ABHA</a>
+  <a href="book-appointment.php"><i class="fas fa-stethoscope"></i>Book</a>
   <a href="profile.php"><i class="fas fa-user-circle"></i>Profile</a>
 </nav>
 

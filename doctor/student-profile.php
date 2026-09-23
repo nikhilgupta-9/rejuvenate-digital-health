@@ -49,9 +49,10 @@ if (!empty($hp['height_cm']) && !empty($hp['weight_kg'])) {
 $doc_types = ['Lab Report', 'Diagnostic Report', 'X-Ray / Imaging', 'Vaccination Certificate', 'Medical Certificate', 'Discharge Summary', 'Other'];
 
 // ── Parent consent (compulsory before any checkup is recorded) ──
-$consent          = get_student_consent($conn, $member_id);
-$has_consent      = $consent && (int) $consent['consent_given'] === 1;
-$unlinked_consent = $has_consent ? null : find_unlinked_consent($conn, (int) $m['school_id'], $m['name']);
+$consent              = get_student_consent($conn, $member_id);
+$has_consent          = student_has_consent($conn, $member_id);
+$consent_block_reason = $has_consent ? null : student_consent_block_reason($conn, $member_id);
+$unlinked_consent     = $has_consent ? null : find_unlinked_consent($conn, (int) $m['school_id'], $m['name']);
 $consent_labels   = consent_item_labels();
 $consent_items_arr = ($consent && !empty($consent['consent_items'])) ? (json_decode($consent['consent_items'], true) ?: []) : [];
 $relations        = ['Father', 'Mother', 'Guardian', 'Other'];
@@ -460,10 +461,10 @@ $sidebar_active = 'school-students';
 
                 <?php else: ?>
                     <div class="consent-missing mb-3">
-                        <span class="consent-chip no"><i class="fa fa-exclamation-triangle"></i> No consent on file</span>
+                        <span class="consent-chip no"><i class="fa fa-exclamation-triangle"></i> <?= htmlspecialchars($consent_block_reason ?: 'No consent on file') ?></span>
                         <p style="font-size:.84rem;color:#7f1d1d;margin:10px 0 0;">
                             You cannot record a health profile, write a prescription or issue a certificate for this
-                            student until a parent/guardian consent is on file.
+                            student until a valid parent/guardian consent is on file.
                         </p>
                     </div>
 

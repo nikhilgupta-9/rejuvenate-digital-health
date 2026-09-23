@@ -133,6 +133,12 @@ dump / phpMyAdmin: `doctors`, `users`, `admin_user`, `appointments`,
 |---|------|-------|
 | 40 | `migration_blog_enhancements.sql` | Adds `excerpt`, `category`, `tags`, `meta_title`, `meta_description` to the base-schema `blogs` table, plus a UNIQUE index on `slug_url` (so `fetch_blog_detail()`'s `LIMIT 1` lookup is unambiguous) and lookup indexes on `(status, created_at)` / `category`. Backs the public `blog.php` (listing) / `blog-details.php` (detail, routed via `/blogs/{slug}`) pages and the admin blog editor's new fields. |
 
+## 12a. School membership + parent/school payment model (Phase 2)
+
+| # | File | Notes |
+|---|------|-------|
+| 41 | `migration_school_membership_phase2.sql` | **`school_health_memberships`** — the 12-month paid membership, one row per purchase/renewal (history kept); parent/student pays the platform directly, school never handles the payment, only earns a commission (`commission_percent`/`commission_amount` snapshot at purchase time, `commission_status` held→payable→paid_out, released after the refund window). **`school_doctor_assignments`** — formal school↔doctor authorization (mirrors `doctor_patients`), scopes `doctor/api/school-lookup-search.php` so a doctor can only search students at schools they're assigned to. **`platform_settings`** — generic admin-editable key/value table (same shape as `telemedicine_settings`), seeded with `school_commission_percent=10` and `membership_refund_window_days=7`. **`school_booking_holds`** — a student-initiated booking request that is not yet a real appointment; converts into an `appointments` row only once the parent confirms consent (via `doctor/inc/consent-helper.php`'s gate) and pays, through `school/parent-booking-approval.php`. Plus `school_health_plans.applicable_classes` (JSON, optional class filter alongside the existing age band), `parent_consent_forms.membership_id`, and `appointments.school_member_id` / `.membership_id` / `.booking_source` (optional attribution so a school student's OPD booking still flows through the existing `appointments`/`insert_appointment()` pipeline). |
+
 ## 13. Referential integrity — run LAST
 
 | # | File | Notes |

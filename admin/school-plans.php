@@ -6,10 +6,14 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-/* school_health_plans schema: see database/migration_school_health_plans.sql */
+/* school_health_plans schema: see database/migration_school_health_plans.sql
+   applicable_classes added by database/migration_school_membership_phase2.sql */
 
 $page_message = '';
 $page_message_type = '';
+
+/** Indian school class taxonomy used across admission/consent forms. */
+const SHP_CLASS_OPTIONS = ['Nursery', 'LKG', 'UKG', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
 
 function _shp_age_label($min, $max): string
 {
@@ -40,6 +44,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_plan'])) {
         $onconsent = isset($_POST['show_on_consent']) ? 1 : 0;
         $active    = isset($_POST['is_active']) ? 1 : 0;
 
+        $selected_classes = array_values(array_intersect((array) ($_POST['applicable_classes'] ?? []), SHP_CLASS_OPTIONS));
+        $classes_json      = $selected_classes ? json_encode($selected_classes) : null;
+
         if ($name === '') {
             $page_message = 'Plan name is required.';
             $page_message_type = 'warning';
@@ -52,12 +59,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_plan'])) {
         } else {
             if ($plan_id > 0) {
                 $stmt = $conn->prepare("UPDATE school_health_plans SET
-                    name=?, tier=?, tagline=?, price=?, billing_label=?, age_min=?, age_max=?,
+                    name=?, tier=?, tagline=?, price=?, billing_label=?, age_min=?, age_max=?, applicable_classes=?,
                     features=?, accent_color=?, sort_order=?, is_popular=?, show_on_consent=?, is_active=?
                     WHERE id=?");
                 $stmt->bind_param(
-                    'sssdsiissiiiii',
-                    $name, $tier, $tagline, $price, $billing, $age_min, $age_max,
+                    'sssdsiisssiiiii',
+                    $name, $tier, $tagline, $price, $billing, $age_min, $age_max, $classes_json,
                     $features, $accent, $sort, $popular, $onconsent, $active, $plan_id
                 );
                 $ok = $stmt->execute();
@@ -65,11 +72,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_plan'])) {
                 $page_message_type = $ok ? 'success' : 'danger';
             } else {
                 $stmt = $conn->prepare("INSERT INTO school_health_plans
-                    (name, tier, tagline, price, billing_label, age_min, age_max, features, accent_color, sort_order, is_popular, show_on_consent, is_active)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
+                    (name, tier, tagline, price, billing_label, age_min, age_max, applicable_classes, features, accent_color, sort_order, is_popular, show_on_consent, is_active)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
                 $stmt->bind_param(
-                    'sssdsiissiiii',
-                    $name, $tier, $tagline, $price, $billing, $age_min, $age_max,
+                    'sssdsiisssiiii',
+                    $name, $tier, $tagline, $price, $billing, $age_min, $age_max, $classes_json,
                     $features, $accent, $sort, $popular, $onconsent, $active
                 );
                 $ok = $stmt->execute();
@@ -261,6 +268,7 @@ if ($res) { while ($r = $res->fetch_assoc()) $plans[] = $r; }
                                                                 data-billing="<?= htmlspecialchars($p['billing_label'], ENT_QUOTES) ?>"
                                                                 data-agemin="<?= $p['age_min'] === null ? '' : (int) $p['age_min'] ?>"
                                                                 data-agemax="<?= $p['age_max'] === null ? '' : (int) $p['age_max'] ?>"
+                                                                data-classes="<?= htmlspecialchars($p['applicable_classes'] ?? '[]', ENT_QUOTES) ?>"
                                                                 data-features="<?= htmlspecialchars($p['features'] ?? '', ENT_QUOTES) ?>"
                                                                 data-accent="<?= htmlspecialchars($p['accent_color'], ENT_QUOTES) ?>"
                                                                 data-sort="<?= (int) $p['sort_order'] ?>"
@@ -333,6 +341,15 @@ if ($res) { while ($r = $res->fetch_assoc()) $plans[] = $r; }
                             <label class="form-label">Age to (yrs)</label>
                             <input type="number" name="age_max" id="p_agemax" class="form-control" min="0" max="120" placeholder="e.g. 13">
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Classes <span class="text-muted small">(optional, on top of the age band)</span></label>
+                            <select name="applicable_classes[]" id="p_classes" class="form-select" multiple size="4">
+                                <?php foreach (SHP_CLASS_OPTIONS as $c): ?>
+                                    <option value="<?= htmlspecialchars($c) ?>"><?= $c === 'Nursery' || $c === 'LKG' || $c === 'UKG' ? htmlspecialchars($c) : 'Class ' . htmlspecialchars($c) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <small class="text-muted">Leave nothing selected to allow every class within the age band.</small>
+                        </div>
                         <div class="col-md-3">
                             <label class="form-label">Accent colour</label>
                             <input type="color" name="accent_color" id="p_accent" class="form-control form-control-color" value="#0C74C5">
@@ -396,6 +413,13 @@ function openAddModal() {
     document.getElementById('p_accent').value = '#0C74C5';
     document.getElementById('p_sort').value = 0;
     document.getElementById('p_active').checked = true;
+    Array.from(document.getElementById('p_classes').options).forEach(o => o.selected = false);
+}
+
+function setSelectedClasses(json) {
+    let list = [];
+    try { list = JSON.parse(json || '[]') || []; } catch (e) { list = []; }
+    Array.from(document.getElementById('p_classes').options).forEach(o => o.selected = list.includes(o.value));
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -419,6 +443,7 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('p_billing').value = d.billing || 'per student / year';
             document.getElementById('p_agemin').value = d.agemin;
             document.getElementById('p_agemax').value = d.agemax;
+            setSelectedClasses(d.classes);
             document.getElementById('p_features').value = d.features;
             document.getElementById('p_accent').value = /^#[0-9a-fA-F]{6}$/.test(d.accent) ? d.accent : '#0C74C5';
             document.getElementById('p_sort').value = d.sort;
