@@ -1099,6 +1099,40 @@ function send_appointment_email( $data) {
         }
     }
 
+    // 5️⃣ WhatsApp Notification (Patient & Doctor)
+    try {
+        require_once dirname(__DIR__) . '/lib/WhatsAppNotifier.php';
+        $wa = new WhatsAppNotifier($conn);
+
+        if (!empty($appt['patient_phone'])) {
+            $wa->sendEvent('appt_booked_patient', $appt['patient_phone'], [
+                'patient_name' => $appt['patient_name'],
+                'doctor_name'  => $appt['doctor_name'] ?? 'our team',
+                'date'         => $dateLabel,
+                'time'         => $timeLabel,
+                'join_link'    => $patientMeetingLink ?? '',
+            ], 'appointment', (int) $appointmentId);
+        }
+
+        if (!empty($appt['doctor_id'])) {
+            $docStmt = $conn->prepare("SELECT phone, name FROM doctors WHERE id = ? LIMIT 1");
+            $docStmt->bind_param('i', $appt['doctor_id']);
+            $docStmt->execute();
+            $docRow = $docStmt->get_result()->fetch_assoc();
+            $docStmt->close();
+            if (!empty($docRow['phone'])) {
+                $wa->sendEvent('appt_booked_doctor', $docRow['phone'], [
+                    'doctor_name'  => $docRow['name'],
+                    'patient_name' => $appt['patient_name'],
+                    'date'         => $dateLabel,
+                    'time'         => $timeLabel,
+                ], 'appointment', (int) $appointmentId);
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('[WhatsApp booking notification error] ' . $e->getMessage());
+    }
+
     return $appointmentId;
 }
 

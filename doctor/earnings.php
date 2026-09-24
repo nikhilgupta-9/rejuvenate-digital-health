@@ -5,9 +5,6 @@ require_once __DIR__ . '/../util/function.php';
 $jwt_doctor = doctor_jwt_guard();
 $doctor_id  = (int) ($jwt_doctor['sub'] ?? $jwt_doctor['doctor_id'] ?? 0);
 
-$sidebar_active = 'earnings';
-require_once __DIR__ . '/inc/sidebar.php';
-
 $bank_success = '';
 $bank_error   = '';
 
@@ -125,7 +122,7 @@ $settlements = $settle_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
   </style>
 </head>
 <body>
-<?php include(__DIR__ . "/inc/sidebar.php"); ?>
+<?php $sidebar_active = 'earnings'; include(__DIR__ . "/inc/sidebar.php"); ?>
 
 <main class="doctor-content">
   <p class="section-title">Earnings &amp; Bank Details</p>

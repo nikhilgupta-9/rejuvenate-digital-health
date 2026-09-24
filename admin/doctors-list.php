@@ -4,12 +4,24 @@ error_reporting(E_ALL);
 session_start();
 include_once "db-conn.php";
 include_once "functions.php";
+require_once dirname(__DIR__) . '/lib/Security.php';
 
 // Every action below redirects back preserving the current filter tab, so
 // toggling/deleting a doctor while viewing e.g. "Active" doesn't silently
 // dump the admin back onto "All Doctors" — which made the action look like
 // it hadn't done anything.
 $redirect_qs = !empty($_GET['type']) ? '?type=' . urlencode($_GET['type']) : '';
+
+// Validate CSRF token for any state-modifying action
+$has_action = isset($_GET['permanent_delete_id']) || isset($_GET['toggle_status']) || isset($_GET['verify_id']) || isset($_GET['unverify_id']);
+if ($has_action) {
+    $csrf = $_REQUEST['csrf_token'] ?? '';
+    if (!Security::verifyCsrf($csrf)) {
+        $_SESSION['error_message'] = "Security check failed (CSRF token invalid or expired). Please refresh and try again.";
+        header("Location: doctors-list.php" . $redirect_qs);
+        exit();
+    }
+}
 
 // Handle PERMANENT delete — a real, irreversible DELETE FROM doctors, only
 // ever allowed once every RESTRICT-linked table (appointments, prescriptions,
@@ -382,17 +394,18 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
                                                 </td>
                                                 <td data-label="Actions">
                                                     <div class="d-inline-flex flex-wrap gap-1 justify-content-end">
+                                                        <?php $csrf_qs = '&csrf_token=' . urlencode(Security::csrfToken()); ?>
                                                         <a href="doctor-edit.php?id=<?= $doctor['id'] ?>" class="tbl-action-btn bg-primary text-white" title="Edit"><i class="fas fa-edit"></i></a>
                                                         <?php if ($doctor['is_verified']): ?>
-                                                            <a href="doctors-list.php?unverify_id=<?= $doctor['id'] ?><?= $type_filter !== 'all' ? '&type=' . urlencode($type_filter) : '' ?>" class="tbl-action-btn bg-warning text-dark" onclick="return confirm('Remove verification for this doctor?')" title="Unverify"><i class="fas fa-times-circle"></i></a>
+                                                            <a href="doctors-list.php?unverify_id=<?= $doctor['id'] ?><?= $type_filter !== 'all' ? '&type=' . urlencode($type_filter) : '' ?><?= $csrf_qs ?>" class="tbl-action-btn bg-warning text-dark" onclick="return confirm('Remove verification for this doctor?')" title="Unverify"><i class="fas fa-times-circle"></i></a>
                                                         <?php else: ?>
-                                                            <a href="doctors-list.php?verify_id=<?= $doctor['id'] ?><?= $type_filter !== 'all' ? '&type=' . urlencode($type_filter) : '' ?>" class="tbl-action-btn bg-success text-white" onclick="return confirm('Verify this doctor?')" title="Verify"><i class="fas fa-check-circle"></i></a>
+                                                            <a href="doctors-list.php?verify_id=<?= $doctor['id'] ?><?= $type_filter !== 'all' ? '&type=' . urlencode($type_filter) : '' ?><?= $csrf_qs ?>" class="tbl-action-btn bg-success text-white" onclick="return confirm('Verify this doctor?')" title="Verify"><i class="fas fa-check-circle"></i></a>
                                                         <?php endif; ?>
                                                         <?php if ($doctor['status'] === 'Active'): ?>
-                                                            <a href="doctors-list.php?toggle_status=<?= $doctor['id'] ?><?= $type_filter !== 'all' ? '&type=' . urlencode($type_filter) : '' ?>" class="tbl-action-btn bg-secondary text-white" onclick="return confirm('Deactivate Dr. <?= htmlspecialchars(addslashes($doctor['name'])) ?>? They won\'t appear for new bookings until reactivated. Permanent delete becomes available once they are Inactive.')" title="Deactivate"><i class="fas fa-toggle-on"></i></a>
+                                                            <a href="doctors-list.php?toggle_status=<?= $doctor['id'] ?><?= $type_filter !== 'all' ? '&type=' . urlencode($type_filter) : '' ?><?= $csrf_qs ?>" class="tbl-action-btn bg-secondary text-white" onclick="return confirm('Deactivate Dr. <?= htmlspecialchars(addslashes($doctor['name'])) ?>? They won\'t appear for new bookings until reactivated. Permanent delete becomes available once they are Inactive.')" title="Deactivate"><i class="fas fa-toggle-on"></i></a>
                                                         <?php else: ?>
-                                                            <a href="doctors-list.php?toggle_status=<?= $doctor['id'] ?><?= $type_filter !== 'all' ? '&type=' . urlencode($type_filter) : '' ?>" class="tbl-action-btn bg-success text-white" onclick="return confirm('Activate Dr. <?= htmlspecialchars(addslashes($doctor['name'])) ?>?')" title="Activate"><i class="fas fa-toggle-off"></i></a>
-                                                            <a href="doctors-list.php?permanent_delete_id=<?= $doctor['id'] ?><?= $type_filter !== 'all' ? '&type=' . urlencode($type_filter) : '' ?>" class="tbl-action-btn bg-dark text-white" onclick="return confirm('PERMANENTLY delete Dr. <?= htmlspecialchars(addslashes($doctor['name'])) ?>? This cannot be undone. It will only succeed if they have no appointments, prescriptions or patients on file.')" title="Permanent Delete"><i class="fas fa-trash-alt"></i></a>
+                                                            <a href="doctors-list.php?toggle_status=<?= $doctor['id'] ?><?= $type_filter !== 'all' ? '&type=' . urlencode($type_filter) : '' ?><?= $csrf_qs ?>" class="tbl-action-btn bg-success text-white" onclick="return confirm('Activate Dr. <?= htmlspecialchars(addslashes($doctor['name'])) ?>?')" title="Activate"><i class="fas fa-toggle-off"></i></a>
+                                                            <a href="doctors-list.php?permanent_delete_id=<?= $doctor['id'] ?><?= $type_filter !== 'all' ? '&type=' . urlencode($type_filter) : '' ?><?= $csrf_qs ?>" class="tbl-action-btn bg-dark text-white" onclick="return confirm('PERMANENTLY delete Dr. <?= htmlspecialchars(addslashes($doctor['name'])) ?>? This cannot be undone. It will only succeed if they have no appointments, prescriptions or patients on file.')" title="Permanent Delete"><i class="fas fa-trash-alt"></i></a>
                                                         <?php endif; ?>
                                                     </div>
                                                 </td>

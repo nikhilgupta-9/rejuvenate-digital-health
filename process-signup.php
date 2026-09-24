@@ -67,10 +67,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
+    require_once __DIR__ . '/lib/Security.php';
     if (empty($password)) {
         $errors['password'] = "Password is required";
-    } elseif (strlen($password) < 6) {
-        $errors['password'] = "Password must be at least 6 characters";
+    } elseif ($pwdErr = Security::validatePasswordStrength($password)) {
+        $errors['password'] = $pwdErr;
     }
     
     if ($password !== $confirmPassword) {

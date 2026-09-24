@@ -154,10 +154,19 @@ try {
                 fail('Please enter a valid 14-digit ABHA number');
             }
             if ($type === 'address') {
-                // ABDM v3 /profile/login/request/otp rejects loginHint "abha-address"
-                // and the /search endpoints are not available to this credential —
-                // no working address→OTP path yet. Route the doctor to a method that works.
-                fail('ABHA-address sign-in is not available yet. Use the ABHA Number or Mobile OTP method instead.');
+                $addr = strpos($input, '@') === false ? $input . '@abdm' : $input;
+                $vRes = $abdm->searchByAbhaAddress($addr);
+                $status = strtoupper($vRes['status'] ?? '');
+                if ($status === 'ACTIVE' || !empty($vRes['authMethods'])) {
+                    ok([
+                        'isVerificationOnly' => true,
+                        'valid'              => true,
+                        'status'             => $vRes['status'] ?? 'ACTIVE',
+                        'abha_address'       => $addr,
+                        'message'            => "ABHA address is verified and active (" . ($vRes['status'] ?? 'ACTIVE') . ") in ABDM registry."
+                    ]);
+                }
+                fail(AbdmApi::extractError($vRes, 'ABHA address not found or inactive in ABDM registry.'));
             }
 
             [$loginHint, $otpSystem, $scopes] = loginHintFor($type);

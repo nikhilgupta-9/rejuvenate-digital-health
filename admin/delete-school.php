@@ -1,9 +1,16 @@
 <?php
 require_once __DIR__ . '/db-conn.php';
 require_once __DIR__ . '/auth/guard.php';
+require_once dirname(__DIR__) . '/lib/Security.php';
 admin_jwt_guard();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { header("Location: schools-list.php"); exit(); }
+
+if (!isset($_POST['csrf_token']) || !Security::verifyCsrf($_POST['csrf_token'])) {
+    $_SESSION['error_message'] = "Security check failed (CSRF token invalid). Please refresh and try again.";
+    header("Location: schools-list.php");
+    exit();
+}
 
 $id = intval($_POST['id'] ?? 0);
 if (!$id) { header("Location: schools-list.php"); exit(); }

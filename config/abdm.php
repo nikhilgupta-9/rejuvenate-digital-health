@@ -69,6 +69,7 @@ if (!defined('ABDM_ENV')) {
     define('ABDM_HIECM_BASE_URL', 'https://dev.abdm.gov.in/api/hiecm');
     define('ABDM_HIP_ID',   trim((string)($_ENV['ABDM_HIP_ID']   ?? '')));
     define('ABDM_HIP_NAME', trim((string)($_ENV['ABDM_HIP_NAME'] ?? 'Rejuvenate Digital Health')));
+    define('ABDM_HFR_FACILITY_ID', trim((string)($_ENV['ABDM_HFR_FACILITY_ID'] ?? $_ENV['ABDM_HIP_ID'] ?? 'IN0810000001')));
     define('ABDM_HIP_CONFIGURED', ABDM_CONFIGURED && ABDM_HIP_ID !== '');
 
     // Webhook (telemedicine/api/abdm-webhook.php) — optional hardening.

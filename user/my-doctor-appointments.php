@@ -346,6 +346,11 @@ $STATUS_META = [
                     <a href="appointment-details.php?id=<?= $appointment['id'] ?>" class="btn btn-outline-secondary" title="View Details">
                       <i class="fa fa-eye"></i>
                     </a>
+                    <?php if ($appointment['status'] === 'completed'): ?>
+                      <a href="<?= BASE_URL ?>doctor/opd-slip.php?appointment_id=<?= $appointment['id'] ?>" target="_blank" class="btn btn-outline-primary" title="Download OPD Slip / Prescription" style="color:var(--primary);border-color:var(--primary);">
+                        <i class="fa fa-file-pdf"></i>
+                      </a>
+                    <?php endif; ?>
                     <?php if (in_array($appointment['status'], ['pending', 'approved'], true) && $appointment['appointment_status'] === 'upcoming'): ?>
                       <a href="?cancel_id=<?= $appointment['id'] ?>" class="btn btn-outline-danger" title="Cancel"
                          onclick="return confirm('Are you sure you want to cancel this appointment?')">

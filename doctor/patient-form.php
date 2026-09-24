@@ -73,6 +73,21 @@ $ts->execute();
 $today_appts = $ts->get_result()->fetch_all(MYSQLI_ASSOC);
 $ts->close();
 
+/* ── Recent appointments for quick resume when none selected ── */
+$recent_appts = [];
+$ra = $conn->prepare("
+    SELECT a.id, u.name, u.last_name, u.mobile, u.abha_id, a.appointment_date, a.appointment_time, a.status,
+           (SELECT COUNT(*) FROM prescriptions p WHERE p.appointment_id = a.id) as has_rx
+    FROM appointments a JOIN users u ON a.user_id = u.id
+    WHERE a.doctor_id = ?
+    ORDER BY a.appointment_date DESC, a.appointment_time DESC
+    LIMIT 12
+");
+$ra->bind_param('i', $doctor_id);
+$ra->execute();
+$recent_appts = $ra->get_result()->fetch_all(MYSQLI_ASSOC);
+$ra->close();
+
 /* ── Today's students list for sidebar ── */
 $today_students = [];
 $tss = $conn->prepare("
@@ -308,6 +323,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
                 error_log('[patient-form] care-context queue failed: ' . $e->getMessage());
             }
         }
+
+        // Notify patient that prescription is ready
+        if (!empty($patient['mobile'])) {
+            try {
+                require_once dirname(__DIR__) . '/lib/WhatsAppNotifier.php';
+                $wa = new WhatsAppNotifier($conn);
+                $slipUrl = BASE_URL . 'doctor/opd-slip.php?appointment_id=' . $appt_id;
+                $wa->sendEvent('prescription_ready', $patient['mobile'], [
+                    'patient_name' => $patient['name'] ?? 'Patient',
+                    'doctor_name'  => 'Dr. ' . ($doctor['name'] ?? 'your doctor'),
+                    'date'         => date('d M Y'),
+                    'download_link'=> $slipUrl,
+                ], 'prescription', (int) ($rxId ?: $appt_id));
+            } catch (Throwable $e) {
+                error_log('[patient-form] prescription whatsapp alert failed: ' . $e->getMessage());
+            }
+        }
     }
 }
 
@@ -387,8 +419,9 @@ $svt = fn($k) => htmlspecialchars($s_vt_data[$k] ?? '');
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Digital Prescription | REJUVENATE</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
-    <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/css/style.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
     <style>
         :root {
             --rdh-blue: #0C74C5;   /* matches doctor portal --primary */
@@ -678,27 +711,141 @@ $svt = fn($k) => htmlspecialchars($s_vt_data[$k] ?? '');
     <?php if ($mode === 'patient'): ?>
 
     <?php if (!$appointment): ?>
-        <!-- No appointment selected -->
-        <div class="rx-card">
-            <div class="rx-card-header"><i class="fa fa-calendar-check"></i> Select Today's Patient</div>
+        <!-- No appointment selected — Navigation Hub & Patient Picker -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-4 col-sm-6 col-12">
+                <div class="p-3 bg-white rounded-3 border h-100 d-flex flex-column justify-content-between shadow-sm">
+                    <div>
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <span class="rounded-circle p-2 bg-primary bg-opacity-10 text-primary"><i class="fa fa-search fa-lg"></i></span>
+                            <strong class="text-dark">Select Any Patient</strong>
+                        </div>
+                        <p class="text-muted small mb-3">Search from registered patients by name, mobile, or 14-digit ABHA ID to author prescription.</p>
+                    </div>
+                    <a href="select-opd-patient.php" class="btn btn-sm btn-primary w-100">
+                        <i class="fa fa-user-check me-1"></i> Open OPD Patient Selector
+                    </a>
+                </div>
+            </div>
+            <div class="col-md-4 col-sm-6 col-12">
+                <div class="p-3 bg-white rounded-3 border h-100 d-flex flex-column justify-content-between shadow-sm">
+                    <div>
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <span class="rounded-circle p-2 bg-success bg-opacity-10 text-success"><i class="fa fa-id-card fa-lg"></i></span>
+                            <strong class="text-dark">Onboard Patient (M1)</strong>
+                        </div>
+                        <p class="text-muted small mb-3">Create or verify a new patient ABHA ID using Aadhaar / Mobile OTP under NHA ABDM.</p>
+                    </div>
+                    <a href="add-patient.php" class="btn btn-sm btn-outline-success w-100">
+                        <i class="fa fa-user-plus me-1"></i> Onboard New Patient
+                    </a>
+                </div>
+            </div>
+            <div class="col-md-4 col-12">
+                <div class="p-3 bg-white rounded-3 border h-100 d-flex flex-column justify-content-between shadow-sm">
+                    <div>
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <span class="rounded-circle p-2 bg-info bg-opacity-10 text-info"><i class="fa fa-calendar-alt fa-lg"></i></span>
+                            <strong class="text-dark">Consultation Queue</strong>
+                        </div>
+                        <p class="text-muted small mb-3">View all appointments, online video consultations, and pending appointment requests.</p>
+                    </div>
+                    <a href="appointments.php" class="btn btn-sm btn-outline-info w-100">
+                        <i class="fa fa-list me-1"></i> View Appointments
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <?php if (!empty($today_appts)): ?>
+        <div class="rx-card mb-4">
+            <div class="rx-card-header"><i class="fa fa-calendar-check"></i> Today's Scheduled Consultations (<?= count($today_appts) ?>)</div>
             <div class="rx-card-body">
-                <?php if (empty($today_appts)): ?>
-                    <p class="text-muted mb-0">No approved appointments for today. <a href="appointments.php">View all appointments</a></p>
+                <div class="row g-2">
+                    <?php foreach ($today_appts as $ta): ?>
+                        <div class="col-xl-3 col-lg-4 col-md-6 col-12">
+                            <a href="patient-form.php?appointment_id=<?= $ta['id'] ?>" class="select-card d-flex align-items-center">
+                                <div class="sc-icon" style="background:#e8f0fb;color:var(--rdh-blue);">
+                                    <i class="fa fa-user-injured"></i>
+                                </div>
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="fw-semibold text-dark text-truncate"><?= htmlspecialchars($ta['name'] . ' ' . $ta['last_name']) ?></div>
+                                    <div class="text-muted small"><i class="fa fa-clock-o me-1"></i><?= date('h:i A', strtotime($ta['appointment_time'])) ?></div>
+                                </div>
+                                <i class="fa fa-chevron-right text-muted small ms-1"></i>
+                            </a>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- Recent Consultations / Prescriptions to resume -->
+        <div class="rx-card">
+            <div class="rx-card-header d-flex justify-content-between align-items-center">
+                <span><i class="fa fa-history me-1"></i> Recent Consultations & Prescriptions</span>
+                <a href="appointments.php" class="small text-decoration-none" style="color:var(--rdh-blue);">All Consultations &rarr;</a>
+            </div>
+            <div class="rx-card-body p-0">
+                <?php if (empty($recent_appts)): ?>
+                    <div class="text-center py-4 text-muted">
+                        <i class="fa fa-file-medical fa-2x mb-2 d-block opacity-25"></i>
+                        No consultations found. Book an appointment or choose a patient to begin.
+                    </div>
                 <?php else: ?>
-                    <div class="row g-2">
-                        <?php foreach ($today_appts as $ta): ?>
-                            <div class="col-xl-3 col-lg-4 col-md-6 col-12">
-                                <a href="patient-form.php?appointment_id=<?= $ta['id'] ?>" class="select-card d-flex">
-                                    <div class="sc-icon" style="background:#e8f0fb;color:var(--rdh-blue);">
-                                        <i class="fa fa-user"></i>
-                                    </div>
-                                    <div>
-                                        <div class="fw-semibold text-dark"><?= htmlspecialchars($ta['name'] . ' ' . $ta['last_name']) ?></div>
-                                        <div class="text-muted small"><?= date('h:i A', strtotime($ta['appointment_time'])) ?></div>
-                                    </div>
-                                </a>
-                            </div>
-                        <?php endforeach; ?>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" style="font-size:.85rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Patient</th>
+                                    <th>Contact / ABHA</th>
+                                    <th>Consult Date & Time</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($recent_appts as $ra_row):
+                                    $st_badge = match($ra_row['status']) {
+                                        'completed' => 'bg-success',
+                                        'approved'  => 'bg-primary',
+                                        'rejected'  => 'bg-danger',
+                                        default     => 'bg-warning text-dark'
+                                    };
+                                ?>
+                                    <tr>
+                                        <td>
+                                            <div class="fw-bold text-dark"><?= htmlspecialchars(trim($ra_row['name'] . ' ' . $ra_row['last_name'])) ?></div>
+                                            <div class="text-muted small">Appt #<?= $ra_row['id'] ?></div>
+                                        </td>
+                                        <td>
+                                            <div><i class="fa fa-phone me-1 text-muted small"></i><?= htmlspecialchars($ra_row['mobile']) ?></div>
+                                            <?php if (!empty($ra_row['abha_id'])): ?>
+                                                <div class="text-muted small font-monospace"><i class="fa fa-id-card me-1 text-primary"></i><?= htmlspecialchars($ra_row['abha_id']) ?></div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <div><?= date('d M Y', strtotime($ra_row['appointment_date'])) ?></div>
+                                            <div class="text-muted small"><?= date('h:i A', strtotime($ra_row['appointment_time'])) ?></div>
+                                        </td>
+                                        <td>
+                                            <span class="badge <?= $st_badge ?>"><?= ucfirst($ra_row['status'] ?: 'Pending') ?></span>
+                                        </td>
+                                        <td class="text-end">
+                                            <a href="patient-form.php?appointment_id=<?= $ra_row['id'] ?>" class="btn btn-sm btn-outline-primary">
+                                                <i class="fa fa-pen-to-square me-1"></i> Edit Rx
+                                            </a>
+                                            <?php if (!empty($ra_row['has_rx'])): ?>
+                                                <a href="opd-slip.php?appointment_id=<?= $ra_row['id'] ?>" target="_blank" class="btn btn-sm btn-outline-secondary" title="View OPD Slip PDF">
+                                                    <i class="fa fa-file-pdf"></i>
+                                                </a>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
                     </div>
                 <?php endif; ?>
             </div>

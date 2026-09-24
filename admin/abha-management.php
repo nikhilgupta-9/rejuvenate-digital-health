@@ -2,6 +2,8 @@
 require_once __DIR__ . '/db-conn.php';
 require_once __DIR__ . '/auth/guard.php';
 require_once __DIR__ . '/../lib/Abha.php';
+require_once __DIR__ . '/../lib/Security.php';
+require_once __DIR__ . '/../config/abdm.php';
 admin_jwt_guard();
 
 $portal = $_GET['portal'] ?? 'all';   // all | patients | school
@@ -223,10 +225,15 @@ if ($tab === 'requests') {
                         <h5>ABHA — Ayushman Bharat Health Account</h5>
                         <p>Central management hub for all ABHA digital health IDs across patients, school students, teachers and staff. Approve self-service requests, link IDs manually, and monitor coverage.</p>
                     </div>
-                    <a href="https://healthid.ndhm.gov.in/" target="_blank" class="btn btn-sm ms-auto flex-shrink-0"
-                       style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3);">
-                        <i class="fas fa-external-link-alt me-1"></i>ABDM Portal
-                    </a>
+                    <div class="d-flex gap-2 ms-auto flex-shrink-0 flex-wrap">
+                        <button type="button" class="btn btn-sm btn-light fw-bold text-dark shadow-sm" onclick="openFindAbhaModal()">
+                            <i class="fas fa-search me-1 text-primary"></i>Find ABHA Number
+                        </button>
+                        <a href="https://healthid.ndhm.gov.in/" target="_blank" class="btn btn-sm"
+                           style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3);">
+                            <i class="fas fa-external-link-alt me-1"></i>ABDM Portal
+                        </a>
+                    </div>
                 </div>
 
                 <!-- Stats row -->
@@ -519,7 +526,11 @@ if ($tab === 'requests') {
             <div class="input-group">
               <input type="text" class="form-control" name="abha_address" id="mu_addr" placeholder="yourname" oninput="fmtAddr(this,'mu_prev_addr')">
               <span class="input-group-text">@abdm</span>
+              <button class="btn btn-outline-primary" type="button" id="btnAdminVerifyAbha" onclick="verifyAbhaLive()" title="Verify on ABDM Registry">
+                <i class="fas fa-check-circle me-1"></i>Verify
+              </button>
             </div>
+            <div id="mu_verify_status" class="mt-1" style="font-size:.78rem;"></div>
           </div>
           <div class="form-check">
             <input type="checkbox" class="form-check-input" name="mark_verified" id="mu_verified">
@@ -550,6 +561,99 @@ if ($tab === 'requests') {
   </div>
 </div>
 
+<!-- Find ABHA Modal (Admin Tool) -->
+<div class="modal fade" id="findAbhaModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header border-0" style="background:#0C74C5;color:#fff;">
+        <h6 class="modal-title fw-bold"><i class="fas fa-search me-2"></i>Find ABHA Number (ABDM Registry)</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <div id="admFindAlert" style="display:none;" class="alert mb-3"></div>
+
+        <!-- Step 1: Input -->
+        <div id="admFindStep1">
+          <p class="text-muted" style="font-size:.82rem;margin-bottom:14px;">
+            Search the national ABDM database to discover registered ABHA accounts by Mobile or Aadhaar OTP.
+          </p>
+          <div class="d-flex gap-2 mb-3">
+            <button type="button" class="btn flex-fill text-start p-2" id="btnAdmFindMobile"
+              onclick="admSwitchMethod('mobile')"
+              style="border:2px solid #0C74C5;background:#f0f9ff;border-radius:8px;">
+              <div class="fw-semibold" style="font-size:.82rem;color:#0369a1;"><i class="fas fa-mobile-alt me-1"></i>Mobile OTP</div>
+              <div style="font-size:.7rem;color:#6b7280;">Finds all ABHAs on mobile</div>
+            </button>
+            <button type="button" class="btn flex-fill text-start p-2" id="btnAdmFindAadhaar"
+              onclick="admSwitchMethod('aadhaar')"
+              style="border:2px solid #e5e7eb;background:#f9fafb;border-radius:8px;">
+              <div class="fw-semibold" style="font-size:.82rem;color:#374151;"><i class="fas fa-fingerprint me-1"></i>Aadhaar OTP</div>
+              <div style="font-size:.7rem;color:#6b7280;">UIDAI OTP verification</div>
+            </button>
+          </div>
+
+          <div id="admFindFormMobile">
+            <div class="mb-3">
+              <label class="form-label fw-semibold" style="font-size:.84rem;">Mobile Number <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text">+91</span>
+                <input type="text" class="form-control" id="adm_find_mobile" placeholder="10-digit mobile number" maxlength="10" inputmode="numeric">
+              </div>
+            </div>
+          </div>
+
+          <div id="admFindFormAadhaar" style="display:none;">
+            <div class="mb-3">
+              <label class="form-label fw-semibold" style="font-size:.84rem;">Aadhaar Number <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="adm_find_aadhaar" placeholder="12-digit Aadhaar number" maxlength="12" inputmode="numeric">
+            </div>
+            <div class="form-check mb-3" style="font-size:.78rem;">
+              <input class="form-check-input" type="checkbox" id="adm_find_consent" checked>
+              <label class="form-check-label text-muted" for="adm_find_consent">
+                Patient / User has consented to OTP authentication via UIDAI.
+              </label>
+            </div>
+          </div>
+
+          <button class="btn w-100 fw-semibold" id="btnAdmSendOtp" style="background:#0C74C5;color:#fff;" onclick="admReqOtp()">
+            <i class="fas fa-paper-plane me-1"></i>Send OTP
+          </button>
+        </div>
+
+        <!-- Step 2: OTP -->
+        <div id="admFindStep2" style="display:none;">
+          <p id="admFindOtpMsg" style="font-size:.82rem;color:#374151;margin-bottom:12px;"></p>
+          <div class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.84rem;">Enter 6-digit OTP</label>
+            <input type="text" class="form-control text-center fw-bold" id="adm_find_otp"
+              placeholder="• • • • • •" maxlength="6" inputmode="numeric" style="letter-spacing:6px;font-size:1.3rem;">
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm" onclick="admResetFind()"><i class="fas fa-arrow-left me-1"></i>Back</button>
+            <button class="btn flex-fill fw-semibold btn-sm" id="btnAdmVerifyOtp" style="background:#0C74C5;color:#fff;" onclick="admVerifyOtp()">
+              <i class="fas fa-search me-1"></i>Verify & Discover ABHA
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 3: Results -->
+        <div id="admFindStep3" style="display:none;">
+          <div class="alert alert-success py-2 px-3 mb-3 d-flex align-items-center" style="font-size:.82rem;">
+            <i class="fas fa-check-circle me-2 fa-lg text-success"></i>
+            <div>Found <strong id="admAccountsCount">0</strong> registered ABHA account(s).</div>
+          </div>
+          <div id="admResultsList" style="max-height:300px;overflow-y:auto;"></div>
+          <div class="mt-3 pt-2 border-top text-end">
+            <button class="btn btn-sm btn-outline-secondary" onclick="admResetFind()">
+              <i class="fas fa-redo me-1"></i>Search Another
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <?php include "footer.php"; ?>
 <script>
 function openUserModal(id, name, abhaId, abhaAddr, verified) {
@@ -560,7 +664,55 @@ function openUserModal(id, name, abhaId, abhaAddr, verified) {
     document.getElementById('mu_verified').checked = !!verified;
     document.getElementById('mu_prev_num').textContent = abhaId || 'XX-XXXX-XXXX-XXXX';
     document.getElementById('mu_prev_addr').textContent = abhaAddr ? abhaAddr+'@abdm' : 'address@abdm';
+    const st = document.getElementById('mu_verify_status');
+    if (st) st.innerHTML = '';
     new bootstrap.Modal(document.getElementById('linkUserModal')).show();
+}
+
+async function verifyAbhaLive() {
+    const addr = document.getElementById('mu_addr').value.trim();
+    const abhaNum = document.getElementById('mu_abha').value.trim();
+    const query = addr || abhaNum;
+    const statusDiv = document.getElementById('mu_verify_status');
+    const btn = document.getElementById('btnAdminVerifyAbha');
+
+    if (!query) {
+        statusDiv.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>Please enter an ABHA Address or ABHA Number first</span>';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Verifying...';
+    statusDiv.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Checking ABDM Registry...</span>';
+
+    try {
+        const resp = await fetch('<?= BASE_URL ?>ajax/abdm-api.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'verify_abha',
+                abha_address: addr ? (addr.includes('@') ? addr : addr + '@abdm') : '',
+                abha_id: abhaNum,
+                _csrf: '<?= Security::csrfToken() ?>'
+            })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            statusDiv.innerHTML = `<span class="text-success fw-semibold"><i class="fas fa-check-circle me-1"></i>Verified Active in ABDM! ${data.name ? '('+data.name+')' : ''} [${data.status || 'ACTIVE'}]</span>`;
+            document.getElementById('mu_verified').checked = true;
+            if (data.healthId && !document.getElementById('mu_abha').value) {
+                document.getElementById('mu_abha').value = data.healthId;
+                fmtAbha(document.getElementById('mu_abha'), 'mu_prev_num');
+            }
+        } else {
+            statusDiv.innerHTML = `<span class="text-danger"><i class="fas fa-times-circle me-1"></i>${data.message || 'Not found in ABDM registry'}</span>`;
+        }
+    } catch (e) {
+        statusDiv.innerHTML = `<span class="text-danger"><i class="fas fa-times-circle me-1"></i>Verification request failed</span>`;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check-circle me-1"></i>Verify';
+    }
 }
 function fmtAbha(el, prevId) {
     let v = el.value.replace(/\D/g,'').substring(0,14);
@@ -593,6 +745,188 @@ if (searchEl) {
             });
         });
     });
+}
+
+/* ── Admin Find ABHA Tool ── */
+let admFindMethod = 'mobile';
+let admFindTxnId = '';
+let findAbhaModalInstance = null;
+
+function openFindAbhaModal() {
+    admResetFind();
+    if (!findAbhaModalInstance) {
+        findAbhaModalInstance = new bootstrap.Modal(document.getElementById('findAbhaModal'));
+    }
+    findAbhaModalInstance.show();
+}
+
+function admAlert(msg, type = 'danger') {
+    const el = document.getElementById('admFindAlert');
+    el.className = 'alert alert-' + type + ' mb-3';
+    el.innerHTML = msg;
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 6000);
+}
+
+function admSwitchMethod(method) {
+    admFindMethod = method;
+    document.getElementById('admFindFormMobile').style.display = method === 'mobile' ? 'block' : 'none';
+    document.getElementById('admFindFormAadhaar').style.display = method === 'aadhaar' ? 'block' : 'none';
+    const btnM = document.getElementById('btnAdmFindMobile');
+    const btnA = document.getElementById('btnAdmFindAadhaar');
+    if (btnM) {
+        btnM.style.border = method === 'mobile' ? '2px solid #0C74C5' : '2px solid #e5e7eb';
+        btnM.style.background = method === 'mobile' ? '#f0f9ff' : '#f9fafb';
+    }
+    if (btnA) {
+        btnA.style.border = method === 'aadhaar' ? '2px solid #00875a' : '2px solid #e5e7eb';
+        btnA.style.background = method === 'aadhaar' ? '#f0fdf4' : '#f9fafb';
+    }
+}
+
+function admResetFind() {
+    admFindTxnId = '';
+    document.getElementById('admFindStep1').style.display = 'block';
+    document.getElementById('admFindStep2').style.display = 'none';
+    document.getElementById('admFindStep3').style.display = 'none';
+    document.getElementById('admFindAlert').style.display = 'none';
+    document.getElementById('adm_find_otp').value = '';
+    admSwitchMethod(admFindMethod);
+}
+
+async function admReqOtp() {
+    let val = '';
+    let consent = false;
+    if (admFindMethod === 'mobile') {
+        val = document.getElementById('adm_find_mobile').value.replace(/\D/g, '');
+        if (val.length !== 10) { admAlert('Enter a valid 10-digit mobile number'); return; }
+    } else {
+        val = document.getElementById('adm_find_aadhaar').value.replace(/\D/g, '');
+        if (val.length !== 12) { admAlert('Enter a valid 12-digit Aadhaar number'); return; }
+        consent = document.getElementById('adm_find_consent')?.checked;
+        if (!consent) { admAlert('Consent is required to authenticate via Aadhaar OTP'); return; }
+    }
+
+    const btn = document.getElementById('btnAdmSendOtp');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Sending OTP...';
+
+    try {
+        const resp = await fetch('<?= BASE_URL ?>ajax/abdm-api.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'find_abha_request_otp',
+                auth_type: admFindMethod,
+                auth_value: val,
+                consent: consent ? 1 : 0,
+                _csrf: '<?= Security::csrfToken() ?>'
+            })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            admFindTxnId = data.txnId || '';
+            document.getElementById('admFindOtpMsg').textContent = data.message || 'OTP sent successfully.';
+            document.getElementById('admFindStep1').style.display = 'none';
+            document.getElementById('admFindStep2').style.display = 'block';
+            document.getElementById('adm_find_otp').focus();
+        } else {
+            admAlert(data.message || 'Failed to send OTP.');
+        }
+    } catch(e) {
+        admAlert('Network error while requesting OTP.');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Send OTP';
+    }
+}
+
+async function admVerifyOtp() {
+    const otp = document.getElementById('adm_find_otp').value.replace(/\D/g, '');
+    if (otp.length !== 6) { admAlert('Please enter 6-digit OTP'); return; }
+
+    const btn = document.getElementById('btnAdmVerifyOtp');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Verifying...';
+
+    try {
+        const resp = await fetch('<?= BASE_URL ?>ajax/abdm-api.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'find_abha_verify_otp',
+                otp: otp,
+                txnId: admFindTxnId,
+                _csrf: '<?= Security::csrfToken() ?>'
+            })
+        });
+        const data = await resp.json();
+        if (data.success && data.accounts && data.accounts.length > 0) {
+            renderAdmResults(data.accounts);
+            document.getElementById('admFindStep2').style.display = 'none';
+            document.getElementById('admFindStep3').style.display = 'block';
+        } else {
+            admAlert(data.message || 'No registered ABHA found for this detail.');
+        }
+    } catch(e) {
+        admAlert('Network error while verifying OTP.');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-search me-1"></i>Verify & Discover ABHA';
+    }
+}
+
+function renderAdmResults(accounts) {
+    const c = document.getElementById('admResultsList');
+    document.getElementById('admAccountsCount').textContent = accounts.length;
+    let html = '';
+    accounts.forEach(a => {
+        const num = a.abha_number || '—';
+        const addr = a.abha_address || '—';
+        const name = a.name || 'ABHA Holder';
+        const meta = [a.gender, a.yearOfBirth ? 'YOB: ' + a.yearOfBirth : '', a.status].filter(Boolean).join(' · ');
+        html += `
+            <div class="card mb-2 p-3 border shadow-sm" style="border-radius:10px;background:#f9fafb;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="fw-bold" style="font-size:.9rem;"><i class="fas fa-user-circle text-primary me-1"></i>${escapeHtmlAdm(name)}</div>
+                        <div class="mt-1" style="font-family:monospace;font-weight:700;color:#00875a;font-size:1.05rem;">
+                            ${escapeHtmlAdm(num)}
+                            <button type="button" class="btn btn-sm btn-link p-0 ms-2 text-muted" title="Copy ABHA Number" onclick="copyAdmText('${escapeHtmlAdm(num)}', this)">
+                                <i class="far fa-copy"></i>
+                            </button>
+                        </div>
+                        ${addr !== '—' ? `<div style="font-size:.8rem;color:#0C74C5;font-family:monospace;">${escapeHtmlAdm(addr)}</div>` : ''}
+                        <div style="font-size:.72rem;color:#6b7280;margin-top:2px;">${escapeHtmlAdm(meta)}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    c.innerHTML = html;
+}
+
+function copyAdmText(text, btn) {
+    if (!navigator.clipboard) {
+        const t = document.createElement('textarea');
+        t.value = text;
+        document.body.appendChild(t);
+        t.select();
+        document.execCommand('copy');
+        document.body.removeChild(t);
+    } else {
+        navigator.clipboard.writeText(text);
+    }
+    if (btn) {
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check text-success"></i>';
+        setTimeout(() => btn.innerHTML = orig, 1800);
+    }
+}
+
+function escapeHtmlAdm(s) {
+    if (!s) return '';
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 }
 </script>
 </body>

@@ -3,8 +3,6 @@ require_once __DIR__ . '/auth/guard.php';
 require_once dirname(__DIR__) . '/config/connect.php';
 $payload = doctor_jwt_guard();
 $doctor_id = (int) ($payload['doctor_id'] ?? $payload['sub'] ?? 0);
-$sidebar_active = 'patients';
-require_once __DIR__ . '/inc/sidebar.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -14,9 +12,11 @@ require_once __DIR__ . '/inc/sidebar.php';
     <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Add Patient — Rejuvenate</title>
+  <title>Onboard Patient (ABHA M1) — REJUVENATE</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/style.css">
   <style>
     .ap-divider{display:flex;align-items:center;gap:12px;margin:26px 0 16px;color:#9ca3af;
@@ -29,6 +29,10 @@ require_once __DIR__ . '/inc/sidebar.php';
 </head>
 
 <body>
+  <?php
+  $sidebar_active = 'add-patient';
+  include __DIR__ . '/inc/sidebar.php';
+  ?>
   <main class="doctor-content">
 
     <div class="ap-header">

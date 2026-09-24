@@ -5,13 +5,13 @@ include_once "../config/abdm.php";
 include_once "../util/function.php";
 include_once "../lib/Security.php";
 
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || empty($_SESSION['user_id'])) {
   header("Location: " . BASE_URL . "login.php");
   exit();
 }
 
 $contact = contact_us();
-$user_id = $_SESSION['user_id'];
+$user_id = (int)$_SESSION['user_id'];
 $success = $error = '';
 
 /* ─── Fetch user ─────────────────────────────────────────────────── */
@@ -19,6 +19,13 @@ $stmt = $conn->prepare("SELECT * FROM users WHERE id=?");
 $stmt->bind_param('i', $user_id);
 $stmt->execute();
 $user = $stmt->get_result()->fetch_assoc();
+
+if (!$user) {
+  unset($_SESSION['logged_in'], $_SESSION['user_id'], $_SESSION['user_name'], $_SESSION['user_email']);
+  session_destroy();
+  header("Location: " . BASE_URL . "login.php?error=" . urlencode("User account not found. Please log in again."));
+  exit();
+}
 
 /* Pending request */
 $pend = $conn->prepare("SELECT * FROM user_abha_requests WHERE user_id=? AND status='Pending' ORDER BY requested_at DESC LIMIT 1");
@@ -99,6 +106,7 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/animate.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <style>
     :root {
       --ab: #00875a;
@@ -394,27 +402,27 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
           <div class="row">
             <div class="col-lg-7">
 
-              <?php if ($user['abha_linked'] && $user['abha_id']): ?>
+              <?php if (!empty($user['abha_linked']) && !empty($user['abha_id'])): ?>
                 <!-- ═══ LINKED ═══ -->
                 <div class="abha-card-big">
                   <div style="position:relative;z-index:1;">
                     <div class="abha-lbl">Ayushman Bharat Health Account</div>
-                    <div class="abha-num"><?= htmlspecialchars($user['abha_id']) ?></div>
-                    <?php if ($user['abha_address']): ?>
+                    <div class="abha-num"><?= htmlspecialchars($user['abha_id'] ?? '') ?></div>
+                    <?php if (!empty($user['abha_address'])): ?>
                       <div class="abha-addr"><i class="fas fa-at me-1" style="font-size:.7rem;"></i><?= htmlspecialchars($user['abha_address']) ?></div>
                     <?php endif; ?>
                     <div class="d-flex align-items-center justify-content-between mt-3 flex-wrap gap-2">
                       <div>
-                        <div style="font-size:.82rem;font-weight:600;"><?= htmlspecialchars($user['name']) ?></div>
-                        <?php if ($age): ?><div style="font-size:.7rem;opacity:.75;"><?= $age ?> · <?= $user['gender'] ?: '' ?> · <?= $user['blood_group'] ?: '' ?></div><?php endif; ?>
+                        <div style="font-size:.82rem;font-weight:600;"><?= htmlspecialchars($user['name'] ?? '') ?></div>
+                        <?php if ($age): ?><div style="font-size:.7rem;opacity:.75;"><?= $age ?> · <?= htmlspecialchars($user['gender'] ?? '') ?> · <?= htmlspecialchars($user['blood_group'] ?? '') ?></div><?php endif; ?>
                       </div>
-                      <?php if ($user['abha_verified']): ?>
+                      <?php if (!empty($user['abha_verified'])): ?>
                         <span class="abha-ver"><i class="fas fa-shield-alt"></i>Verified by ABDM</span>
                       <?php else: ?>
                         <span class="abha-ver" style="background:rgba(255,165,0,.25);border-color:rgba(255,165,0,.4);"><i class="fas fa-link"></i>Linked</span>
                       <?php endif; ?>
                     </div>
-                    <?php if ($user['abha_linked_at']): ?>
+                    <?php if (!empty($user['abha_linked_at'])): ?>
                       <div style="font-size:.63rem;opacity:.55;margin-top:10px;"><i class="fas fa-calendar me-1"></i>Linked on <?= date('d M Y', strtotime($user['abha_linked_at'])) ?></div>
                     <?php endif; ?>
                   </div>
@@ -422,44 +430,109 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
 
                 <div class="info-box">
                   <h6 class="fw-bold mb-3" style="font-size:.85rem;color:#374151;"><i class="fas fa-id-card me-2 text-success"></i>ABHA Details</h6>
-                  <div class="info-row"><span class="info-lbl">ABHA Number</span><span class="info-val" style="font-family:monospace;color:#00875a;"><?= htmlspecialchars($user['abha_id']) ?></span></div>
-                  <div class="info-row"><span class="info-lbl">ABHA Address</span><span class="info-val"><?= $user['abha_address'] ?: '—' ?></span></div>
+                  <div class="info-row"><span class="info-lbl">ABHA Number</span><span class="info-val" style="font-family:monospace;color:#00875a;"><?= htmlspecialchars($user['abha_id'] ?? '') ?></span></div>
+                  <div class="info-row"><span class="info-lbl">ABHA Address</span><span class="info-val"><?= htmlspecialchars($user['abha_address'] ?? '—') ?></span></div>
                   <div class="info-row">
                     <span class="info-lbl">Status</span>
-                    <?php if ($user['abha_verified']): ?><span class="spill-b"><i class="fas fa-shield-alt me-1"></i>Verified</span>
+                    <?php if (!empty($user['abha_verified'])): ?><span class="spill-b"><i class="fas fa-shield-alt me-1"></i>Verified</span>
                     <?php else: ?><span class="spill-g"><i class="fas fa-link me-1"></i>Linked</span><?php endif; ?>
                   </div>
-                  <?php if ($user['abha_linked_at']): ?>
+                  <?php if (!empty($user['abha_linked_at'])): ?>
                     <div class="info-row"><span class="info-lbl">Linked On</span><span class="info-val"><?= date('d M Y', strtotime($user['abha_linked_at'])) ?></span></div>
                   <?php endif; ?>
                 </div>
 
                 <!-- ABHA Card Download -->
+                <?php
+                $isCardUnlocked = (!empty($_SESSION['abdm_card_verified_' . ($user['id'] ?? 0)]) && $_SESSION['abdm_card_verified_' . ($user['id'] ?? 0)] > time()) || Security::getToken('abdm_user_token');
+                ?>
                 <div class="info-box" id="abhaCardBox">
-                  <h6 class="fw-bold mb-3" style="font-size:.85rem;color:#374151;"><i class="fas fa-download me-2 text-success"></i>Download ABHA Card</h6>
-                  <div id="cardAuthSection">
+                  <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold mb-0" style="font-size:.85rem;color:#374151;"><i class="fas fa-id-card me-2 text-success"></i>Official ABHA Card</h6>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size:.72rem;">ABDM M1 Certified</span>
+                  </div>
+
+                  <div id="cardAuthSection" style="<?= $isCardUnlocked ? 'display:none;' : '' ?>">
                     <p style="font-size:.81rem;color:#6b7280;margin-bottom:12px;">
                       <i class="fas fa-shield-alt me-1 text-success"></i>
-                      Verify your identity to download your official ABHA card. An OTP will be sent to your Aadhaar-linked mobile.
+                      Verify your identity to unlock and download your official government ABHA card. An OTP will be sent to your registered mobile number.
                     </p>
+                    <div id="cardAlertBox" class="alert mb-2" style="display:none;"></div>
                     <div id="cardOtpRow" style="display:none;" class="mb-3">
                       <label class="form-label fw-semibold" style="font-size:.83rem;">Enter 6-digit OTP</label>
-                      <input type="text" class="form-control otp-input-big" id="card_otp_in" placeholder="• • • • • •" maxlength="6" inputmode="numeric">
+                      <div class="input-group">
+                        <input type="text" class="form-control otp-input-big" id="card_otp_in" placeholder="• • • • • •" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+                        <button class="btn fw-semibold" style="background:#00875a;color:#fff;font-size:.85rem;" id="btnCardVerifyOtp" onclick="cardVerifyOtp()">
+                          <i class="fas fa-check-circle me-1"></i>Verify OTP &amp; Unlock
+                        </button>
+                      </div>
+                      <div class="form-text text-muted" style="font-size:.76rem;">OTP sent via ABDM to your Aadhaar-linked registered mobile. Press Enter to verify.</div>
                     </div>
-                    <div id="cardAlertBox" class="alert mb-2" style="display:none;"></div>
-                    <div class="d-flex gap-2">
-                      <button class="btn fw-semibold" style="background:#00875a;color:#fff;font-size:.83rem;" id="btnCardSendOtp" onclick="cardSendOtp()"><i class="fas fa-mobile-alt me-1"></i>Send OTP</button>
-                      <button class="btn fw-semibold d-none" style="background:#0C74C5;color:#fff;font-size:.83rem;" id="btnCardVerifyOtp" onclick="cardVerifyOtp()"><i class="fas fa-check me-1"></i>Verify OTP</button>
+                    <div class="d-flex align-items-center gap-2">
+                      <button class="btn fw-semibold" style="background:#00875a;color:#fff;font-size:.83rem;" id="btnCardSendOtp" onclick="cardSendOtp()">
+                        <i class="fas fa-mobile-alt me-1"></i>Send OTP
+                      </button>
+                      <span id="cardResendTimer" style="display:none;font-size:.78rem;color:#64748b;"></span>
                     </div>
                   </div>
-                  <div id="cardDownloadSection" style="display:none;">
-                    <p style="font-size:.8rem;color:#16a34a;margin-bottom:12px;"><i class="fas fa-check-circle me-1"></i>Authenticated — download your ABHA card below.</p>
-                    <div class="d-flex gap-2 flex-wrap">
-                      <button class="btn fw-semibold" style="background:#00875a;color:#fff;font-size:.83rem;" onclick="downloadAbhaCard('png')"><i class="fas fa-image me-1"></i>Download PNG</button>
-                      <button class="btn btn-outline-success fw-semibold" style="font-size:.83rem;" onclick="downloadAbhaCard('pdf')"><i class="fas fa-file-pdf me-1"></i>Download PDF</button>
-                      <button class="btn btn-outline-secondary fw-semibold" style="font-size:.83rem;" onclick="resetCardAuth()"><i class="fas fa-lock me-1"></i>Lock</button>
+
+                  <div id="cardDownloadSection" style="<?= $isCardUnlocked ? 'display:block;' : 'display:none;' ?>">
+                    <div class="alert alert-success py-2 px-3 mb-3 d-flex align-items-center justify-content-between" style="font-size:.8rem;border-radius:10px;">
+                      <span><i class="fas fa-check-circle me-2"></i>ABHA Identity Authenticated — your official card is ready.</span>
+                      <button class="btn btn-sm btn-link text-muted p-0 text-decoration-none" onclick="resetCardAuth()"><i class="fas fa-lock me-1"></i>Lock</button>
                     </div>
-                    <div id="cardPreview" style="display:none;margin-top:14px;"></div>
+                    <div class="d-flex gap-2 flex-wrap mb-3">
+                      <button class="btn fw-semibold" style="background:#00875a;color:#fff;font-size:.83rem;" onclick="downloadAbhaCard('png', event)">
+                        <i class="fas fa-download me-1"></i>Download PNG Image
+                      </button>
+                      <button class="btn btn-outline-success fw-semibold" style="font-size:.83rem;" onclick="downloadAbhaCard('pdf', event)">
+                        <i class="fas fa-file-pdf me-1"></i>Download Printable PDF
+                      </button>
+                    </div>
+                    <div id="cardPreview"></div>
+                  </div>
+                </div>
+
+                <!-- Standalone ABHA QR Code (M1 & M3 Scan & Share Ready) -->
+                <div class="info-box" id="abhaQrBox">
+                  <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold mb-0" style="font-size:.85rem;color:#374151;"><i class="fas fa-qrcode me-2 text-success"></i>ABHA QR Code (Scan &amp; Share Ready)</h6>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size:.72rem;">ABDM M1 / M3</span>
+                  </div>
+                  <div class="text-center p-3" style="background:#f8fafc;border-radius:12px;border:1px dashed #cbd5e1;">
+                    <div id="abhaStandaloneQr" style="display:inline-block;padding:12px;background:#fff;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);"></div>
+                    <p class="text-muted mt-2 mb-2" style="font-size:.78rem;">
+                      Scan this QR code at hospital / clinic reception counter for instant check-in via ABDM Scan &amp; Share.
+                    </p>
+                    <div class="d-flex justify-content-center gap-2 mt-2">
+                      <button class="btn btn-sm btn-outline-success fw-semibold" onclick="downloadStandaloneQr()">
+                        <i class="fas fa-download me-1"></i>Download QR Code (PNG)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ABHA Self-Service & Account Settings (M1) -->
+                <div class="info-box" id="abhaSelfServiceBox">
+                  <h6 class="fw-bold mb-2" style="font-size:.85rem;color:#374151;"><i class="fas fa-user-cog me-2 text-primary"></i>ABHA Account Self-Service (M1)</h6>
+                  <p style="font-size:.8rem;color:#6b7280;margin-bottom:14px;">Manage your official ABDM registry profile, contact details, or account status directly.</p>
+                  
+                  <div class="row g-2">
+                    <div class="col-sm-6">
+                      <button class="btn btn-outline-primary btn-sm w-100 text-start py-2" data-bs-toggle="modal" data-bs-target="#modalUpdateMobile">
+                        <i class="fas fa-phone-alt me-2"></i>Update Mobile Number
+                      </button>
+                    </div>
+                    <div class="col-sm-6">
+                      <button class="btn btn-outline-primary btn-sm w-100 text-start py-2" data-bs-toggle="modal" data-bs-target="#modalUpdateEmail">
+                        <i class="fas fa-envelope me-2"></i>Update Email Address
+                      </button>
+                    </div>
+                    <div class="col-sm-12 mt-2">
+                      <button class="btn btn-outline-danger btn-sm w-100 text-start py-2" data-bs-toggle="modal" data-bs-target="#modalDeactivateAbha">
+                        <i class="fas fa-user-slash me-2"></i>Deactivate ABHA Account
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -480,6 +553,15 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
                     <!-- Alert placeholder -->
                     <div id="wAlertBox" style="display:none;" class="alert mb-3"></div>
 
+                    <?php if (defined('ABDM_ENV') && ABDM_ENV === 'sandbox'): ?>
+                      <div class="alert alert-warning py-2 px-3 mb-3 d-flex align-items-center gap-2" style="font-size:.8rem;border-radius:10px;">
+                        <i class="fas fa-flask text-warning fs-5"></i>
+                        <div>
+                          <strong>ABDM Sandbox Environment:</strong> This system is currently connected to the ABDM Sandbox test registry. Real-world government ABHAs do not exist in the sandbox database. To test, please create an ABHA under the <strong>Create New ABHA</strong> tab.
+                        </div>
+                      </div>
+                    <?php endif; ?>
+
                     <!-- Tab buttons -->
                     <div class="wizard-tab-btns mb-3">
                       <button class="active" id="btnTabLink" onclick="switchTab('link')">
@@ -487,6 +569,9 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
                       </button>
                       <button id="btnTabCreate" onclick="switchTab('create')">
                         <i class="fas fa-plus-circle me-1"></i>Create New ABHA
+                      </button>
+                      <button id="btnTabFind" onclick="switchTab('find')">
+                        <i class="fas fa-search me-1"></i>Find ABHA Number
                       </button>
                     </div>
 
@@ -509,7 +594,12 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
                               <i class="fas fa-qrcode"></i>
                             </button>
                           </div>
-                          <small class="text-muted">Your 14-digit Ayushman Bharat Health ID, or scan your ABHA card QR</small>
+                          <div class="d-flex justify-content-between align-items-center mt-1">
+                            <small class="text-muted">14-digit ABHA ID or QR code</small>
+                            <a href="javascript:void(0)" onclick="switchTab('find')" style="font-size:.76rem;color:#0C74C5;text-decoration:none;font-weight:600;">
+                              <i class="fas fa-question-circle me-1"></i>Don't know your ABHA Number?
+                            </a>
+                          </div>
                         </div>
                         <div class="mb-3">
                           <label class="form-label fw-semibold" style="font-size:.84rem;">Auth Method</label>
@@ -777,6 +867,16 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
                           <div style="font-size:.75rem;opacity:.8;" id="create_profile_info">—</div>
                         </div>
                         <div class="mb-3">
+                          <label class="form-label fw-semibold" style="font-size:.84rem;">Communication Mobile Number <span class="text-danger">*</span></label>
+                          <div class="input-group">
+                            <span class="input-group-text">+91</span>
+                            <input type="text" class="form-control" id="create_comm_mobile"
+                              placeholder="10-digit mobile" maxlength="10" inputmode="numeric"
+                              value="<?= htmlspecialchars(substr(preg_replace('/\D/', '', $user['mobile'] ?? ''), -10)) ?>">
+                          </div>
+                          <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Required by ABDM for communication and notifications.</small>
+                        </div>
+                        <div class="mb-3">
                           <label class="form-label fw-semibold" style="font-size:.84rem;">ABHA Address <small class="text-muted fw-normal">(optional)</small></label>
                           <div class="input-group">
                             <input type="text" class="form-control" id="create_abha_addr"
@@ -791,6 +891,108 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
                       </div>
 
                     </div><!-- /tabCreate -->
+
+                    <!-- ── TAB: Find ABHA Number ── -->
+                    <div id="tabFind" style="display:none;">
+
+                      <!-- Step F1: Choose method & Enter Identifier -->
+                      <div id="stepF1">
+                        <p class="step-indicator"><span class="cur">Step 1</span> of 3 — Search ABDM Registry</p>
+                        <p style="font-size:.82rem;color:#4b5563;margin-bottom:12px;">
+                          Forgot or don't know your 14-digit ABHA number? Search the ABDM database using your registered Mobile Number or Aadhaar Number.
+                        </p>
+
+                        <!-- Method Picker -->
+                        <div class="d-flex gap-2 mb-3">
+                          <button type="button" class="btn flex-fill text-start p-2" id="btnFindMethodMobile"
+                            onclick="switchFindMethod('mobile')"
+                            style="border:2px solid #0C74C5;background:#f0f9ff;border-radius:8px;">
+                            <div class="fw-semibold" style="font-size:.82rem;color:#0369a1;"><i class="fas fa-mobile-alt me-1"></i>Mobile OTP</div>
+                            <div style="font-size:.72rem;color:#6b7280;">Finds all ABHAs on your mobile</div>
+                          </button>
+                          <button type="button" class="btn flex-fill text-start p-2" id="btnFindMethodAadhaar"
+                            onclick="switchFindMethod('aadhaar')"
+                            style="border:2px solid #e5e7eb;background:#f9fafb;border-radius:8px;">
+                            <div class="fw-semibold" style="font-size:.82rem;color:#374151;"><i class="fas fa-fingerprint me-1"></i>Aadhaar OTP</div>
+                            <div style="font-size:.72rem;color:#6b7280;">UIDAI OTP verification</div>
+                          </button>
+                        </div>
+
+                        <!-- Form: Mobile -->
+                        <div id="findFormMobile">
+                          <div class="mb-3">
+                            <label class="form-label fw-semibold" style="font-size:.84rem;">Mobile Number <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                              <span class="input-group-text">+91</span>
+                              <input type="text" class="form-control" id="find_mobile_in"
+                                placeholder="10-digit mobile" maxlength="10" inputmode="numeric"
+                                value="<?= htmlspecialchars(substr(preg_replace('/\D/', '', $user['mobile'] ?? ''), -10)) ?>">
+                            </div>
+                            <small class="text-muted"><i class="fas fa-info-circle me-1"></i>An OTP will be sent to this mobile number by ABDM.</small>
+                          </div>
+                        </div>
+
+                        <!-- Form: Aadhaar -->
+                        <div id="findFormAadhaar" style="display:none;">
+                          <div class="mb-3">
+                            <label class="form-label fw-semibold" style="font-size:.84rem;">Aadhaar Number <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="find_aadhaar_in"
+                              placeholder="12-digit Aadhaar number" maxlength="12" inputmode="numeric">
+                            <small class="text-muted"><i class="fas fa-lock me-1"></i>Never stored; verified directly with UIDAI.</small>
+                          </div>
+                          <div class="form-check mb-3" style="font-size:.8rem;">
+                            <input class="form-check-input" type="checkbox" id="find_aadhaar_consent" checked>
+                            <label class="form-check-label text-muted" for="find_aadhaar_consent">
+                              I consent to use my Aadhaar number for authentication via UIDAI to fetch my ABHA details as per ABDM guidelines.
+                            </label>
+                          </div>
+                        </div>
+
+                        <button class="btn w-100 fw-semibold" style="background:#0C74C5;color:#fff;" onclick="reqFindOtp()">
+                          <i class="fas fa-paper-plane me-2"></i>Send OTP to Discover ABHA
+                        </button>
+                      </div>
+
+                      <!-- Step F2: Enter OTP -->
+                      <div id="stepF2" style="display:none;">
+                        <p class="step-indicator"><span class="cur">Step 2</span> of 3 — Verify OTP</p>
+                        <p id="findOtpMsg" style="font-size:.82rem;color:#374151;margin-bottom:14px;"></p>
+                        <div class="mb-3">
+                          <label class="form-label fw-semibold" style="font-size:.84rem;">Enter 6-digit OTP</label>
+                          <input type="text" class="form-control otp-input-big" id="find_otp_in"
+                            placeholder="• • • • • •" maxlength="6" inputmode="numeric">
+                        </div>
+                        <div class="d-flex gap-2">
+                          <button class="btn btn-outline-secondary" style="font-size:.82rem;" onclick="resetStep('find')">
+                            <i class="fas fa-arrow-left me-1"></i>Back
+                          </button>
+                          <button class="btn flex-fill fw-semibold" style="background:#0C74C5;color:#fff;" onclick="verifyFindOtp()">
+                            <i class="fas fa-search me-1"></i>Verify & Search ABHA
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- Step F3: Search Results -->
+                      <div id="stepF3" style="display:none;">
+                        <p class="step-indicator"><span class="cur">Step 3</span> of 3 — Discovered Accounts</p>
+                        <div class="alert alert-success d-flex align-items-center mb-3 py-2 px-3" style="font-size:.84rem;">
+                          <i class="fas fa-check-circle me-2 fa-lg text-success"></i>
+                          <div>Found <strong id="findAccountsCount">0</strong> registered ABHA account(s).</div>
+                        </div>
+
+                        <div id="findResultsList"></div>
+
+                        <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
+                          <button class="btn btn-sm btn-outline-secondary" onclick="resetStep('find')">
+                            <i class="fas fa-redo me-1"></i>Search Another Number
+                          </button>
+                          <button class="btn btn-sm btn-outline-primary" onclick="switchTab('create')">
+                            <i class="fas fa-plus me-1"></i>Create New Instead
+                          </button>
+                        </div>
+                      </div>
+
+                    </div><!-- /tabFind -->
 
                     <!-- ── SUCCESS (both flows) ── -->
                     <div id="stepSuccess" style="display:none;">
@@ -899,10 +1101,10 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
               <!-- My Health snapshot -->
               <div class="info-box">
                 <h6 class="fw-bold mb-3" style="font-size:.85rem;color:#374151;"><i class="fas fa-user-circle me-2 text-primary"></i>My Profile</h6>
-                <div class="info-row"><span class="info-lbl">Name</span><span class="info-val"><?= htmlspecialchars($user['name']) ?></span></div>
-                <div class="info-row"><span class="info-lbl">Age / Gender</span><span class="info-val"><?= $age ?> · <?= $user['gender'] ?: '—' ?></span></div>
-                <div class="info-row"><span class="info-lbl">Blood Group</span><span class="info-val"><?= $user['blood_group'] ?: '—' ?></span></div>
-                <div class="info-row"><span class="info-lbl">ID Type</span><span class="info-val"><?= $user['identification_type'] ?: 'None' ?> <?= $user['identification_number'] ? '· ' . $user['identification_number'] : '' ?></span></div>
+                <div class="info-row"><span class="info-lbl">Name</span><span class="info-val"><?= htmlspecialchars($user['name'] ?? '') ?></span></div>
+                <div class="info-row"><span class="info-lbl">Age / Gender</span><span class="info-val"><?= $age ?> · <?= htmlspecialchars($user['gender'] ?? '—') ?></span></div>
+                <div class="info-row"><span class="info-lbl">Blood Group</span><span class="info-val"><?= htmlspecialchars($user['blood_group'] ?? '—') ?></span></div>
+                <div class="info-row"><span class="info-lbl">ID Type</span><span class="info-val"><?= htmlspecialchars($user['identification_type'] ?? 'None') ?> <?= !empty($user['identification_number']) ? '· ' . htmlspecialchars($user['identification_number']) : '' ?></span></div>
                 <div class="info-row"><span class="info-lbl">Medical Reports</span><span class="info-val"><?= $reports_count ?></span></div>
                 <a href="my-profile.php" class="btn btn-sm btn-outline-primary w-100 mt-2" style="font-size:.78rem;"><i class="fas fa-edit me-1"></i>Edit Profile</a>
               </div>
@@ -1006,22 +1208,28 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
     const _captcha = { aadhaar: 0, dl: 0 };
 
     function refreshCaptcha(which) {
+      const q = document.getElementById(which + '_captcha_q');
+      if (!q) return;
       const a = Math.floor(Math.random() * 10) + 1;
       const b = Math.floor(Math.random() * 10) + 1;
       _captcha[which] = a + b;
-      document.getElementById(which + '_captcha_q').textContent = a + ' + ' + b + ' = ?';
+      q.textContent = a + ' + ' + b + ' = ?';
       const ans = document.getElementById(which + '_captcha_ans');
       if (ans) ans.value = '';
     }
 
     function validateCaptcha(which) {
-      const ans = parseInt(document.getElementById(which + '_captcha_ans').value.trim(), 10);
+      const el = document.getElementById(which + '_captcha_ans');
+      if (!el) return false;
+      const ans = parseInt(el.value.trim(), 10);
       return ans === _captcha[which];
     }
 
-    // Init captchas on load
-    refreshCaptcha('aadhaar');
-    refreshCaptcha('dl');
+    // Init captchas on load if elements are present
+    if (document.getElementById('aadhaar_captcha_q')) {
+      refreshCaptcha('aadhaar');
+      refreshCaptcha('dl');
+    }
 
     /* ── ABDM Wizard ─────────────────────────────────────────────────── */
     const AJAX_URL    = '<?= BASE_URL ?>ajax/abdm-api.php';
@@ -1047,35 +1255,66 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
     }
 
     function setLoader(show, msg = '') {
-      document.getElementById('wLoader').style.display = show ? 'block' : 'none';
-      document.getElementById('wLoaderMsg').textContent = msg;
+      const wizard = document.getElementById('abhaWizard');
+      if (!wizard) return; // Outside wizard context, do not touch steps
+
+      const loader = document.getElementById('wLoader');
+      if (loader) loader.style.display = show ? 'block' : 'none';
+      const loaderMsg = document.getElementById('wLoaderMsg');
+      if (loaderMsg && msg) loaderMsg.textContent = msg;
       // hide all step content while loading
-      const steps = document.querySelectorAll('#abhaWizard [id^="step"]');
+      const steps = wizard.querySelectorAll('[id^="step"]');
       steps.forEach(s => {
         if (s.id !== 'wLoader') s.style.display = show ? 'none' : '';
       });
       if (!show) {
         // restore active step
-        if (abdmFlow === 'link_existing') showLinkStep(window._curLinkStep || 'L1');
-        else showCreateStep(window._curCreateStep || 'C1');
+        if (abdmFlow === 'link_existing' && typeof showLinkStep === 'function') showLinkStep(window._curLinkStep || 'L1');
+        else if (abdmFlow === 'find_abha' && typeof showFindStep === 'function') showFindStep(window._curFindStep || 'F1');
+        else if (typeof showCreateStep === 'function') showCreateStep(window._curCreateStep || 'C1');
       }
     }
 
     function wAlert(msg, type = 'danger') {
       const b = document.getElementById('wAlertBox');
+      if (!b) {
+        if (typeof cardAlert === 'function' && document.getElementById('cardAlertBox')) {
+          cardAlert(msg, type);
+        } else {
+          alert(msg);
+        }
+        return;
+      }
       b.className = 'alert alert-' + type + ' mb-3';
       b.textContent = msg;
       b.style.display = 'block';
-      setTimeout(() => b.style.display = 'none', 6000);
+      setTimeout(() => { if (b) b.style.display = 'none'; }, 6000);
     }
 
     /* ── Tab switching ── */
     function switchTab(tab) {
-      document.getElementById('tabLink').style.display = tab === 'link' ? 'block' : 'none';
-      document.getElementById('tabCreate').style.display = tab === 'create' ? 'block' : 'none';
-      document.getElementById('btnTabLink').classList.toggle('active', tab === 'link');
-      document.getElementById('btnTabCreate').classList.toggle('active', tab === 'create');
-      abdmFlow = tab === 'link' ? 'link_existing' : 'create_aadhaar';
+      const tabLink = document.getElementById('tabLink');
+      const tabCreate = document.getElementById('tabCreate');
+      const tabFind = document.getElementById('tabFind');
+      if (tabLink) tabLink.style.display = tab === 'link' ? 'block' : 'none';
+      if (tabCreate) tabCreate.style.display = tab === 'create' ? 'block' : 'none';
+      if (tabFind) tabFind.style.display = tab === 'find' ? 'block' : 'none';
+
+      const btnTabLink = document.getElementById('btnTabLink');
+      const btnTabCreate = document.getElementById('btnTabCreate');
+      const btnTabFind = document.getElementById('btnTabFind');
+      if (btnTabLink) btnTabLink.classList.toggle('active', tab === 'link');
+      if (btnTabCreate) btnTabCreate.classList.toggle('active', tab === 'create');
+      if (btnTabFind) btnTabFind.classList.toggle('active', tab === 'find');
+
+      if (tab === 'link') {
+        abdmFlow = 'link_existing';
+      } else if (tab === 'find') {
+        abdmFlow = 'find_abha';
+        if (typeof showFindStep === 'function') showFindStep(window._curFindStep || 'F1');
+      } else {
+        abdmFlow = 'create_aadhaar';
+      }
     }
 
     function showLinkStep(step) {
@@ -1093,14 +1332,20 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
 
     function switchCreateMethod(method) {
       createMethod = method;
-      document.getElementById('createFormAadhaar').style.display = method === 'aadhaar' ? 'block' : 'none';
-      document.getElementById('createFormDL').style.display      = method === 'dl'      ? 'block' : 'none';
+      const fA = document.getElementById('createFormAadhaar');
+      const fD = document.getElementById('createFormDL');
+      if (fA) fA.style.display = method === 'aadhaar' ? 'block' : 'none';
+      if (fD) fD.style.display = method === 'dl' ? 'block' : 'none';
       const btnA = document.getElementById('btnMethodAadhaar');
       const btnD = document.getElementById('btnMethodDL');
-      btnA.style.border     = method === 'aadhaar' ? '2px solid #00875a' : '2px solid #e5e7eb';
-      btnA.style.background = method === 'aadhaar' ? '#f0fdf4' : '#f9fafb';
-      btnD.style.border     = method === 'dl' ? '2px solid #1d4ed8' : '2px solid #e5e7eb';
-      btnD.style.background = method === 'dl' ? '#eff6ff' : '#f9fafb';
+      if (btnA) {
+        btnA.style.border     = method === 'aadhaar' ? '2px solid #00875a' : '2px solid #e5e7eb';
+        btnA.style.background = method === 'aadhaar' ? '#f0fdf4' : '#f9fafb';
+      }
+      if (btnD) {
+        btnD.style.border     = method === 'dl' ? '2px solid #1d4ed8' : '2px solid #e5e7eb';
+        btnD.style.background = method === 'dl' ? '#eff6ff' : '#f9fafb';
+      }
     }
 
     function showCreateStep(step) {
@@ -1116,9 +1361,183 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
 
     function resetStep(tab) {
       if (tab === 'link') showLinkStep('L1');
+      else if (tab === 'find') showFindStep('F1');
       else showCreateStep('C1');
       document.getElementById('wAlertBox').style.display = 'none';
       abdmTxnId = '';
+      findTxnId = '';
+    }
+
+    /* ── Find ABHA flow ── */
+    let findMethod = 'mobile';
+    let findTxnId = '';
+
+    function switchFindMethod(method) {
+      findMethod = method;
+      const fMobile = document.getElementById('findFormMobile');
+      const fAadhaar = document.getElementById('findFormAadhaar');
+      const btnM = document.getElementById('btnFindMethodMobile');
+      const btnA = document.getElementById('btnFindMethodAadhaar');
+      if (fMobile) fMobile.style.display = method === 'mobile' ? 'block' : 'none';
+      if (fAadhaar) fAadhaar.style.display = method === 'aadhaar' ? 'block' : 'none';
+      if (btnM) {
+        btnM.style.border = method === 'mobile' ? '2px solid #0C74C5' : '2px solid #e5e7eb';
+        btnM.style.background = method === 'mobile' ? '#f0f9ff' : '#f9fafb';
+      }
+      if (btnA) {
+        btnA.style.border = method === 'aadhaar' ? '2px solid #00875a' : '2px solid #e5e7eb';
+        btnA.style.background = method === 'aadhaar' ? '#f0fdf4' : '#f9fafb';
+      }
+    }
+
+    function showFindStep(step) {
+      ['F1', 'F2', 'F3'].forEach(s => {
+        const el = document.getElementById('step' + s);
+        if (el) el.style.display = (step === s) ? 'block' : 'none';
+      });
+      const ss = document.getElementById('stepSuccess');
+      if (ss && step !== 'Success') ss.style.display = 'none';
+      if (step === 'F1') switchFindMethod(findMethod);
+      window._curFindStep = step;
+    }
+
+    async function reqFindOtp() {
+      let val = '';
+      let consent = false;
+      if (findMethod === 'mobile') {
+        val = (document.getElementById('find_mobile_in')?.value || '').replace(/\D/g, '');
+        if (val.length !== 10) {
+          wAlert('Please enter a valid 10-digit mobile number');
+          return;
+        }
+      } else {
+        val = (document.getElementById('find_aadhaar_in')?.value || '').replace(/\D/g, '');
+        if (val.length !== 12) {
+          wAlert('Please enter a valid 12-digit Aadhaar number');
+          return;
+        }
+        consent = document.getElementById('find_aadhaar_consent')?.checked;
+        if (!consent) {
+          wAlert('Consent is required to search using Aadhaar OTP');
+          return;
+        }
+      }
+
+      const res = await abdmPost('find_abha_request_otp', {
+        auth_type: findMethod,
+        auth_value: val,
+        consent: consent ? 1 : 0
+      });
+
+      if (res.success) {
+        findTxnId = res.txnId || '';
+        document.getElementById('findOtpMsg').textContent = res.message || 'OTP sent successfully.';
+        document.getElementById('find_otp_in').value = '';
+        showFindStep('F2');
+      } else {
+        wAlert(res.message);
+      }
+    }
+
+    async function verifyFindOtp() {
+      const otp = (document.getElementById('find_otp_in')?.value || '').replace(/\D/g, '');
+      if (otp.length !== 6) {
+        wAlert('Please enter a valid 6-digit OTP');
+        return;
+      }
+      const res = await abdmPost('find_abha_verify_otp', {
+        otp: otp,
+        txnId: findTxnId
+      });
+
+      if (res.success && res.accounts && res.accounts.length > 0) {
+        renderDiscoveredAbhas(res.accounts);
+        showFindStep('F3');
+      } else {
+        wAlert(res.message || 'No registered ABHA found for this detail.');
+      }
+    }
+
+    function renderDiscoveredAbhas(accounts) {
+      const container = document.getElementById('findResultsList');
+      if (!container) return;
+      document.getElementById('findAccountsCount').textContent = accounts.length;
+
+      let html = '';
+      accounts.forEach((acc) => {
+        const num = acc.abha_number || '—';
+        const addr = acc.abha_address || '—';
+        const name = acc.name || 'ABHA Holder';
+        const meta = [acc.gender, acc.yearOfBirth ? 'YOB: ' + acc.yearOfBirth : '', acc.status].filter(Boolean).join(' · ');
+
+        html += `
+          <div class="card mb-3 p-3 border shadow-sm" style="border-radius:12px;background:#fcfdfd;">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+              <div>
+                <div class="fw-bold text-dark" style="font-size:1rem;"><i class="fas fa-user-circle text-primary me-2"></i>${escapeHtml(name)}</div>
+                <div class="mt-1" style="font-family:monospace;font-weight:700;color:#00875a;font-size:1.1rem;letter-spacing:1px;">
+                  ${escapeHtml(num)}
+                  <button type="button" class="btn btn-sm btn-link p-0 ms-2 text-muted" title="Copy ABHA Number" onclick="copyToClipboard('${escapeHtml(num)}', this)">
+                    <i class="far fa-copy"></i>
+                  </button>
+                </div>
+                ${addr !== '—' ? `<div style="font-size:.82rem;color:#0C74C5;font-family:monospace;">${escapeHtml(addr)}</div>` : ''}
+                <div style="font-size:.76rem;color:#6b7280;margin-top:3px;"><i class="fas fa-info-circle me-1"></i>${escapeHtml(meta)}</div>
+              </div>
+              <div class="d-flex flex-column gap-2 mt-2 mt-sm-0">
+                <button type="button" class="btn btn-sm fw-semibold" style="background:#00875a;color:#fff;border-radius:8px;padding:6px 14px;"
+                  onclick="linkFoundAbha('${escapeHtml(num)}', '${escapeHtml(addr)}')">
+                  <i class="fas fa-link me-1"></i>Link to My Profile
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    async function linkFoundAbha(num, addr) {
+      if (!confirm(`Are you sure you want to link ABHA Number ${num} to your profile?`)) return;
+      const res = await abdmPost('find_abha_link_account', {
+        abha_number: num,
+        abha_address: addr
+      });
+      if (res.success) {
+        document.getElementById('success_abha_num').textContent = res.abha_number || num;
+        document.getElementById('success_abha_addr').textContent = res.abha_address || addr;
+        const tabFind = document.getElementById('tabFind');
+        if (tabFind) tabFind.style.display = 'none';
+        const ss = document.getElementById('stepSuccess');
+        if (ss) ss.style.display = 'block';
+      } else {
+        wAlert(res.message);
+      }
+    }
+
+    function copyToClipboard(text, btn) {
+      if (!navigator.clipboard) {
+        const t = document.createElement('textarea');
+        t.value = text;
+        document.body.appendChild(t);
+        t.select();
+        document.execCommand('copy');
+        document.body.removeChild(t);
+      } else {
+        navigator.clipboard.writeText(text);
+      }
+      if (btn) {
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check text-success"></i>';
+        setTimeout(() => btn.innerHTML = orig, 1800);
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, function(m) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+      });
     }
 
     /* ── DL flow ── */
@@ -1223,7 +1642,8 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
       if (!document.getElementById('aadhaar_consent').checked) { wAlert('Please agree to the Terms and Conditions to continue.'); return; }
       if (!validateCaptcha('aadhaar')) { wAlert('Captcha answer is incorrect. Please try again.'); refreshCaptcha('aadhaar'); return; }
 
-      const res = await abdmPost('gen_aadhaar_otp', { aadhaar: raw, consent: 1 });
+      const defaultMob = '<?= htmlspecialchars(substr(preg_replace('/\D/', '', $user['mobile'] ?? ''), -10)) ?>';
+      const res = await abdmPost('gen_aadhaar_otp', { aadhaar: raw, consent: 1, mobile: defaultMob });
 
       if (res.success) {
         abdmTxnId = res.txnId || '';
@@ -1301,8 +1721,19 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
 
     async function createAbha() {
       const addr = document.getElementById('create_abha_addr').value.trim();
+      const mobEl = document.getElementById('create_comm_mobile');
+      let mobile = mobEl ? mobEl.value.replace(/\D/g, '') : '';
+      if (!mobile) {
+        mobile = '<?= htmlspecialchars(substr(preg_replace('/\D/', '', $user['mobile'] ?? ''), -10)) ?>';
+      }
+      if (mobile.length !== 10) {
+        wAlert('Please enter a valid 10-digit mobile number for communication');
+        return;
+      }
+
       const res = await abdmPost('create_abha', {
-        abha_address: addr
+        abha_address: addr,
+        mobile: mobile
       });
 
       if (res.success) {
@@ -1324,108 +1755,410 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
     ════════════════════════════════════════════════════ */
 
     let _cardTxnId = '';
+    let _cardCooldownTimer = null;
 
     function cardAlert(msg, type = 'danger') {
       const b = document.getElementById('cardAlertBox');
+      if (!b) return;
       b.className = 'alert alert-' + type + ' mb-2 py-2';
       b.textContent = msg;
       b.style.display = 'block';
     }
 
+    function startCardCooldown(seconds = 60) {
+      const sendBtn   = document.getElementById('btnCardSendOtp');
+      const timerSpan = document.getElementById('cardResendTimer');
+      if (!sendBtn) return;
+      sendBtn.disabled = true;
+      if (timerSpan) timerSpan.style.display = 'inline-block';
+      let left = seconds;
+      clearInterval(_cardCooldownTimer);
+      _cardCooldownTimer = setInterval(() => {
+        left--;
+        if (left <= 0) {
+          clearInterval(_cardCooldownTimer);
+          sendBtn.disabled = false;
+          sendBtn.innerHTML = '<i class="fas fa-redo me-1"></i>Resend OTP';
+          if (timerSpan) { timerSpan.style.display = 'none'; timerSpan.textContent = ''; }
+        } else {
+          sendBtn.innerHTML = '<i class="fas fa-redo me-1"></i>Resend OTP (' + left + 's)';
+          if (timerSpan) timerSpan.textContent = 'Resend available in ' + left + 's';
+        }
+      }, 1000);
+    }
+
     async function cardSendOtp() {
-      if (!_LINKED_ABHA) { cardAlert('No ABHA linked. Please link an ABHA first.'); return; }
+      if (!_LINKED_ABHA) { cardAlert('No ABHA linked. Please link an ABHA first.', 'warning'); return; }
 
       const btn = document.getElementById('btnCardSendOtp');
-      btn.disabled = true;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Sending…';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Sending OTP…';
+      }
 
-      // Use the user's linked ABHA number (known from PHP) to request OTP via abdm mobile
       const res = await abdmPost('init_link', {
         abha_id:     _LINKED_ABHA,
         auth_method: 'MOBILE_OTP'
       });
 
-      btn.disabled = false;
       if (res.success) {
         _cardTxnId = res.txnId || '';
-        document.getElementById('cardOtpRow').style.display = 'block';
-        document.getElementById('btnCardVerifyOtp').classList.remove('d-none');
-        btn.innerHTML = '<i class="fas fa-redo me-1"></i>Resend OTP';
-        cardAlert('OTP sent to your Aadhaar-linked mobile number.', 'success');
+        const otpRow = document.getElementById('cardOtpRow');
+        if (otpRow) otpRow.style.display = 'block';
+        startCardCooldown(60);
+        cardAlert('OTP sent successfully to your Aadhaar-linked registered mobile.', 'success');
+        const otpIn = document.getElementById('card_otp_in');
+        if (otpIn) {
+          otpIn.value = '';
+          otpIn.focus();
+        }
       } else {
-        btn.innerHTML = '<i class="fas fa-mobile-alt me-1"></i>Send OTP';
-        cardAlert(res.message || 'Could not send OTP. Please try again.');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-mobile-alt me-1"></i>Send OTP';
+        }
+        cardAlert(res.message || 'Could not send OTP. Please try again.', 'danger');
       }
     }
 
     async function cardVerifyOtp() {
-      const otp = document.getElementById('card_otp_in').value.trim();
-      if (otp.length !== 6) { cardAlert('Enter the 6-digit OTP'); return; }
+      const otpIn = document.getElementById('card_otp_in');
+      const otp = (otpIn?.value || '').trim().replace(/\D/g, '');
+      if (otp.length !== 6) {
+        cardAlert('Please enter the 6-digit OTP received on your mobile.', 'warning');
+        if (otpIn) otpIn.focus();
+        return;
+      }
 
       const btn = document.getElementById('btnCardVerifyOtp');
-      btn.disabled = true;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Verifying…';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Verifying…';
+      }
 
-      const res = await abdmPost('confirm_link_otp', { otp });
+      const res = await abdmPost('confirm_link_otp', {
+        otp: otp,
+        txnId: _cardTxnId,
+        abha_id: _LINKED_ABHA
+      });
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check-circle me-1"></i>Verify OTP &amp; Unlock';
+      }
 
       if (res.success) {
-        document.getElementById('cardAuthSection').style.display    = 'none';
-        document.getElementById('cardDownloadSection').style.display = 'block';
-        document.getElementById('cardAlertBox').style.display        = 'none';
+        const authSec = document.getElementById('cardAuthSection');
+        if (authSec) authSec.style.display = 'none';
+        const dlSec = document.getElementById('cardDownloadSection');
+        if (dlSec) dlSec.style.display = 'block';
+        const alertBox = document.getElementById('cardAlertBox');
+        if (alertBox) alertBox.style.display = 'none';
+        // Auto-load inline card preview
+        downloadAbhaCard('png', null, true);
       } else {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-check me-1"></i>Verify OTP';
-        cardAlert(res.message || 'Invalid OTP. Please try again.');
+        cardAlert(res.message || 'Invalid or expired OTP. Please try again.', 'danger');
+        if (otpIn) otpIn.focus();
       }
     }
 
-    async function downloadAbhaCard(format) {
-      const btn = event.currentTarget;
-      const orig = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Downloading…';
+    // Auto-verify on 6 digits or Enter key in OTP input
+    document.addEventListener('DOMContentLoaded', () => {
+      const otpIn = document.getElementById('card_otp_in');
+      if (otpIn) {
+        otpIn.addEventListener('keyup', (e) => {
+          if (e.key === 'Enter' || otpIn.value.trim().length === 6) {
+            cardVerifyOtp();
+          }
+        });
+      }
+      // If already unlocked on load, load card preview
+      const dlSec = document.getElementById('cardDownloadSection');
+      if (dlSec && dlSec.style.display !== 'none') {
+        downloadAbhaCard('png', null, true);
+      }
+    });
+
+    async function downloadAbhaCard(format, evt, isPreviewOnly = false) {
+      let btn = null;
+      let orig = '';
+      if (!isPreviewOnly) {
+        btn = (evt && evt.currentTarget) ? evt.currentTarget : (window.event ? window.event.currentTarget : document.activeElement);
+        orig = btn ? btn.innerHTML : '';
+        if (btn) {
+          btn.disabled = true;
+          btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Downloading…';
+        }
+      }
 
       const res = await abdmPost('get_abha_card', { format });
 
-      btn.disabled = false;
-      btn.innerHTML = orig;
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+      }
 
-      if (!res.success) { cardAlert(res.message || 'Download failed. Please try again.'); return; }
+      if (!res.success) {
+        if (!isPreviewOnly) cardAlert(res.message || 'Download failed. Please try again.', 'danger');
+        return;
+      }
 
-      // Convert base64 to blob and trigger download
-      const byteArr = Uint8Array.from(atob(res.data), c => c.charCodeAt(0));
-      const blob    = new Blob([byteArr], { type: res.mimeType });
-      const url     = URL.createObjectURL(blob);
-      const a       = document.createElement('a');
-      a.href     = url;
-      a.download = 'ABHA-Card.' + format;
-      a.click();
-      URL.revokeObjectURL(url);
+      try {
+        const byteArr = Uint8Array.from(atob(res.data), c => c.charCodeAt(0));
+        const mime = res.mimeType || (format === 'pdf' ? 'application/pdf' : 'image/png');
+        const blob = new Blob([byteArr], { type: mime });
 
-      // Show PNG preview inline
-      if (format === 'png') {
-        const preview = document.getElementById('cardPreview');
-        preview.innerHTML = '<img src="data:image/png;base64,' + res.data + '" style="max-width:100%;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.15);" alt="ABHA Card">';
-        preview.style.display = 'block';
+        if (!isPreviewOnly) {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'ABHA-Card-' + (_LINKED_ABHA || 'Official') + '.' + format;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+
+        // Show PNG preview inline
+        if (format === 'png') {
+          const preview = document.getElementById('cardPreview');
+          if (preview) {
+            preview.innerHTML = '<div class="text-center p-2" style="background:#f8fafc;border-radius:12px;border:1px dashed #cbd5e1;">'
+              + '<p class="fw-semibold text-muted mb-2" style="font-size:.78rem;"><i class="fas fa-eye me-1"></i>Official ABHA Card Preview</p>'
+              + '<img src="data:image/png;base64,' + res.data + '" style="max-width:100%;height:auto;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);border:1px solid #e2e8f0;" alt="ABHA Card">'
+              + '</div>';
+            preview.style.display = 'block';
+          }
+        }
+      } catch (err) {
+        console.error('Card processing error:', err);
+        if (!isPreviewOnly) cardAlert('Error rendering ABHA card data: ' + err.message, 'danger');
       }
     }
 
     function resetCardAuth() {
-      document.getElementById('cardAuthSection').style.display     = 'block';
-      document.getElementById('cardDownloadSection').style.display  = 'none';
-      document.getElementById('cardPreview').style.display          = 'none';
-      document.getElementById('card_otp_in').value                  = '';
-      document.getElementById('cardOtpRow').style.display           = 'none';
-      document.getElementById('btnCardVerifyOtp').classList.add('d-none');
-      document.getElementById('btnCardSendOtp').disabled            = false;
-      document.getElementById('btnCardSendOtp').innerHTML           = '<i class="fas fa-mobile-alt me-1"></i>Send OTP';
-      document.getElementById('cardAlertBox').style.display         = 'none';
+      const authSec = document.getElementById('cardAuthSection');
+      if (authSec) authSec.style.display = 'block';
+      const dlSec = document.getElementById('cardDownloadSection');
+      if (dlSec) dlSec.style.display = 'none';
+      const preview = document.getElementById('cardPreview');
+      if (preview) preview.style.display = 'none';
+      const otpIn = document.getElementById('card_otp_in');
+      if (otpIn) otpIn.value = '';
+      const otpRow = document.getElementById('cardOtpRow');
+      if (otpRow) otpRow.style.display = 'none';
+      const sendBtn = document.getElementById('btnCardSendOtp');
+      if (sendBtn) {
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = '<i class="fas fa-mobile-alt me-1"></i>Send OTP';
+      }
+      const timerSpan = document.getElementById('cardResendTimer');
+      if (timerSpan) { timerSpan.style.display = 'none'; timerSpan.textContent = ''; }
+      clearInterval(_cardCooldownTimer);
+      const alertBox = document.getElementById('cardAlertBox');
+      if (alertBox) alertBox.style.display = 'none';
       _cardTxnId = '';
     }
 
-    /* Init tab state */
-    switchTab('link');
+    /* Init tab state only if wizard tabs are present */
+    if (document.getElementById('tabLink')) {
+      switchTab('link');
+    }
+
+    // Render Standalone QR Code if user is linked
+    const qrContainer = document.getElementById('abhaStandaloneQr');
+    if (qrContainer && typeof QRCode !== 'undefined' && _LINKED_ABHA) {
+      try {
+        const qrPayload = JSON.stringify({
+          "hidn": _LINKED_ABHA,
+          "hid": "<?= htmlspecialchars($user['abha_address'] ?? '', ENT_QUOTES) ?>",
+          "name": "<?= htmlspecialchars($user['name'] ?? '', ENT_QUOTES) ?>",
+          "gender": "<?= htmlspecialchars($user['gender'] ?? '', ENT_QUOTES) ?>",
+          "dob": "<?= htmlspecialchars($user['dob'] ?? '', ENT_QUOTES) ?>"
+        });
+
+        new QRCode(qrContainer, {
+          text: qrPayload,
+          width: 160,
+          height: 160,
+          colorDark: "#000000",
+          colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      } catch (e) {
+        console.error("QR Code generation error:", e);
+      }
+    }
+
+    function downloadStandaloneQr() {
+      const img = document.querySelector('#abhaStandaloneQr img');
+      if (img && img.src) {
+        const a = document.createElement('a');
+        a.href = img.src;
+        a.download = 'ABHA-QR-Code.png';
+        a.click();
+      } else {
+        const canvas = document.querySelector('#abhaStandaloneQr canvas');
+        if (canvas) {
+          const a = document.createElement('a');
+          a.href = canvas.toDataURL('image/png');
+          a.download = 'ABHA-QR-Code.png';
+          a.click();
+        }
+      }
+    }
+
+    let _mobileTxnId = '', _emailTxnId = '';
+
+    async function reqMobileUpdateOtp() {
+      const mobile = document.getElementById('new_mobile_in').value.trim();
+      if (mobile.length !== 10) { alert('Enter a valid 10-digit mobile number'); return; }
+      const res = await abdmPost('req_mobile_update_otp', { new_mobile: mobile });
+      if (res.success) {
+        _mobileTxnId = res.txnId;
+        document.getElementById('mobileOtpStep').style.display = 'block';
+        document.getElementById('btnReqMobileOtp').style.display = 'none';
+        document.getElementById('mobileAlert').className = 'alert alert-success';
+        document.getElementById('mobileAlert').textContent = res.message || 'OTP sent!';
+        document.getElementById('mobileAlert').style.display = 'block';
+      } else {
+        document.getElementById('mobileAlert').className = 'alert alert-danger';
+        document.getElementById('mobileAlert').textContent = res.message || 'Error sending OTP';
+        document.getElementById('mobileAlert').style.display = 'block';
+      }
+    }
+
+    async function verifyMobileUpdateOtp() {
+      const otp = document.getElementById('mobile_otp_in').value.trim();
+      if (otp.length !== 6) { alert('Enter 6-digit OTP'); return; }
+      const res = await abdmPost('verify_mobile_update_otp', { otp, txnId: _mobileTxnId });
+      if (res.success) {
+        alert(res.message);
+        location.reload();
+      } else {
+        alert(res.message || 'OTP verification failed');
+      }
+    }
+
+    async function reqEmailUpdateOtp() {
+      const email = document.getElementById('new_email_in').value.trim();
+      if (!email.includes('@')) { alert('Enter a valid email address'); return; }
+      const res = await abdmPost('req_email_update_otp', { new_email: email });
+      if (res.success) {
+        _emailTxnId = res.txnId;
+        document.getElementById('emailOtpStep').style.display = 'block';
+        document.getElementById('btnReqEmailOtp').style.display = 'none';
+        document.getElementById('emailAlert').className = 'alert alert-success';
+        document.getElementById('emailAlert').textContent = res.message || 'OTP sent!';
+        document.getElementById('emailAlert').style.display = 'block';
+      } else {
+        document.getElementById('emailAlert').className = 'alert alert-danger';
+        document.getElementById('emailAlert').textContent = res.message || 'Error sending OTP';
+        document.getElementById('emailAlert').style.display = 'block';
+      }
+    }
+
+    async function verifyEmailUpdateOtp() {
+      const otp = document.getElementById('email_otp_in').value.trim();
+      if (otp.length !== 6) { alert('Enter 6-digit OTP'); return; }
+      const res = await abdmPost('verify_email_update_otp', { otp, txnId: _emailTxnId });
+      if (res.success) {
+        alert(res.message);
+        location.reload();
+      } else {
+        alert(res.message || 'OTP verification failed');
+      }
+    }
+
+    async function confirmDeactivateAbha() {
+      const reason = document.getElementById('deactivate_reason_in').value;
+      if (!confirm('Are you sure you want to deactivate your ABHA account? You can reactivate it later with an OTP.')) return;
+      const res = await abdmPost('deactivate_abha', { reason });
+      if (res.success) {
+        alert(res.message);
+        location.reload();
+      } else {
+        alert(res.message || 'Deactivation failed. Please try again.');
+      }
+    }
   </script>
+
+  <!-- Modal: Update Mobile -->
+  <div class="modal fade" id="modalUpdateMobile" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h6 class="modal-title fw-bold"><i class="fas fa-phone-alt me-2 text-primary"></i>Update Mobile Number (M1)</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="mobileAlert" class="alert" style="display:none;"></div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">New 10-Digit Mobile Number</label>
+            <input type="tel" class="form-control" id="new_mobile_in" placeholder="Enter 10-digit mobile" maxlength="10">
+          </div>
+          <div id="mobileOtpStep" style="display:none;" class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Enter 6-Digit OTP</label>
+            <input type="text" class="form-control otp-input-big" id="mobile_otp_in" placeholder="• • • • • •" maxlength="6">
+            <button class="btn btn-primary w-100 mt-3 fw-semibold" onclick="verifyMobileUpdateOtp()"><i class="fas fa-check me-1"></i>Verify &amp; Update Mobile</button>
+          </div>
+          <button class="btn btn-primary w-100 fw-semibold" id="btnReqMobileOtp" onclick="reqMobileUpdateOtp()"><i class="fas fa-paper-plane me-1"></i>Send OTP to New Mobile</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Update Email -->
+  <div class="modal fade" id="modalUpdateEmail" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h6 class="modal-title fw-bold"><i class="fas fa-envelope me-2 text-primary"></i>Update Email Address (M1)</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="emailAlert" class="alert" style="display:none;"></div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">New Email Address</label>
+            <input type="email" class="form-control" id="new_email_in" placeholder="name@domain.com">
+          </div>
+          <div id="emailOtpStep" style="display:none;" class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Enter 6-Digit OTP</label>
+            <input type="text" class="form-control otp-input-big" id="email_otp_in" placeholder="• • • • • •" maxlength="6">
+            <button class="btn btn-primary w-100 mt-3 fw-semibold" onclick="verifyEmailUpdateOtp()"><i class="fas fa-check me-1"></i>Verify &amp; Update Email</button>
+          </div>
+          <button class="btn btn-primary w-100 fw-semibold" id="btnReqEmailOtp" onclick="reqEmailUpdateOtp()"><i class="fas fa-paper-plane me-1"></i>Send OTP to New Email</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Deactivate ABHA -->
+  <div class="modal fade" id="modalDeactivateAbha" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h6 class="modal-title fw-bold text-danger"><i class="fas fa-user-slash me-2"></i>Deactivate ABHA Account (M1)</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:.85rem;color:#4b5563;">
+            Deactivating your ABHA account stops active health information sharing and hides your profile from the ABDM registry. You can reactivate your account at any time by logging in with OTP.
+          </p>
+          <div class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Reason for Deactivation</label>
+            <select class="form-select" id="deactivate_reason_in">
+              <option value="Temporary pause">Temporary pause / personal choice</option>
+              <option value="Created duplicate ABHA">Created duplicate ABHA account</option>
+              <option value="Privacy preference">Privacy preference</option>
+              <option value="Other">Other reason</option>
+            </select>
+          </div>
+          <button class="btn btn-danger w-100 fw-semibold" onclick="confirmDeactivateAbha()"><i class="fas fa-exclamation-triangle me-1"></i>Confirm Deactivation</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 
 </html>

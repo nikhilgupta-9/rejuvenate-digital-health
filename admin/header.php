@@ -135,6 +135,20 @@ if ($is_admin && isset($conn)) {
         </li>
 
         <li>
+            <a class="has-arrow" href="#"><i class="fas fa-pills"></i> <span>Pharmacy</span></a>
+            <ul>
+                <li><a href="pharmacy-orders.php">Pharmacy Orders</a></li>
+            </ul>
+        </li>
+
+        <li>
+            <a class="has-arrow" href="#"><i class="fas fa-vial"></i> <span>Diagnostics</span></a>
+            <ul>
+                <li><a href="lab-bookings.php">Lab Bookings</a></li>
+            </ul>
+        </li>
+
+        <li>
             <a class="has-arrow" href="#"><i class="fas fa-user-md"></i> <span>Doctors</span></a>
             <ul>
                 <li><a href="doctors-list.php">All Doctors</a></li>
@@ -177,6 +191,7 @@ if ($is_admin && isset($conn)) {
                 <li><a href="abha-management.php?portal=school"><i class="fas fa-school me-1"></i> School ABHA</a></li>
                 <li><a href="abha-management.php?tab=requests"><i class="fas fa-inbox me-1"></i> Link Requests <?php if ($abha_pend > 0): ?><span class="badge bg-danger ms-1" style="font-size:9px;"><?= $abha_pend ?></span><?php endif; ?></a></li>
                 <li><a href="hip-linking.php"><i class="fas fa-link me-1"></i> HIP Care-Context Linking</a></li>
+                <li><a href="scan-share.php"><i class="fas fa-qrcode me-1"></i> Scan &amp; Share (M3)</a></li>
             </ul>
         </li>
         <?php endif; ?>

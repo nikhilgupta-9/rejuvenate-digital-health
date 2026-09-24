@@ -339,17 +339,44 @@ $abdm_on    = ABDM_CONFIGURED;
         const off = ['DEACTIVATED', 'DELETED', 'INACTIVE'].includes((a.status || '').toUpperCase());
         const d = document.createElement('div');
         d.className = 'acct';
+        const meta = [a.gender, a.yearOfBirth ? 'YOB: ' + a.yearOfBirth : ''].filter(Boolean).join(' · ');
         d.innerHTML =
-          '<div class="nm">' + esc(a.name || '—') +
-          ' <span class="badge-st ' + (off ? 'off' : 'on') + '">' + esc(a.status || 'ACTIVE') + '</span></div>' +
-          '<div class="row-x"><span>ABHA Number</span><span class="mono">' + esc(a.abha_number || '—') + '</span></div>' +
-          (a.abha_address ? '<div class="row-x"><span>ABHA Address</span><span class="mono">' + esc(a.abha_address) + '</span></div>' : '');
+          '<div class="d-flex justify-content-between align-items-center mb-1">' +
+            '<div class="nm"><i class="fas fa-user-circle me-1" style="color:var(--primary);"></i>' + esc(a.name || 'ABHA Holder') + '</div>' +
+            '<span class="badge-st ' + (off ? 'off' : 'on') + '">' + esc(a.status || 'ACTIVE') + '</span>' +
+          '</div>' +
+          '<div class="row-x align-items-center"><span>ABHA Number</span>' +
+            '<span class="mono fw-bold" style="color:var(--ab);">' + esc(a.abha_number || '—') +
+              (a.abha_number ? ' <button type="button" class="btn btn-sm p-0 ms-1 text-muted" title="Copy ABHA Number" onclick="copyAbha(this, \'' + esc(a.abha_number) + '\')"><i class="far fa-copy"></i></button>' : '') +
+            '</span>' +
+          '</div>' +
+          (a.abha_address ? '<div class="row-x"><span>ABHA Address</span><span class="mono" style="color:var(--primary);">' + esc(a.abha_address) + '</span></div>' : '') +
+          (meta ? '<div class="row-x" style="font-size:.74rem;color:#6b7280;"><span>Profile</span><span>' + esc(meta) + '</span></div>' : '') +
+          (a.abha_number ? '<div class="mt-2 pt-2 border-top"><a href="' + BASE + 'login.php" class="btn btn-sm w-100" style="background:#f0fdf4;color:#00875a;font-weight:600;border:1px solid #86efac;font-size:.8rem;"><i class="fas fa-sign-in-alt me-1"></i>Login with this ABHA</a></div>' : '');
         box.appendChild(d);
       });
 
       document.getElementById('faPlural').textContent = list.length === 1 ? '' : 's';
       document.getElementById('faStep2').style.display = 'none';
       document.getElementById('faStep3').style.display = 'block';
+    }
+
+    function copyAbha(btn, text) {
+      if (!navigator.clipboard) {
+        const t = document.createElement('textarea');
+        t.value = text;
+        document.body.appendChild(t);
+        t.select();
+        document.execCommand('copy');
+        document.body.removeChild(t);
+      } else {
+        navigator.clipboard.writeText(text);
+      }
+      if (btn) {
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check text-success"></i>';
+        setTimeout(() => btn.innerHTML = orig, 1800);
+      }
     }
 
     function faReset() {

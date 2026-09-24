@@ -4,9 +4,6 @@ require_once __DIR__ . '/auth/guard.php';
 $jwt_doctor = doctor_jwt_guard();
 $doctor_id  = (int) ($jwt_doctor['sub'] ?? $jwt_doctor['doctor_id'] ?? 0);
 
-$sidebar_active = 'billing';
-require_once __DIR__ . '/inc/sidebar.php';
-
 $sub_stmt = $conn->prepare("
     SELECT ds.*, dp.name AS plan_name, dp.billing_cycle_days
     FROM doctor_subscriptions ds
@@ -34,6 +31,7 @@ $status_badge = [
   <title>Payment History | REJUVENATE Doctor Portal</title>
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
   <style>
     .bg-ok { background: #dcfce7; color: #166534; }
     .bg-pending { background: #fef3c7; color: #92400e; }
@@ -42,7 +40,7 @@ $status_badge = [
   </style>
 </head>
 <body>
-<?php include(__DIR__ . "/inc/sidebar.php"); ?>
+<?php $sidebar_active = 'billing'; include(__DIR__ . "/inc/sidebar.php"); ?>
 
 <main class="doctor-content">
   <p class="section-title">Payment History</p>

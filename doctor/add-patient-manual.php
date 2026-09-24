@@ -4,8 +4,6 @@ require_once dirname(__DIR__) . '/config/connect.php';
 require_once dirname(__DIR__) . '/util/otp-widget.php';
 $payload = doctor_jwt_guard();
 $doctor_id = (int) ($payload['doctor_id'] ?? $payload['sub'] ?? 0);
-$sidebar_active = 'patients';
-require_once __DIR__ . '/inc/sidebar.php';
 $prefill_mobile = preg_replace('/\D/', '', ($_GET['mobile'] ?? ''));
 ?>
 <!DOCTYPE html>
@@ -195,6 +193,10 @@ $prefill_mobile = preg_replace('/\D/', '', ($_GET['mobile'] ?? ''));
 </head>
 
 <body>
+  <?php
+  $sidebar_active = 'add-patient';
+  include __DIR__ . '/inc/sidebar.php';
+  ?>
   <main class="doctor-content">
 
     <div class="ap-head">

@@ -91,9 +91,6 @@ if ($doc_check->num_rows > 0) {
   $doc_stmt->execute();
   $docs = $doc_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 }
-
-$sidebar_active = 'patients';
-require_once __DIR__ . '/inc/sidebar.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -104,8 +101,10 @@ require_once __DIR__ . '/inc/sidebar.php';
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title><?= htmlspecialchars($full_name) ?> — Patient Profile</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/style.css">
   <style>
     /* Profile header */
@@ -316,6 +315,10 @@ require_once __DIR__ . '/inc/sidebar.php';
 </head>
 
 <body>
+  <?php
+  $sidebar_active = 'patients';
+  include __DIR__ . '/inc/sidebar.php';
+  ?>
   <main class="doctor-content">
 
     <?php if ($just_added): ?>
@@ -581,7 +584,10 @@ require_once __DIR__ . '/inc/sidebar.php';
       <div class="d-flex justify-content-between align-items-center mb-3">
         <div style="font-size:.84rem;color:#374151;font-weight:600;" id="docCountLabel"><?= count($docs) ?> document(s)
         </div>
-        <div class="docs-toolbar mb-0">
+        <div class="docs-toolbar mb-0 d-flex align-items-center">
+          <a href="patient-documents.php?patient_id=<?= (int)$patient_id ?>" class="btn btn-sm btn-outline-primary mr-2" style="font-size:.75rem;padding:3px 10px;border-radius:8px;" title="Full ABDM Documents Repository">
+            <i class="fa fa-folder-open mr-1"></i> Full Repository
+          </a>
           <button type="button" title="Sort by date" onclick="toggleDocSort()"><i class="fa fa-sort" id="sortIcon"></i></button>
           <button type="button" title="Upload document" onclick="toggleUploadForm()"><i class="fa fa-plus"></i></button>
         </div>

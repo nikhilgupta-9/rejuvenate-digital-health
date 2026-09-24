@@ -86,6 +86,9 @@ $logo    = get_header_logo();
       <div class="col-xxl-2 col-xl-2 col-lg-3 col-md-6 col-sm-6">
         <h4 class="rjv-footer-heading">Our Services</h4>
         <ul class="rjv-footer-links">
+          <li><a href="<?= BASE_URL ?>book-your-medicine.php"><i class="fas fa-pills me-1"></i>Pharmacy &amp; Medicines</a></li>
+          <li><a href="<?= BASE_URL ?>lab-tests.php"><i class="fas fa-vial me-1"></i>Lab &amp; Diagnostics</a></li>
+          <li><a href="<?= BASE_URL ?>user/my-abha.php"><i class="fas fa-id-card me-1"></i>ABHA Health Card</a></li>
           <?php foreach (get_online_book(5) as $svc): ?>
             <li><a href="<?= BASE_URL ?>online-services/<?= $svc['slug_url'] ?>"><i class="fas fa-chevron-right"></i><?= htmlspecialchars($svc['pro_name']) ?></a></li>
           <?php endforeach; ?>

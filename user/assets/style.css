@@ -274,7 +274,9 @@
 
 .card-primary { background: #0C74C5; }
 .card-accent  { background: #02c9b8; }
+.card-blue    { background: #2563eb; }
 .card-blue2   { background: #0a5fa0; }
+.card-teal    { background: #0d9488; }
 .card-teal2   { background: #01a89a; }
 .card-green   { background: #198754; }
 .card-purple  { background: #6f42c1; }
@@ -591,6 +593,8 @@ table.ap-table tr.is-today td { background: #f0f7ff; }
 .bg-orange { background: #e07e18; }
 .bg-green  { background: #198754; }
 .bg-purple { background: #6f42c1; }
+.bg-blue   { background: #2563eb; }
+.bg-teal   { background: #0d9488; }
 
 .table-responsive {
   overflow-x: auto;

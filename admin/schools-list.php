@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/db-conn.php';
 require_once __DIR__ . '/auth/guard.php';
+require_once dirname(__DIR__) . '/lib/Security.php';
 admin_jwt_guard();
 
 $total    = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM schools"))['c'];
@@ -229,6 +230,7 @@ $schools_result = mysqli_query($conn, "SELECT s.*,
                                 This will also delete its admin account, and <strong>all</strong> teachers, students, staff and their health records. This cannot be undone.
                             </div>
                             <input type="hidden" name="id" id="delSchoolId">
+                            <input type="hidden" name="csrf_token" value="<?= Security::csrfToken() ?>">
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>

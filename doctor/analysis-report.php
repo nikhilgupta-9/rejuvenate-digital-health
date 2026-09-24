@@ -82,9 +82,6 @@ $tokens_yesterday = (int) $stmt->get_result()->fetch_assoc()['c'];
 // -- Red Flag Document: not tracked yet --
 $red_flag_total     = 0;
 $red_flag_yesterday = 0;
-
-$sidebar_active = 'analysis-report';
-require_once __DIR__ . '/inc/sidebar.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -165,6 +162,10 @@ require_once __DIR__ . '/inc/sidebar.php';
 </head>
 
 <body>
+    <?php
+    $sidebar_active = 'analysis-report';
+    include __DIR__ . '/inc/sidebar.php';
+    ?>
     <main class="doctor-content">
         <div class="report-card">
             <div class="text-center">

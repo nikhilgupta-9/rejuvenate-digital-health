@@ -34,23 +34,27 @@ while ($row = $result->fetch_assoc()) {
     }
     $appointments_by_date[$date][] = $row;
 }
-
-$sidebar_active = 'reports';
-require_once __DIR__ . '/inc/sidebar.php';
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <?php if (!function_exists('get_favicon')) { require_once __DIR__ . '/../util/function.php'; } ?>
 <head>
     <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
-    <title>Appointments Calendar</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Appointments Calendar — REJUVENATE Doctor Portal</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css">
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
 </head>
 <body>
+    <?php
+    $sidebar_active = 'reports';
+    include __DIR__ . '/inc/sidebar.php';
+    ?>
     <main class="doctor-content">
         <div id="calendar"></div>
     </main>

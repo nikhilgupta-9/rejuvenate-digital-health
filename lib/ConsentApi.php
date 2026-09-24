@@ -111,6 +111,63 @@ class ConsentApi
     }
 
     /* ═══════════════════════════════════════════════════════════════
+       HEALTH-INFORMATION TRANSFER NOTIFY  (Phase B)
+         POST {base}/data-flow/v3/health-information/notify
+    ═══════════════════════════════════════════════════════════════ */
+
+    public function hiNotify(
+        string $consentId,
+        string $transactionId,
+        string $sessionStatus = 'TRANSFERRED',
+        array $careContextStatuses = [],
+        ?array $error = null
+    ): array {
+        [$token, $err] = $this->token();
+        if ($err !== null) return $this->fail($err);
+
+        $statusResponses = [];
+        foreach ($careContextStatuses as $item) {
+            $statusResponses[] = [
+                'careContextReference' => (string)($item['careContextReference'] ?? $item['ref'] ?? ''),
+                'hiStatus'             => (string)($item['hiStatus'] ?? 'DELIVERED'),
+                'description'          => (string)($item['description'] ?? 'Transferred successfully'),
+            ];
+        }
+
+        $body = [
+            'notification' => [
+                'consentId'          => $consentId,
+                'transactionId'      => $transactionId,
+                'doneAt'             => $this->timestamp(),
+                'notifier'           => [
+                    'type' => 'HIP',
+                    'id'   => $this->hipId,
+                ],
+                'statusNotification' => [
+                    'sessionStatus'   => $sessionStatus,
+                    'hipId'           => $this->hipId,
+                    'statusResponses' => $statusResponses,
+                ]
+            ]
+        ];
+
+        if ($error !== null) {
+            $body['error'] = [
+                'code'    => (string)($error['code'] ?? 'ABDM-9999'),
+                'message' => (string)($error['message'] ?? 'error'),
+            ];
+        }
+
+        $r = $this->http('POST', $this->base . '/data-flow/v3/health-information/notify', $body, $token);
+        if (!$this->is2xx($r)) {
+            $this->logSafe('hi notify failed', ['transactionId' => $transactionId, 'http' => $r['_http'], 'curl' => $r['_curlErr']]);
+            return $this->fail($this->extractError($r, 'Could not send health-information transfer notification.'));
+        }
+        $this->logSafe('hi notify accepted', ['transactionId' => $transactionId, 'http' => $r['_http']]);
+        return $this->ok(['transactionId' => $transactionId, 'accepted' => true]);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
        PRIVATE — transport / helpers (mirror lib/HipApi.php)
     ═══════════════════════════════════════════════════════════════ */
 

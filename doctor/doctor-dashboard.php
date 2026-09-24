@@ -583,7 +583,7 @@ $earnings = $earnings_result->fetch_assoc();
       </div>
       <div class="col-6 col-sm-4 col-xl-2">
         <div class="stat-card card-teal2">
-          <i class="fa fa-file-text-o bg-icon"></i>
+          <i class="fa-solid fa-file-lines bg-icon"></i>
           <div class="num"><?= $stats['total_documents'] ?? 0 ?></div>
           <div class="lbl">Documents</div>
         </div>
@@ -600,28 +600,30 @@ $earnings = $earnings_result->fetch_assoc();
     <!-- ── Quick Actions ── -->
     <p class="section-title">Quick Actions</p>
     <div class="row g-3">
-      <?php
-      $actions = [
-        [BASE_URL . 'doctor/my-patients.php',    'bg-primary-theme text-white',  'fa fa-heartbeat',   'My Patients'],
-        [BASE_URL . 'doctor/appointments.php',   'bg-accent-theme text-white',   'fa fa-calendar',    'Appointments'],
-        [BASE_URL . 'doctor/appointments.php?date=' . date('Y-m-d'), 'bg-orange text-white', 'fa fa-clock', "Today's"],
-        [BASE_URL . 'doctor/patient-form.php',   'bg-green text-white',          'fa fa-file', 'Patient Form'],
-        [BASE_URL . 'doctor/appointments-calendar.php', 'bg-purple text-white',  'fa fa-chart-area',   'Reports'],
-        [BASE_URL . 'doctor/change-password.php', 'bg-secondary text-white',      'fa fa-cog',         'Settings'],
-      ];
-      foreach ($actions as [$href, $cls, $icon, $title]):
-      ?>
-        <div class="col-6 col-sm-4 col-md-3 col-xl-2">
-          <a href="<?= $href ?>" class="quick-action">
-            <div style="width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;"
-              class="<?= $cls ?>">
-              <i class="<?= $icon ?>" style="font-size:1.1rem;"></i>
-            </div>
-            <span><?= $title ?></span>
-          </a>
+  <?php
+  $actions = [
+    [BASE_URL . 'doctor/patient-form.php', 'bg-primary-theme text-white', 'fa-solid fa-pen-to-square', 'OPD Rx (Parche)'],
+    [BASE_URL . 'doctor/select-opd-patient.php', 'bg-accent-theme text-white', 'fa-solid fa-file-lines', 'Generate OPD Slip'],
+    [BASE_URL . 'doctor/add-patient.php', 'bg-green text-white', 'fa-solid fa-user-plus', 'Onboard ABHA (M1)'],
+    [BASE_URL . 'doctor/patient-documents.php', 'bg-dark text-white', 'fa-solid fa-flask', 'Lab & Diagnostics'],
+    [BASE_URL . 'doctor/school-students.php', 'bg-purple text-white', 'fa-solid fa-graduation-cap', 'School Health'],
+    [BASE_URL . 'doctor/appointments.php?date=' . date('Y-m-d'), 'bg-orange text-white', 'fa-solid fa-clock', "Today's Consults"],
+  ];
+
+  foreach ($actions as [$href, $cls, $icon, $title]):
+  ?>
+    <div class="col-6 col-sm-4 col-md-3 col-xl-2">
+      <a href="<?= $href ?>" class="quick-action">
+        <div
+          style="width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;"
+          class="<?= $cls ?>">
+          <i class="<?= $icon ?>" style="font-size:1.1rem;"></i>
         </div>
-      <?php endforeach; ?>
+        <span><?= $title ?></span>
+      </a>
     </div>
+  <?php endforeach; ?>
+</div>
 
     <!-- ── Membership & Referrals ── -->
     <p class="section-title mt-4">Membership &amp; Referrals</p>

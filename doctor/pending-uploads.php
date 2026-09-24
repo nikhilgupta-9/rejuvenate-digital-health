@@ -25,9 +25,6 @@ $p_stmt = $conn->prepare("
 $p_stmt->bind_param('i', $doctor_id);
 $p_stmt->execute();
 $pending_patients = $p_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-
-$sidebar_active = 'pending-uploads';
-require_once __DIR__ . '/inc/sidebar.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -36,9 +33,10 @@ require_once __DIR__ . '/inc/sidebar.php';
     <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pending Uploads — Rejuvenate</title>
+<title>ABHA Compliance Queue — REJUVENATE</title>
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
 <style>
 .info-section{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.05);padding:18px 20px;margin-bottom:16px;}
 .section-title{font-size:.85rem;font-weight:700;color:#374151;margin-bottom:12px;}
@@ -58,6 +56,10 @@ require_once __DIR__ . '/inc/sidebar.php';
 </style>
 </head>
 <body>
+<?php
+$sidebar_active = 'pending-uploads';
+include __DIR__ . '/inc/sidebar.php';
+?>
 <main class="doctor-content">
 
   <div class="info-section">

@@ -5,7 +5,7 @@ include_once "../util/function.php";
 
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header("Location: login.php");
+    header("Location: " . BASE_URL . "login.php");
     exit();
 }
 
@@ -211,51 +211,62 @@ if (isset($_GET['set_default'])) {
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
     <style>
-        .error { color: #dc3545; font-size: 0.875em; margin-top: 0.25rem; }
-        .is-invalid { border-color: #dc3545; }
-        .alert { border-radius: 8px; }
-        .profile-card { padding: 2rem; }
-        .form-label { font-weight: 500; color: #333; margin-bottom: 0.5rem; }
+        .error { color: #dc3545; font-size: 0.85em; margin-top: 0.25rem; }
+        .is-invalid { border-color: #dc3545 !important; }
+        .form-label { font-weight: 600; color: #374151; font-size: .84rem; margin-bottom: 0.4rem; }
         .address-card { 
-            border: 1px solid #e9ecef; 
-            border-radius: 10px; 
-            padding: 1.5rem; 
-            margin-bottom: 1.5rem;
+            border: 1px solid #e5e7eb; 
+            border-radius: 12px; 
+            padding: 1.25rem; 
+            margin-bottom: 1.25rem;
             background: white;
+            transition: all .2s;
+        }
+        .address-card:hover {
+            box-shadow: 0 4px 14px rgba(12,116,197,.08);
         }
         .address-card.default { 
-            border-color: #2c5aa0; 
-            background: #f8f9fa;
+            border-color: var(--primary); 
+            background: #f8fbff;
         }
         .address-type-badge {
-            background: #2c5aa0;
+            background: var(--primary);
             color: white;
             padding: 0.25rem 0.75rem;
             border-radius: 15px;
-            font-size: 0.75rem;
+            font-size: 0.72rem;
+            font-weight: 600;
             text-transform: capitalize;
         }
         .default-badge {
-            background: #28a745;
+            background: #10b981;
             color: white;
             padding: 0.25rem 0.75rem;
             border-radius: 15px;
-            font-size: 0.75rem;
+            font-size: 0.72rem;
+            font-weight: 600;
             margin-left: 0.5rem;
         }
         .address-actions .btn {
             margin-right: 0.5rem;
             margin-bottom: 0.5rem;
         }
-        .sidebar { position: sticky; top: 20px; }
     </style>
 </head>
 
-<body>
+<body class="patient-body">
     <?php $sidebar_active = 'address'; include("sidebar.php"); ?>
     <main class="patient-content">
-                    <div class="profile-card shadow">
-                        <h4 class="mb-4">Manage Address</h4>
+        <div class="profile-card shadow-sm border-0">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+                <div>
+                    <h1 class="ap-h mb-1"><i class="fa fa-map-marker me-2 text-primary-theme"></i>Manage Delivery Addresses</h1>
+                    <div class="ap-sub">Saved shipping addresses for medicine deliveries, lab sample collection, and supplements</div>
+                </div>
+                <a href="<?= BASE_URL ?>user/user-dashboard.php" class="btn btn-outline-secondary btn-sm">
+                    <i class="fa fa-arrow-left me-1"></i> Back to Dashboard
+                </a>
+            </div>
                         
                         <?php if ($success_message): ?>
                             <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -349,7 +360,9 @@ if (isset($_GET['set_default'])) {
                                     </div>
 
                                     <div class="col-12 mt-3">
-                                        <button type="submit" class="btn btn-warning">Save Address</button>
+                                        <button type="submit" class="btn btn-primary fw-bold px-4">
+                                            <i class="fa fa-save me-1"></i> Save Address
+                                        </button>
                                     </div>
                                 </div>
                             </form>

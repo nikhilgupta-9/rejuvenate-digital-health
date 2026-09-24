@@ -596,7 +596,7 @@ $abdm_on = ABDM_CONFIGURED;
                   <input type="text" class="form-control" id="otp_mobile"
                     placeholder="10-digit mobile number" maxlength="10" inputmode="numeric">
                 </div>
-                <small class="text-muted">OTP will be sent to your registered email (SMS coming soon)</small>
+                <small class="text-muted"><i class="fab fa-whatsapp text-success me-1"></i>OTP will be sent to your WhatsApp number & registered email</small>
               </div>
               <button class="btn btn-primary w-100 py-2 fw-semibold" style="border-radius:10px;" onclick="sendMobileOtp()">
                 <i class="fas fa-paper-plane me-2"></i>Send OTP

@@ -50,9 +50,6 @@ foreach ($requests as $r) {
     break;
   }
 }
-
-$sidebar_active = 'delete-account';
-require_once __DIR__ . '/inc/sidebar.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -138,6 +135,10 @@ require_once __DIR__ . '/inc/sidebar.php';
 </head>
 
 <body>
+  <?php
+  $sidebar_active = 'delete-account';
+  include __DIR__ . '/inc/sidebar.php';
+  ?>
   <main class="doctor-content">
 
     <div class="info-section">

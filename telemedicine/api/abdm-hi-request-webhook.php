@@ -112,6 +112,13 @@ try {
 
     hi_request_ack($incomingRequestId, $txnId, $ok, $ok ? null : ['code' => 'ABDM-9999', 'message' => 'could not record request']);
 
+    if ($ok) {
+        // Trigger Phase B Push Worker in background
+        $workerScript = escapeshellarg(dirname(__DIR__, 2) . '/scripts/abdm-hi-push-worker.php');
+        $phpBin = PHP_BINARY ?: 'php';
+        @exec("{$phpBin} {$workerScript} > /dev/null 2>&1 &");
+    }
+
 } catch (Throwable $e) {
     error_log('[abdm-hi-request-webhook] processing error: ' . $e->getMessage());
 }

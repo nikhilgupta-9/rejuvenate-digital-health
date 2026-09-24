@@ -67,9 +67,6 @@ function ua_short(string $ua): string
     elseif (stripos($ua, 'Linux') !== false) $o = 'Linux';
     return trim($b . ($o ? ' · ' . $o : ''));
 }
-
-$sidebar_active = 'settings';
-require_once __DIR__ . '/inc/sidebar.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -81,6 +78,7 @@ require_once __DIR__ . '/inc/sidebar.php';
 <title>Account Settings — REJUVENATE Doctor Portal</title>
 <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+<link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
 <style>
     .as-head h1{font-size:1.2rem;font-weight:800;color:#1f2937;margin:0;}
     .as-head .sub{font-size:.82rem;color:#9ca3af;}
@@ -99,6 +97,10 @@ require_once __DIR__ . '/inc/sidebar.php';
 </style>
 </head>
 <body>
+<?php
+$sidebar_active = 'settings';
+include __DIR__ . '/inc/sidebar.php';
+?>
 <main class="doctor-content">
 
     <div class="as-head mb-3">

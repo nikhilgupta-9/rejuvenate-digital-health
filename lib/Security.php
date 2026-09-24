@@ -202,6 +202,27 @@ class Security
         return password_needs_rehash($hash, PASSWORD_BCRYPT, ['cost' => self::BCRYPT_COST]);
     }
 
+    /**
+     * Validate password complexity (ABDM / healthcare requirement: 8+ chars, uppercase, number, symbol).
+     * Returns error message string if invalid, or null if strong.
+     */
+    public static function validatePasswordStrength(string $password): ?string
+    {
+        if (strlen($password) < 8) {
+            return "Password must be at least 8 characters long.";
+        }
+        if (!preg_match('/[A-Z]/', $password)) {
+            return "Password must contain at least one uppercase letter.";
+        }
+        if (!preg_match('/[0-9]/', $password)) {
+            return "Password must contain at least one number.";
+        }
+        if (!preg_match('/[^a-zA-Z0-9]/', $password)) {
+            return "Password must contain at least one special character.";
+        }
+        return null;
+    }
+
     /* ═══════════════════════════════════════════════
        TOKEN LIFETIME (ABDM Guideline)
        Admin tokens: max 12 hours.

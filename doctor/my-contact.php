@@ -186,9 +186,6 @@ $checks = [
 $done  = count(array_filter($checks));
 $total = count($checks);
 $pct   = $total ? round($done / $total * 100) : 0;
-
-$sidebar_active = 'contact';
-require_once __DIR__ . '/inc/sidebar.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -237,6 +234,10 @@ require_once __DIR__ . '/inc/sidebar.php';
 </style>
 </head>
 <body>
+<?php
+$sidebar_active = 'contact';
+include __DIR__ . '/inc/sidebar.php';
+?>
 <main class="doctor-content">
 
     <div class="mp-head">
@@ -276,12 +277,35 @@ require_once __DIR__ . '/inc/sidebar.php';
                 <div class="form-section-title"><i class="fa fa-id-card mr-2" style="color:#0C74C5;"></i>Identity &amp; Photo</div>
                 <input type="file" name="profile_image" id="mpPhotoInput" accept="image/*" hidden onchange="mpPreview(this)">
                 <div class="text-center mb-3">
-                    <div class="mp-photo-wrap" onclick="document.getElementById('mpPhotoInput').click()">
-                        <img id="mpPhotoPreview" class="mp-photo" src="<?= BASE_URL . htmlspecialchars($photo) ?>" alt="Profile photo">
-                        <span class="mp-photo-edit"><i class="fa fa-camera"></i></span>
-                    </div>
-                    <div class="text-muted mt-2" style="font-size:.72rem;">Click to change · JPG / PNG / WEBP · max 2 MB</div>
-                </div>
+    <div class="mp-photo-wrap" onclick="document.getElementById('mpPhotoInput').click()">
+
+        <img
+            id="mpPhotoPreview"
+            class="mp-photo"
+            src="<?= BASE_URL . htmlspecialchars($photo) ?>"
+            alt="Profile photo"
+            onerror="this.style.display='none'; document.getElementById('mpPhotoFallback').style.display='flex';"
+        >
+
+        <!-- Show when image path is invalid -->
+        <div
+            id="mpPhotoFallback"
+            class="mp-photo"
+            style="<?= empty($photo) ? 'display:flex;' : 'display:none;' ?> align-items:center; justify-content:center;"
+        >
+            <i class="fa-solid fa-camera" style="font-size:2rem;"></i>
+        </div>
+
+        <span class="mp-photo-edit">
+            <i class="fa-solid fa-camera"></i>
+        </span>
+
+    </div>
+
+    <div class="text-muted mt-2" style="font-size:.72rem;">
+        Click to change · JPG / PNG / WEBP · max 2 MB
+    </div>
+</div>
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label-sm">Full Name <span class="text-danger">*</span></label>

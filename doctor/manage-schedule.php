@@ -99,9 +99,6 @@ function slot_count(string $start, string $end, int $dur): int
     }
     return $n;
 }
-
-$sidebar_active = 'schedule';
-require_once __DIR__ . '/inc/sidebar.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -135,6 +132,10 @@ require_once __DIR__ . '/inc/sidebar.php';
 </style>
 </head>
 <body>
+<?php
+$sidebar_active = 'schedule';
+include __DIR__ . '/inc/sidebar.php';
+?>
 <main class="doctor-content">
 
     <div class="ms-head mb-3">

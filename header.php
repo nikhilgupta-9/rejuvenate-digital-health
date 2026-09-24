@@ -5,6 +5,7 @@ include_once "util/function.php";
 $contact = contact_us();
 $logo = get_header_logo();
 ?>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 <button id="back-top" class="back-to-top">
     <i class="fas fa-long-arrow-up"></i>
 </button>
@@ -32,6 +33,9 @@ $logo = get_header_logo();
                         <a href="<?= BASE_URL ?>"><i class="fas fa-home"></i>Home</a>
                         <a href="<?= BASE_URL ?>book-appointment/"><i class="fas fa-calendar-check"></i>Book Appointment</a>
                         <a href="<?= BASE_URL ?>online-clinic/"><i class="fas fa-video"></i>Online Clinic</a>
+                        <a href="<?= BASE_URL ?>book-your-medicine.php"><i class="fas fa-pills"></i>Pharmacy / Medicines</a>
+                        <a href="<?= BASE_URL ?>lab-tests.php"><i class="fas fa-vial"></i>Lab Tests &amp; Diagnostics</a>
+                        <a href="<?= BASE_URL ?>user/my-abha.php"><i class="fas fa-id-card"></i>ABHA Health ID</a>
                         <a href="<?= BASE_URL ?>doctor-network/"><i class="fas fa-user-md"></i>Doctor Network</a>
                         <a href="<?= BASE_URL ?>blogs/"><i class="fas fa-newspaper"></i>Blog</a>
                         <a href="<?= BASE_URL ?>school-program.php"><i class="fas fa-school"></i>School Programs</a>
@@ -71,7 +75,7 @@ $logo = get_header_logo();
         <div class="header-top-wrapper">
             <div class="top-right">
                 <div class="abba-and-san">
-                    <a href="https://abha.abdm.gov.in/abha/v3/login" target="_blank" class="btn btn-topabha">Abha Card</a>
+                    <a href="<?= BASE_URL ?>user/my-abha.php" class="btn btn-topabha"><i class="fas fa-id-card me-1"></i>ABHA Card</a>
                     <a href="https://esanjeevani.mohfw.gov.in/#/patient/signin" target="_blank" class="btn btn-esanjeevni">E-Sanjeevani</a>
                 </div>
             </div>
@@ -300,7 +304,7 @@ $logo = get_header_logo();
                                             ?>
                                                     <li><a href="<?= BASE_URL ?>doctor-profile/<?= $doc['slug_url'] ?>"><?= $doc['name'] ?></a></li>
                                             <?php
-                                                } else {
+                                                 } else {
                                             ?>
                                                     <li><a href="<?= BASE_URL ?>doctor-profile/<?= $doc['slug_url'] ?>">Dr. <?= $doc['name'] ?></a></li>
                                             <?php

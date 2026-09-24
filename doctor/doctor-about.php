@@ -117,9 +117,6 @@ if ($doctor['experience_years'] >= 20) {
 // Get doctor's profile image or default
 $doctor_profile_image = !empty($doctor['profile_image']) ?
   $doctor['profile_image'] : 'assets/img/dummy.png';
-
-$sidebar_active = 'about';
-require_once __DIR__ . '/inc/sidebar.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -389,6 +386,10 @@ require_once __DIR__ . '/inc/sidebar.php';
 </head>
 
 <body>
+  <?php
+  $sidebar_active = 'about';
+  include __DIR__ . '/inc/sidebar.php';
+  ?>
   <main class="doctor-content">
 
     <!-- Profile Header -->

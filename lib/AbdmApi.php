@@ -607,12 +607,23 @@ class AbdmApi
     public function getAbhaCard(string $xToken): string
     {
         $gToken = $this->getAccessToken();
-        return $this->rawPostBinary(
+        // 1. Try v3 POST /profile/account/getAbhaCard
+        $bytes = $this->rawPostBinary(
             $this->base . '/profile/account/getAbhaCard',
             [],
             $gToken,
             ['X-token' => 'Bearer ' . $xToken, 'Accept' => 'image/png']
         );
+        if ($bytes && strlen($bytes) > 200 && substr($bytes, 0, 4) === "\x89PNG") {
+            return $bytes;
+        }
+        // 2. Fallback: try GET /profile/account/abha-card
+        $bytes = $this->rawGetBinary(
+            $this->base . '/profile/account/abha-card',
+            $gToken,
+            ['X-token' => 'Bearer ' . $xToken, 'Accept' => 'image/png']
+        );
+        return $bytes;
     }
 
     /**
@@ -622,12 +633,23 @@ class AbdmApi
     public function getAbhaCardPdf(string $xToken): string
     {
         $gToken = $this->getAccessToken();
-        return $this->rawPostBinary(
+        // 1. Try v3 POST /profile/account/getAbhaCard with Accept: application/pdf
+        $bytes = $this->rawPostBinary(
             $this->base . '/profile/account/getAbhaCard',
             [],
             $gToken,
             ['X-token' => 'Bearer ' . $xToken, 'Accept' => 'application/pdf']
         );
+        if ($bytes && strlen($bytes) > 200 && substr($bytes, 0, 4) === '%PDF') {
+            return $bytes;
+        }
+        // 2. Fallback: try GET /profile/account/abha-card
+        $bytes = $this->rawGetBinary(
+            $this->base . '/profile/account/abha-card',
+            $gToken,
+            ['X-token' => 'Bearer ' . $xToken, 'Accept' => 'application/pdf']
+        );
+        return $bytes;
     }
 
     /**
@@ -813,6 +835,144 @@ class AbdmApi
     }
 
     /* ═══════════════════════════════════════════════════════════════
+       10b. M1 SELF-SERVICE & ACCOUNT MANAGEMENT
+       GET  /profile/account/qrCode             → standalone QR code
+       POST /profile/account/request/otp        → request OTP for mobile/email update
+       POST /profile/account/change/mobile      → verify & change mobile
+       POST /profile/account/change/email       → verify & change email
+       POST /profile/account/deactivate         → reversible deactivation
+       POST /profile/account/reactivate         → account reactivation
+    ═══════════════════════════════════════════════════════════════ */
+
+    /**
+     * Download standalone ABHA QR Code (PNG/SVG binary).
+     */
+    public function getAbhaQrCode(string $xToken): string
+    {
+        $gToken = $this->getAccessToken();
+        return $this->rawGetBinary(
+            $this->base . '/profile/account/qrCode',
+            $gToken,
+            ['X-token' => 'Bearer ' . $xToken]
+        );
+    }
+
+    /**
+     * Request OTP to update mobile number on ABHA account.
+     */
+    public function requestMobileUpdateOtp(string $xToken, string $newMobile): array
+    {
+        $gToken = $this->getAccessToken();
+        return $this->rawPost(
+            $this->base . '/profile/account/request/otp',
+            [
+                'scope'     => ['mobile-verify'],
+                'loginHint' => 'mobile',
+                'loginId'   => $this->rsaEncrypt(preg_replace('/\D/', '', $newMobile)),
+                'otpSystem' => 'abdm'
+            ],
+            $gToken,
+            true,
+            ['X-token' => 'Bearer ' . $xToken]
+        );
+    }
+
+    /**
+     * Verify OTP and apply new mobile number to ABHA account.
+     */
+    public function verifyMobileUpdateOtp(string $xToken, string $otp, string $txnId): array
+    {
+        $gToken = $this->getAccessToken();
+        return $this->rawPost(
+            $this->base . '/profile/account/change/mobile',
+            [
+                'authData' => [
+                    'authMethods' => ['otp'],
+                    'otp' => [
+                        'txnId'    => $txnId,
+                        'otpValue' => $this->rsaEncrypt($otp)
+                    ]
+                ]
+            ],
+            $gToken,
+            true,
+            ['X-token' => 'Bearer ' . $xToken]
+        );
+    }
+
+    /**
+     * Request OTP to update email address on ABHA account.
+     */
+    public function requestEmailUpdateOtp(string $xToken, string $newEmail): array
+    {
+        $gToken = $this->getAccessToken();
+        return $this->rawPost(
+            $this->base . '/profile/account/request/otp',
+            [
+                'scope'     => ['email-verify'],
+                'loginHint' => 'email',
+                'loginId'   => $this->rsaEncrypt(trim($newEmail)),
+                'otpSystem' => 'abdm'
+            ],
+            $gToken,
+            true,
+            ['X-token' => 'Bearer ' . $xToken]
+        );
+    }
+
+    /**
+     * Verify OTP and apply new email address to ABHA account.
+     */
+    public function verifyEmailUpdateOtp(string $xToken, string $otp, string $txnId): array
+    {
+        $gToken = $this->getAccessToken();
+        return $this->rawPost(
+            $this->base . '/profile/account/change/email',
+            [
+                'authData' => [
+                    'authMethods' => ['otp'],
+                    'otp' => [
+                        'txnId'    => $txnId,
+                        'otpValue' => $this->rsaEncrypt($otp)
+                    ]
+                ]
+            ],
+            $gToken,
+            true,
+            ['X-token' => 'Bearer ' . $xToken]
+        );
+    }
+
+    /**
+     * Reversibly deactivate ABHA account (M1).
+     */
+    public function deactivateAccount(string $xToken, string $reason = ''): array
+    {
+        $gToken = $this->getAccessToken();
+        return $this->rawPost(
+            $this->base . '/profile/account/deactivate',
+            $reason ? ['reason' => $reason] : [],
+            $gToken,
+            true,
+            ['X-token' => 'Bearer ' . $xToken]
+        );
+    }
+
+    /**
+     * Reactivate deactivated ABHA account (M1).
+     */
+    public function reactivateAccount(string $txnId, string $otp): array
+    {
+        $gToken = $this->getAccessToken();
+        return $this->rawPost(
+            $this->base . '/profile/account/reactivate',
+            ['txnId' => $txnId, 'otp' => $this->rsaEncrypt($otp)],
+            $gToken,
+            true
+        );
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
        11. STATIC HELPERS
     ═══════════════════════════════════════════════════════════════ */
 
@@ -843,6 +1003,21 @@ class AbdmApi
         // X-token refresh — the ABHA session must be re-established with a fresh OTP.
         if (self::isXTokenExpired($res)) {
             return 'Your ABHA session has expired. Please start the ABHA login again.';
+        }
+
+        // Specific ABDM error codes
+        $errCode = $res['error']['code'] ?? ($res['code'] ?? ($res['details'][0]['code'] ?? ''));
+        if ($errCode === 'ABDM-1114') {
+            if (defined('ABDM_ENV') && ABDM_ENV === 'sandbox') {
+                return 'ABHA number not found in ABDM Sandbox registry. Note: Real production ABHAs do not exist in the Sandbox test database — to test, use the "Create New ABHA" tab or use Sandbox test data.';
+            }
+            return 'ABHA number not found in the ABDM registry. Please check the 14-digit number and try again.';
+        }
+        if ($errCode === 'ABDM-1115') {
+            return 'Login via Aadhaar OTP is not allowed for this account. Please select Mobile OTP instead.';
+        }
+        if ($errCode === 'ABDM-1102') {
+            return 'Mobile number verification is pending for this ABHA account in ABDM.';
         }
 
         // ABDM wraps errors in various structures — try each shape in order
@@ -1045,7 +1220,8 @@ class AbdmApi
     /** Full-URL POST — returns raw binary (for ABHA card image/PDF via v3 POST endpoint). */
     private function rawPostBinary(string $url, array $data, string $bearer = '', array $extra = []): string
     {
-        [$body] = $this->curlExec('POST', $url, json_encode($data), $bearer, $extra);
+        $payload = empty($data) ? '{}' : json_encode($data);
+        [$body] = $this->curlExec('POST', $url, $payload, $bearer, $extra);
         return $body;
     }
 
@@ -1085,19 +1261,23 @@ class AbdmApi
         array   $extraHeaders = [],
         bool    $v3Headers  = true
     ): array {
-        $headers = ['Content-Type: application/json', 'Accept: application/json'];
+        $hdrMap = [
+            'content-type' => 'Content-Type: application/json',
+            'accept'       => 'Accept: application/json',
+        ];
 
         if ($bearer) {
-            $headers[] = 'Authorization: Bearer ' . $bearer;
+            $hdrMap['authorization'] = 'Authorization: Bearer ' . $bearer;
         }
         if ($v3Headers) {
-            $headers[] = 'REQUEST-ID: ' . $this->uuid();
-            $headers[] = 'TIMESTAMP: '  . $this->timestamp();
-            $headers[] = 'X-CM-ID: '    . $this->xCmId;
+            $hdrMap['request-id'] = 'REQUEST-ID: ' . $this->uuid();
+            $hdrMap['timestamp']  = 'TIMESTAMP: '  . $this->timestamp();
+            $hdrMap['x-cm-id']    = 'X-CM-ID: '    . $this->xCmId;
         }
         foreach ($extraHeaders as $k => $v) {
-            $headers[] = "$k: $v";
+            $hdrMap[strtolower((string)$k)] = "$k: $v";
         }
+        $headers = array_values($hdrMap);
 
         $ch = curl_init($url);
         $opts = [

@@ -6,6 +6,7 @@
  * Requires $doctor_id to be set (from JWT guard).
  */
 $sidebar_active = $sidebar_active ?? '';
+$doctor_id = $doctor_id ?? (int)($_SESSION['doctor_id'] ?? 0);
 
 // Fetch doctor info for the sidebar header
 $_d_sql  = "SELECT name, email, profile_image, specialization, hpr_id, hpr_verified, abha_id FROM doctors WHERE id = ?";
@@ -22,42 +23,52 @@ $_d_hpr_ver = (bool)($_d['hpr_verified'] ?? false);
 $_d_pic     = !empty($_d['profile_image']) ? BASE_URL . htmlspecialchars($_d['profile_image']) : null;
 
 $_page_titles = [
-    'dashboard'        => 'Dashboard',
-    'patients'         => 'My Patients',
-    'appointments'     => 'Appointments',
-    'schedule'         => 'Manage Schedule',
-    'patient-form'     => 'Patient Form Report',
-    'reports'          => 'Calender',
-    'analysis-report'  => 'Analysis Report',
-    'school-students'  => 'Students',
+    'dashboard'        => 'Clinical Dashboard',
+    'patient-form'     => 'Digital Prescription (OPD Note)',
+    'opd-slips'        => 'Generate OPD Slip',
+    'appointments'     => 'Appointments & Consultations',
+    'schedule'         => 'Manage Schedule & Timings',
+    'reports'          => 'Appointments Calendar',
+    'patients'         => 'Patients Registry',
+    'add-patient'      => 'Onboard Patient (ABHA M1)',
+    'documents'        => 'Diagnostic & Lab Reports',
+    'pending-uploads'  => 'ABHA Compliance Queue',
+    'analysis-report'  => 'ABDM Analytics & Reports',
+    'school-students'  => 'School Students Health',
+    'contact'          => 'Doctor Profile & HPR ID',
+    'earnings'         => 'Earnings & Settlements',
+    'billing'          => 'Subscription & Billing History',
     'settings'         => 'Account Settings',
-    'pending-uploads'  => 'Pending Uploads',
-    'earnings'         => 'Earnings & Bank Details',
-    'billing'          => 'Payment History',
-    'contact'          => 'My Profile',
-    'about'            => 'About Us',
+    'about'            => 'About & Guidelines',
     'delete-account'   => 'Delete Account',
 ];
-$_page_title = $_page_titles[$sidebar_active] ?? 'Doctor Panel';
+$_page_title = $_page_titles[$sidebar_active] ?? 'Doctor Portal';
 
 $_menu = [
-    'dashboard'        => ['icon' => 'fa fa-th-large',    'label' => 'Dashboard',                'url' => BASE_URL . 'doctor/doctor-dashboard.php',      'section' => 'Main'],
-    'patients'         => ['icon' => 'fa fa-heartbeat',   'label' => 'My Patients',               'url' => BASE_URL . 'doctor/my-patients.php',           'section' => 'Clinical'],
-    'appointments'     => ['icon' => 'fa fa-book-medical',    'label' => 'Appointments',              'url' => BASE_URL . 'doctor/appointments.php',          'section' => 'Clinical'],
-    'schedule'         => ['icon' => 'fa fa-clock',       'label' => 'Manage Schedule',           'url' => BASE_URL . 'doctor/manage-schedule.php',       'section' => 'Clinical'],
-    'patient-form'     => ['icon' => 'fa fa-chart-area', 'label' => 'Patient Form Report',       'url' => BASE_URL . 'doctor/patient-form.php',          'section' => 'Clinical'],
-    'reports'          => ['icon' => 'fa fa-calendar',   'label' => 'Calender',   'url' => BASE_URL . 'doctor/appointments-calendar.php', 'section' => 'Clinical'],
-    'analysis-report'  => ['icon' => 'fa fa-chart-line',    'label' => 'Analysis Report',           'url' => BASE_URL . 'doctor/analysis-report.php',       'section' => 'Clinical'],
-    'school-students'  => ['icon' => 'fa fa-user-graduate', 'label' => 'Students',                'url' => BASE_URL . 'doctor/school-students.php',       'section' => 'School Health'],
-    'pending-uploads'  => ['icon' => 'fa fa-cloud-upload', 'label' => 'Pending Uploads',           'url' => BASE_URL . 'doctor/pending-uploads.php',       'section' => 'ABHA Compliance'],
-    'earnings'         => ['icon' => 'fa fa-inr',         'label' => 'Earnings & Bank',           'url' => BASE_URL . 'doctor/earnings.php',              'section' => 'Account'],
-    'billing'          => ['icon' => 'fa fa-credit-card', 'label' => 'Payment History',           'url' => BASE_URL . 'doctor/payment-history.php',       'section' => 'Account'],
-    'contact'          => ['icon' => 'fa fa-user-md',     'label' => 'My Profile',                'url' => BASE_URL . 'doctor/my-contact.php',            'section' => 'Account'],
-    'settings'         => ['icon' => 'fa fa-cog',         'label' => 'Settings',                  'url' => BASE_URL . 'doctor/account-settings.php',      'section' => 'Account'],
-    'about'            => ['icon' => 'fa fa-info-circle', 'label' => 'About Us',                  'url' => BASE_URL . 'doctor/doctor-about.php',          'section' => 'Account'],
-    'delete-account'   => ['icon' => 'fa fa-trash',       'label' => 'Delete Account',            'url' => BASE_URL . 'doctor/delete-account.php',        'section' => 'Account'],
+    'dashboard'        => ['icon' => 'fa fa-th-large',          'label' => 'Dashboard',                'url' => BASE_URL . 'doctor/doctor-dashboard.php',      'section' => 'Main'],
+    'patient-form'     => ['icon' => 'fa fa-edit',   'label' => 'OPD Consultation (Rx)',   'url' => BASE_URL . 'doctor/patient-form.php',          'section' => 'Clinical & OPD'],
+    'opd-slips'        => ['icon' => 'fa-solid fa-file-lines',       'label' => 'Generate OPD Slip',        'url' => BASE_URL . 'doctor/select-opd-patient.php',    'section' => 'Clinical & OPD'],
+    'appointments'     => ['icon' => 'fa fa-book-medical',      'label' => 'Appointments',             'url' => BASE_URL . 'doctor/appointments.php',          'section' => 'Clinical & OPD'],
+    'schedule'         => ['icon' => 'fa-solid fa-clock',           'label' => 'Manage Schedule',          'url' => BASE_URL . 'doctor/manage-schedule.php',       'section' => 'Clinical & OPD'],
+    'reports'          => ['icon' => 'fa fa-calendar',         'label' => 'Calendar',                 'url' => BASE_URL . 'doctor/appointments-calendar.php', 'section' => 'Clinical & OPD'],
+
+    'patients'         => ['icon' => 'fa fa-heartbeat',         'label' => 'Patients Registry',        'url' => BASE_URL . 'doctor/my-patients.php',           'section' => 'ABDM & Patients'],
+    'add-patient'      => ['icon' => 'fa fa-user-plus',         'label' => 'Onboard Patient (M1)',     'url' => BASE_URL . 'doctor/add-patient.php',           'section' => 'ABDM & Patients'],
+    'documents'        => ['icon' => 'fa fa-folder-open',       'label' => 'Lab & Diagnostic Reports', 'url' => BASE_URL . 'doctor/patient-documents.php',    'section' => 'ABDM & Patients'],
+    'pending-uploads'  => ['icon' => 'fa fa-cloud-upload',      'label' => 'ABHA Compliance Queue',    'url' => BASE_URL . 'doctor/pending-uploads.php',       'section' => 'ABDM & Patients'],
+    'analysis-report'  => ['icon' => 'fa fa-chart-line',        'label' => 'Analysis Report',          'url' => BASE_URL . 'doctor/analysis-report.php',       'section' => 'ABDM & Patients'],
+
+    'school-students'  => ['icon' => 'fa fa-graduation-cap',   'label' => 'School Students',          'url' => BASE_URL . 'doctor/school-students.php',       'section' => 'School Health'],
+
+    'contact'          => ['icon' => 'fa fa-user-md',           'label' => 'Profile & HPR ID',         'url' => BASE_URL . 'doctor/my-contact.php',            'section' => 'Account & HPR'],
+    'earnings'         => ['icon' => 'fa fa-inr',               'label' => 'Earnings & Bank',          'url' => BASE_URL . 'doctor/earnings.php',              'section' => 'Account & HPR'],
+    'billing'          => ['icon' => 'fa fa-credit-card',       'label' => 'Payment History',          'url' => BASE_URL . 'doctor/payment-history.php',       'section' => 'Account & HPR'],
+    'settings'         => ['icon' => 'fa fa-cog',               'label' => 'Settings',                 'url' => BASE_URL . 'doctor/account-settings.php',      'section' => 'Account & HPR'],
+    'about'            => ['icon' => 'fa fa-info-circle',       'label' => 'About Us',                 'url' => BASE_URL . 'doctor/doctor-about.php',          'section' => 'Account & HPR'],
+    'delete-account'   => ['icon' => 'fa fa-trash',             'label' => 'Delete Account',           'url' => BASE_URL . 'doctor/delete-account.php',        'section' => 'Account & HPR'],
 ];
 ?>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
 
 <!-- Sidebar Overlay (mobile) -->
@@ -136,7 +147,13 @@ $_menu = [
             <div style="font-size:.72rem;color:#9ca3af;"><?= date('l, d M Y') ?></div>
         </div>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+        <a href="<?= BASE_URL ?>doctor/patient-form.php" class="btn btn-sm btn-primary d-none d-sm-inline-flex align-items-center" style="background:#0C74C5;border-color:#0C74C5;gap:5px;font-size:.78rem;font-weight:600;">
+            <i class="fa fa-pencil-square-o"></i> OPD (Rx)
+        </a>
+        <a href="<?= BASE_URL ?>doctor/add-patient.php" class="btn btn-sm btn-outline-primary d-none d-md-inline-flex align-items-center" style="gap:5px;font-size:.78rem;font-weight:600;">
+            <i class="fa fa-user-plus"></i> New ABHA (M1)
+        </a>
         <div style="text-align:right;display:none;" id="doctorTopbarName">
             <span style="font-weight:600;font-size:.82rem;display:block;">Dr. <?= $_d_name ?></span>
             <span style="font-size:.7rem;color:#9ca3af;"><?= $_d_spec ?></span>
@@ -151,9 +168,9 @@ $_menu = [
             <?php endif; ?>
         </div>
         <?php if ($_d_hpr_ver): ?>
-            <span class="hpr-badge"><i class="fa fa-check-circle" style="margin-right:4px;"></i>HPR</span>
+            <span class="hpr-badge" title="ABDM Healthcare Professional Registry Verified"><i class="fa fa-check-circle" style="margin-right:4px;"></i>HPR Verified</span>
         <?php else: ?>
-            <span class="hpr-badge hpr-unverified"><i class="fa fa-exclamation-circle" style="margin-right:4px;"></i>HPR Pending</span>
+            <a href="<?= BASE_URL ?>doctor/my-contact.php" class="hpr-badge hpr-unverified" title="Click to verify HPR ID" style="text-decoration:none;"><i class="fa fa-exclamation-circle" style="margin-right:4px;"></i>HPR Pending</a>
         <?php endif; ?>
         <a href="<?= BASE_URL ?>doctor/doctor-logout.php" class="btn btn-sm btn-outline-danger" title="Logout">
             <i class="fa fa-sign-out"></i>

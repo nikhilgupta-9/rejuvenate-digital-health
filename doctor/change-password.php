@@ -234,9 +234,6 @@ function sendPasswordChangeEmail($email, $name) {
 
 // doctor_password_history / doctor_password_logs schema:
 // see database/migration_doctor_password_security.sql
-
-$sidebar_active = 'settings';
-require_once __DIR__ . '/inc/sidebar.php';
 ?>
 
 <!DOCTYPE html>
@@ -301,6 +298,10 @@ require_once __DIR__ . '/inc/sidebar.php';
     </style>
 </head>
 <body>
+    <?php
+    $sidebar_active = 'settings';
+    include __DIR__ . '/inc/sidebar.php';
+    ?>
     <main class="doctor-content">
     
                     <!-- Password Change Form -->

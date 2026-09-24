@@ -78,6 +78,10 @@ if ($role === 'patient' && empty($user['email_verified'])) {
     $upd = $conn->prepare("UPDATE users SET otp_code=?, otp_expiry=? WHERE id=?");
     $upd->bind_param('ssi', $otp_code, $otp_expiry, $user['id']); $upd->execute();
     send_otp_email($user['email'], $otp_code);
+    if (!empty($user['mobile'])) {
+        wa_send_otp($user['mobile'], $otp_code);
+        $_SESSION['user_mobile'] = $user['mobile'];
+    }
     $_SESSION['verify_email']  = true;
     $_SESSION['user_email']    = $user['email'];
     $_SESSION['user_id']       = $user['id'];

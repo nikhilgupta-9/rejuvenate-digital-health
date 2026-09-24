@@ -96,6 +96,7 @@ $sidebar_active = 'school-students';
     <title><?= htmlspecialchars($m['name']) ?> — Student Profile</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/style.css">
     <style>
         .profile-header {
@@ -110,7 +111,7 @@ $sidebar_active = 'school-students';
             width: 72px;
             height: 72px;
             border-radius: 50%;
-            background: #0277bd;
+            background: #0C74C5;
             color: #fff;
             display: flex;
             align-items: center;
@@ -186,7 +187,7 @@ $sidebar_active = 'school-students';
         }
 
         .p-tab.active {
-            background: #0277bd;
+            background: #0C74C5;
             color: #fff;
         }
 
@@ -257,7 +258,7 @@ $sidebar_active = 'school-students';
             height: 42px;
             border-radius: 10px;
             background: #e0f2fe;
-            color: #0277bd;
+            color: #0C74C5;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -266,8 +267,8 @@ $sidebar_active = 'school-students';
         }
 
         .btn-primary-custom {
-            background: #0277bd;
-            border-color: #0277bd;
+            background: #0C74C5;
+            border-color: #0C74C5;
             color: #fff;
         }
 
@@ -401,7 +402,7 @@ $sidebar_active = 'school-students';
             <div class="row">
                 <div class="col-md-6">
                     <div class="info-section">
-                        <div class="section-title"><i class="fa fa-id-card me-2" style="color:#0277bd;"></i>Basic Information</div>
+                        <div class="section-title"><i class="fa fa-id-card me-2" style="color:#0C74C5;"></i>Basic Information</div>
                         <div class="form-row">
                             <div class="col-md-6 mb-2"><span class="info-label">Blood Group</span><div><?= htmlspecialchars($m['blood_group'] ?: 'Not set') ?></div></div>
                             <div class="col-md-6 mb-2"><span class="info-label">Date of Birth</span><div><?= $m['dob'] ? date('d M Y', strtotime($m['dob'])) : 'Not set' ?></div></div>
@@ -413,7 +414,7 @@ $sidebar_active = 'school-students';
                 </div>
                 <div class="col-md-6">
                     <div class="info-section">
-                        <div class="section-title"><i class="fa fa-graduation-cap me-2" style="color:#0277bd;"></i>
+                        <div class="section-title"><i class="fa fa-graduation-cap me-2" style="color:#0C74C5;"></i>
                             <?= $m['type'] === 'Student' ? 'Academic Details' : 'Employment Details' ?>
                         </div>
                         <div class="form-row">
@@ -437,7 +438,7 @@ $sidebar_active = 'school-students';
         <!-- ── TAB: Consent ── -->
         <div class="tab-pane" id="tab-consent">
             <div class="info-section">
-                <div class="section-title"><i class="fa fa-file-signature me-2" style="color:#0277bd;"></i>Parent / Guardian Consent</div>
+                <div class="section-title"><i class="fa fa-file-signature me-2" style="color:#0C74C5;"></i>Parent / Guardian Consent</div>
 
                 <?php if (isset($_SESSION['consent_success'])): ?>
                     <div class="alert alert-success" style="font-size:.82rem;"><?= htmlspecialchars($_SESSION['consent_success']); unset($_SESSION['consent_success']); ?></div>
@@ -493,7 +494,7 @@ $sidebar_active = 'school-students';
 
                     <div class="info-section" style="border:1px solid #e5e7eb;">
                         <div style="font-size:.86rem;font-weight:600;color:#1f2937;margin-bottom:4px;">
-                            <i class="fa fa-pen-to-square me-1" style="color:#0277bd;"></i>Record Parent Consent (parent present)
+                            <i class="fa fa-pen-to-square me-1" style="color:#0C74C5;"></i>Record Parent Consent (parent present)
                         </div>
                         <div style="font-size:.78rem;color:#6b7280;margin-bottom:12px;">
                             Fill this with the parent/guardian in person. It is stored as the consent record for this checkup.
@@ -565,7 +566,7 @@ $sidebar_active = 'school-students';
                 <div class="row g-2 mb-3">
                     <div class="col-6 col-sm-3">
                         <div style="background:#f9fafb;border-radius:10px;padding:12px;text-align:center;">
-                            <div style="font-size:1.1rem;font-weight:700;color:#0277bd;"><?= $hp['height_cm'] ?> <span style="font-size:.68rem;">cm</span></div>
+                            <div style="font-size:1.1rem;font-weight:700;color:#0C74C5;"><?= $hp['height_cm'] ?> <span style="font-size:.68rem;">cm</span></div>
                             <div style="font-size:.68rem;color:#9ca3af;">Height</div>
                         </div>
                     </div>
@@ -681,7 +682,7 @@ $sidebar_active = 'school-students';
         <!-- ── TAB: Prescriptions ── -->
         <div class="tab-pane" id="tab-rx">
             <div class="info-section">
-                <div class="section-title"><i class="fa fa-file-medical me-2" style="color:#0277bd;"></i>Write New Prescription</div>
+                <div class="section-title"><i class="fa fa-file-medical me-2" style="color:#0C74C5;"></i>Write New Prescription</div>
                 <?php if (isset($_SESSION['rx_error'])): ?>
                     <div class="alert alert-danger" style="font-size:.82rem;"><?= htmlspecialchars($_SESSION['rx_error']); unset($_SESSION['rx_error']); ?></div>
                 <?php endif; ?>
@@ -765,7 +766,7 @@ $sidebar_active = 'school-students';
         <!-- ── TAB: Certificates ── -->
         <div class="tab-pane" id="tab-cert">
             <div class="info-section">
-                <div class="section-title"><i class="fa fa-certificate me-2" style="color:#0277bd;"></i>Issue Medical / Leave Certificate</div>
+                <div class="section-title"><i class="fa fa-certificate me-2" style="color:#0C74C5;"></i>Issue Medical / Leave Certificate</div>
                 <?php if (isset($_SESSION['cert_error'])): ?>
                     <div class="alert alert-danger" style="font-size:.82rem;"><?= htmlspecialchars($_SESSION['cert_error']); unset($_SESSION['cert_error']); ?></div>
                 <?php endif; ?>
@@ -856,7 +857,7 @@ $sidebar_active = 'school-students';
         <!-- ── TAB: Medical Reports ── -->
         <div class="tab-pane" id="tab-docs">
             <div class="info-section">
-                <div class="section-title"><i class="fa fa-upload me-2" style="color:#0277bd;"></i>Upload Medical Report</div>
+                <div class="section-title"><i class="fa fa-upload me-2" style="color:#0C74C5;"></i>Upload Medical Report</div>
                 <?php if (isset($_SESSION['doc_error'])): ?>
                     <div class="alert alert-danger" style="font-size:.82rem;"><?= htmlspecialchars($_SESSION['doc_error']); unset($_SESSION['doc_error']); ?></div>
                 <?php endif; ?>

@@ -9,6 +9,7 @@ if (!isset($_SESSION['signup_success']) && !isset($_SESSION['verify_email'])) {
 
 include_once "config/connect.php";
 include_once "util/function.php";
+require_once "lib/WhatsAppOtp.php";
 
 $contact = contact_us();
 $logo = get_header_logo();
@@ -30,7 +31,9 @@ if (isset($_POST['resend_otp'])) {
     if ($stmt->execute()) {
         // Resend OTP
         send_otp_email($email, $new_otp);
-        // send_otp_sms($mobile, $new_otp); // Uncomment when SMS is setup
+        if (!empty($mobile)) {
+            wa_send_otp($mobile, (string)$new_otp);
+        }
         
         $_SESSION['otp_code'] = $new_otp;
         $_SESSION['otp_expiry'] = $new_otp_expiry;
@@ -124,7 +127,7 @@ $can_resend = $time_elapsed > 60; // Can resend after 60 seconds
                         <h3>Verify Your Account</h3>
                         <p>We've sent a 6-digit OTP to:<br>
                            <strong>Email:</strong> <?= htmlspecialchars($email) ?>
-                           <?php if ($mobile): ?><br><strong>Mobile:</strong> <?= htmlspecialchars($mobile) ?><?php endif; ?>
+                           <?php if ($mobile): ?><br><strong><i class="fab fa-whatsapp text-success me-1"></i>WhatsApp / Mobile:</strong> <?= htmlspecialchars($mobile) ?><?php endif; ?>
                         </p>
                         
                         <?php if (isset($_SESSION['success_message'])): ?>

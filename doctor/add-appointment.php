@@ -66,9 +66,6 @@ $patients = $patients_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
 $preselect_patient = (int)($_GET['patient_id'] ?? 0);
 $preselect_date = $_GET['date'] ?? '';
-
-$sidebar_active = 'appointments';
-require_once __DIR__ . '/inc/sidebar.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -77,14 +74,19 @@ require_once __DIR__ . '/inc/sidebar.php';
     <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Add Appointment — Rejuvenate</title>
+<title>Add Appointment — REJUVENATE Doctor Portal</title>
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
 <style>
 .profile-card{background:#fff;padding:25px;border-radius:10px;border:1px solid #dee2e6;max-width:640px;}
 </style>
 </head>
 <body>
+<?php
+$sidebar_active = 'appointments';
+include __DIR__ . '/inc/sidebar.php';
+?>
 <main class="doctor-content">
 
   <div class="d-flex align-items-center justify-content-between mb-3">

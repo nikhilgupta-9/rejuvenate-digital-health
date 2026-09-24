@@ -55,6 +55,43 @@ if (isset($_POST['update_status'])) {
                 if ($new_status === 'completed') {
                     create_settlement_if_needed($conn, $appointment_id);
                 }
+
+                // WhatsApp notification to patient on approval or rejection
+                if (in_array($new_status, ['approved', 'rejected'], true)) {
+                    try {
+                        require_once dirname(__DIR__) . '/lib/WhatsAppNotifier.php';
+                        require_once dirname(__DIR__) . '/telemedicine/helpers.php';
+                        $pStmt = $conn->prepare("
+                            SELECT a.*, COALESCE(u.mobile, a.patient_phone) AS mobile,
+                                   COALESCE(u.name, a.patient_name) AS pname,
+                                   d.name AS doctor_name
+                            FROM appointments a
+                            LEFT JOIN users u ON u.id = a.user_id
+                            LEFT JOIN doctors d ON d.id = a.doctor_id
+                            WHERE a.id = ? LIMIT 1");
+                        $pStmt->bind_param('i', $appointment_id);
+                        $pStmt->execute();
+                        $aRow = $pStmt->get_result()->fetch_assoc();
+                        $pStmt->close();
+
+                        if ($aRow && !empty($aRow['mobile'])) {
+                            $joinLink = '';
+                            if ($new_status === 'approved' && strtolower($aRow['appointment_type'] ?? '') === 'online') {
+                                $joinLink = telemedicine_guest_link($appointment_id);
+                            }
+                            $event = $new_status === 'approved' ? 'appt_confirmed_patient' : 'appt_rejected_patient';
+                            (new WhatsAppNotifier($conn))->sendEvent($event, $aRow['mobile'], [
+                                'patient_name' => $aRow['pname'],
+                                'doctor_name'  => 'Dr. ' . ($aRow['doctor_name'] ?? 'your doctor'),
+                                'date'         => date('d M Y', strtotime($aRow['appointment_date'])),
+                                'time'         => date('h:i A', strtotime($aRow['appointment_time'])),
+                                'join_link'    => $joinLink,
+                            ], 'appointment', $appointment_id);
+                        }
+                    } catch (Throwable $e) {
+                        error_log('[WhatsApp status update notification error] ' . $e->getMessage());
+                    }
+                }
             } else {
                 $error_message = "Failed to update appointment status.";
             }
@@ -201,9 +238,6 @@ function appt_url($overrides, $status_filter, $search_query)
     return 'appointments.php?' . http_build_query($params);
 }
 
-$sidebar_active = 'appointments';
-require_once __DIR__ . '/inc/sidebar.php';
-
 /* Status → colour map (shared by badges + week strip) */
 $STATUS_META = [
     'pending'   => ['Pending',   '#f59e0b', '#fff7e6'],
@@ -291,6 +325,10 @@ function stat_card_link($key, $status_filter, $search_query)
 </head>
 
 <body>
+    <?php
+    $sidebar_active = 'appointments';
+    include __DIR__ . '/inc/sidebar.php';
+    ?>
     <main class="doctor-content">
 
         <?php if ($success_message): ?>

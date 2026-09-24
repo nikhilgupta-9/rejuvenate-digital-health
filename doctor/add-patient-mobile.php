@@ -3,8 +3,6 @@ require_once __DIR__ . '/auth/guard.php';
 require_once dirname(__DIR__) . '/config/connect.php';
 $payload        = doctor_jwt_guard();
 $doctor_id      = (int)($payload['doctor_id'] ?? $payload['sub'] ?? 0);
-$sidebar_active = 'patients';
-require_once __DIR__ . '/inc/sidebar.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -13,9 +11,10 @@ require_once __DIR__ . '/inc/sidebar.php';
     <link rel="icon" type="image/x-icon" href="<?= BASE_URL . get_favicon() ?>">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Add by Mobile — Rejuvenate</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+<title>Search by Mobile — REJUVENATE</title>
+<link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
+<link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+<link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
 <style>
 .cp-card{background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.07);padding:24px 28px;margin-bottom:20px;}
 .cp-title{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:#6b7280;
@@ -26,6 +25,10 @@ require_once __DIR__ . '/inc/sidebar.php';
 </style>
 </head>
 <body>
+<?php
+$sidebar_active = 'add-patient';
+include __DIR__ . '/inc/sidebar.php';
+?>
 <main class="doctor-content">
 
 <div class="d-flex align-items-center justify-content-between mb-4">

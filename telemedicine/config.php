@@ -15,7 +15,10 @@ define('TELEMED_WS_PORT',      (int) ($_ENV['TELEMED_WS_PORT'] ?? 8090));
 define('TELEMED_WS_BIND_HOST', $_ENV['TELEMED_WS_BIND_HOST'] ?? '0.0.0.0');
 
 // Ticket signing secret — reuse JWT_SECRET so we don't need a second one in .env.
-define('TELEMED_SECRET', defined('JWT_SECRET') && JWT_SECRET ? JWT_SECRET : 'change-me-telemed-secret');
+if (!defined('JWT_SECRET') || empty(JWT_SECRET) || JWT_SECRET === 'change-me-telemed-secret') {
+    throw new RuntimeException('JWT_SECRET must be set in .env for telemedicine security.');
+}
+define('TELEMED_SECRET', JWT_SECRET);
 
 /*
  * ICE servers + poll interval.

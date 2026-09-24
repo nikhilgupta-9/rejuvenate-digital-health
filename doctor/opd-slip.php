@@ -192,18 +192,22 @@ $pdf->Cell(96, 4.6, enc(trim(($row['degrees'] ?? '') . '  ' . ($row['specializat
 $pdf->Cell(0, 4.6, enc(trim(($row['patient_age'] !== null ? $row['patient_age'] . ' yrs' : '') . '  |  ' . ($row['gender'] ?: '-')
     . ($row['blood_group'] ? '  |  ' . $row['blood_group'] : ''))), 0, 1, 'L');
 
-$pdf->Cell(96, 4.6, enc(($row['hpr_id'] ? 'HPR: ' . $row['hpr_id'] : 'HPR: not registered')
-    . ($row['nmc_reg_number'] ? '   NMC: ' . $row['nmc_reg_number'] : '')), 0, 0, 'L');
-$pdf->Cell(0, 4.6, enc($row['abha_number'] ? 'ABHA: ' . $row['abha_number'] : 'ABHA: not linked'), 0, 1, 'L');
+$doc_hpr_str = !empty($row['hpr_id']) ? ('HPR ID: ' . $row['hpr_id'] . (str_contains($row['hpr_id'], '@') ? '' : '@hpr.abdm')) : 'HPR ID: Not Registered';
+$pat_raw_abha = !empty($row['abha_number']) ? $row['abha_number'] : (!empty($row['abha_id']) ? $row['abha_id'] : '');
+$pat_abha_str = $pat_raw_abha ? ('ABHA: ' . Abha::formatNumber($pat_raw_abha)) : 'ABHA: Not Linked';
+$pat_addr_str = !empty($row['abha_address']) ? ('  |  ' . $row['abha_address']) : '';
+
+$pdf->Cell(96, 4.6, enc($doc_hpr_str . ($row['nmc_reg_number'] ? '   NMC: ' . $row['nmc_reg_number'] : '')), 0, 0, 'L');
+$pdf->Cell(0, 4.6, enc($pat_abha_str . $pat_addr_str), 0, 1, 'L');
 
 $pdf->Cell(96, 4.6, enc(trim(($row['doctor_phone'] ?? '') . '  ' . ($row['doctor_email'] ?? ''))), 0, 0, 'L');
-$pdf->Cell(0, 4.6, enc(trim(($row['patient_phone'] ?? '') . ($row['abha_address'] ? '  ' . $row['abha_address'] : ''))), 0, 1, 'L');
+$pdf->Cell(0, 4.6, enc(trim(($row['patient_phone'] ?? '') . ($row['patient_email'] ? '  ' . $row['patient_email'] : ''))), 0, 1, 'L');
 
 $pdf->SetTextColor(0, 0, 0);
 $pdf->Ln(1);
 $pdf->SetFont('Helvetica', '', 8.5);
 $pdf->Cell(0, 4.6, enc('Visit Date: ' . date('d M Y', strtotime($rx['visit_date'] ?: $row['appointment_date']))
-    . '     Appt #' . $appointment_id . '     Slip: ' . $slip_number), 0, 1, 'L');
+    . '     Appt #' . $appointment_id . '     Slip: ' . $slip_number . '     [ABDM M2 Compliant]'), 0, 1, 'L');
 $pdf->SetDrawColor(220, 220, 220);
 $pdf->Line(12, $pdf->GetY() + 1, 198, $pdf->GetY() + 1);
 $pdf->Ln(2);

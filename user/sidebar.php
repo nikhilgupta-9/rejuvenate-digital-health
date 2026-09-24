@@ -9,7 +9,7 @@ $sidebar_active = $sidebar_active ?? '';
 $user_id = $_SESSION['user_id'] ?? 0;
 
 // Fetch patient info for the sidebar header
-$_u_sql  = "SELECT name, last_name, email, mobile, profile_pic, abha_id, abha_linked FROM users WHERE id = ?";
+$_u_sql  = "SELECT name, last_name, email, mobile, profile_pic, abha_id, abha_address, abha_linked, abha_verified FROM users WHERE id = ?";
 $_u_stmt = $conn->prepare($_u_sql);
 $_u_stmt->bind_param('i', $user_id);
 $_u_stmt->execute();
@@ -20,6 +20,7 @@ $_u_email   = htmlspecialchars($_u['email'] ?? '');
 $_u_pic     = !empty($_u['profile_pic']) ? BASE_URL . 'assets/img/' . htmlspecialchars($_u['profile_pic']) : null;
 $_u_initial = strtoupper(substr($_u_name, 0, 1)) ?: 'P';
 $_u_abha_linked = !empty($_u['abha_linked']);
+$_u_abha_id = htmlspecialchars($_u['abha_id'] ?? '');
 
 $_abha_pending = false;
 if (!$_u_abha_linked) {
@@ -30,34 +31,39 @@ if (!$_u_abha_linked) {
 }
 
 $_page_titles = [
-    'dashboard'       => 'Dashboard',
-    'profile'         => 'My Profile',
-    'health'          => 'My Health Profile',
-    'abha'            => 'My ABHA Health ID',
-    'bookings'        => 'My Bookings',
-    'reports'         => 'My Reports',
-    'orders'          => 'My Supplement Order',
-    'appointments'    => 'My Doctor Appointments',
-    'medical-history' => 'Medical History',
-    'address'         => 'Manage Addresses',
-    'help'            => 'Help & Contact Us',
+    'dashboard'       => 'Patient Dashboard',
+    'profile'         => 'Account Profile',
+    'health'          => 'Personal Health Record (PHR)',
+    'abha'            => 'ABDM ABHA Health ID & Card',
+    'bookings'        => 'Book Doctor Consultation',
+    'reports'         => 'Diagnostic & Lab Reports',
+    'orders'          => 'My Supplement Orders',
+    'pharmacy'        => 'My Medicine Orders',
+    'lab'             => 'My Lab Test Bookings',
+    'appointments'    => 'My Doctor Consultations',
+    'medical-history' => 'Clinical & Medical History',
+    'address'         => 'Manage Delivery Addresses',
+    'help'            => 'Help & ABDM Support',
 ];
 $_page_title = $_page_titles[$sidebar_active] ?? 'Patient Portal';
 
 $_menu = [
-    'dashboard'    => ['icon' => 'fa fa-th-large',   'label' => 'Dashboard',              'url' => BASE_URL . 'user/user-dashboard.php',         'section' => 'Main'],
-    'appointments' => ['icon' => 'fa fa-stethoscope', 'label' => 'My Doctor Appointments', 'url' => BASE_URL . 'user/my-doctor-appointments.php', 'section' => 'Health'],
-    'bookings'     => ['icon' => 'fa fa-calendar', 'label' => 'My Bookings',       'url' => BASE_URL . 'user/my-bookings.php',            'section' => 'Health'],
-    'medical-history' => ['icon' => 'fa fa-file-medical', 'label' => 'Medical History', 'url' => BASE_URL . 'user/medical-history.php',    'section' => 'Health'],
-    'health'       => ['icon' => 'fa fa-heartbeat', 'label' => 'My Health Profile',      'url' => BASE_URL . 'user/health-profile.php',         'section' => 'Health'],
-    'abha'         => ['icon' => 'fa fa-id-card',    'label' => 'My ABHA Health ID',       'url' => BASE_URL . 'user/my-abha.php',                'section' => 'Health'],
-    'reports'      => ['icon' => 'fa fa-chart-area', 'label' => 'My Reports',             'url' => BASE_URL . 'user/my-reports.php',             'section' => 'Health'],
-    'orders'       => ['icon' => 'fa fa-shopping-bag', 'label' => 'My Supplement Order',   'url' => BASE_URL . 'user/my-supplement-order.php',    'section' => 'Shop'],
-    'address'      => ['icon' => 'fa fa-map-marker', 'label' => 'Manage Addresses',        'url' => BASE_URL . 'user/manage-address.php',         'section' => 'Shop'],
-    'profile'      => ['icon' => 'fa fa-user',       'label' => 'My Profile',              'url' => BASE_URL . 'user/my-profile.php',             'section' => 'Account'],
-    'help'         => ['icon' => 'fa fa-life-ring',  'label' => 'Help & Contact Us',       'url' => BASE_URL . 'user/help-and-contact.php',       'section' => 'Account'],
+    'dashboard'       => ['icon' => 'fa fa-th-large',     'label' => 'Dashboard',                 'url' => BASE_URL . 'user/user-dashboard.php',         'section' => 'Main'],
+    'abha'            => ['icon' => 'fa fa-id-card',      'label' => 'ABHA Health ID & Card',     'url' => BASE_URL . 'user/my-abha.php',                'section' => 'Digital Health (ABDM)'],
+    'health'          => ['icon' => 'fa fa-heartbeat',    'label' => 'Health Profile (PHR)',      'url' => BASE_URL . 'user/health-profile.php',         'section' => 'Digital Health (ABDM)'],
+    'medical-history' => ['icon' => 'fa fa-file-medical', 'label' => 'Medical & Clinical History','url' => BASE_URL . 'user/medical-history.php',      'section' => 'Digital Health (ABDM)'],
+    'reports'         => ['icon' => 'fa fa-chart-area',   'label' => 'Diagnostic Reports',       'url' => BASE_URL . 'user/my-reports.php',             'section' => 'Digital Health (ABDM)'],
+    'appointments'    => ['icon' => 'fa fa-stethoscope',  'label' => 'My Consultations',          'url' => BASE_URL . 'user/my-doctor-appointments.php', 'section' => 'Consultations'],
+    'bookings'        => ['icon' => 'fa fa-calendar-plus','label' => 'Book Consultation',         'url' => BASE_URL . 'user/my-bookings.php',            'section' => 'Consultations'],
+    'pharmacy'        => ['icon' => 'fa fa-pills',        'label' => 'Medicine Orders',           'url' => BASE_URL . 'user/my-medicine-orders.php',    'section' => 'Pharmacy & Labs'],
+    'lab'             => ['icon' => 'fa fa-flask',        'label' => 'Lab Test Bookings',         'url' => BASE_URL . 'user/my-lab-bookings.php',        'section' => 'Pharmacy & Labs'],
+    'orders'          => ['icon' => 'fa fa-shopping-bag', 'label' => 'Supplement Orders',         'url' => BASE_URL . 'user/my-supplement-order.php',    'section' => 'Pharmacy & Labs'],
+    'address'         => ['icon' => 'fa fa-map-marker',   'label' => 'Saved Addresses',           'url' => BASE_URL . 'user/manage-address.php',         'section' => 'Account & Support'],
+    'profile'         => ['icon' => 'fa fa-user',         'label' => 'Account Profile',           'url' => BASE_URL . 'user/my-profile.php',             'section' => 'Account & Support'],
+    'help'            => ['icon' => 'fa fa-life-ring',    'label' => 'Help & ABDM Support',       'url' => BASE_URL . 'user/help-and-contact.php',       'section' => 'Account & Support'],
 ];
 ?>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
 
 <!-- Sidebar Overlay (mobile) -->
@@ -74,23 +80,30 @@ $_menu = [
             <div class="sidebar-logo"><?= $_u_initial ?></div>
         <?php endif; ?>
         <div class="s-name"><?= $_u_name ?></div>
-        <div class="s-sub">Patient</div>
+        <div class="s-sub">Patient Account</div>
         <?php if ($_u_abha_linked): ?>
-            <div style="">
-                <span style="background:#02c9b8;border-radius:10px;padding:1px 6px;font-size:.6rem;font-weight:700;color:#fff;">
-                    <i class="fa fa-check"></i> ABHA Linked
+            <div style="margin-top:6px;">
+                <span style="background:#02c9b8;border-radius:10px;padding:2px 8px;font-size:.62rem;font-weight:700;color:#fff;display:inline-block;">
+                    <i class="fa fa-shield"></i> ABDM Verified
                 </span>
+                <?php if (!empty($_u_abha_id)): ?>
+                    <div style="font-size:.65rem;color:rgba(255,255,255,.75);margin-top:2px;font-family:monospace;letter-spacing:.3px;">
+                        <?= $_u_abha_id ?>
+                    </div>
+                <?php endif; ?>
             </div>
         <?php elseif ($_abha_pending): ?>
-            <div style="margin-top:5px;">
-                <span style="background:#d97706;border-radius:10px;padding:1px 6px;font-size:.6rem;font-weight:700;color:#fff;">
+            <div style="margin-top:6px;">
+                <span style="background:#d97706;border-radius:10px;padding:2px 8px;font-size:.62rem;font-weight:700;color:#fff;display:inline-block;">
                     <i class="fa fa-clock-o"></i> ABHA Pending
                 </span>
             </div>
         <?php else: ?>
-            <div style="margin-top:5px;">
+            <div style="margin-top:6px;">
                 <a href="<?= BASE_URL ?>user/my-abha.php"
-                    style="font-size:.68rem;color:rgba(255,255,255,.55);text-decoration:underline;">+ Link ABHA ID</a>
+                    style="font-size:.68rem;color:rgba(255,255,255,.75);background:rgba(255,255,255,.15);border-radius:6px;padding:2px 8px;display:inline-block;text-decoration:none;">
+                    <i class="fa fa-id-card"></i> Link ABHA ID
+                </a>
             </div>
         <?php endif; ?>
     </div>

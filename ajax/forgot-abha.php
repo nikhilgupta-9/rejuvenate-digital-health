@@ -65,12 +65,12 @@ if ($action === 'verify_otp'
     fail('Too many attempts. Please wait 10 minutes before trying again.', 429);
 }
 
-/** 12-3456-7890-1234 → 12-XXXX-XXXX-1234 */
-function mask_abha_number(string $raw): string
+/** 12345678901234 → 12-3456-7890-1234 */
+function format_abha_number(string $raw): string
 {
     $d = preg_replace('/\D/', '', $raw);
-    if (strlen($d) !== 14) return $raw !== '' ? '••••' : '';
-    return substr($d, 0, 2) . '-XXXX-XXXX-' . substr($d, 10, 4);
+    if (strlen($d) !== 14) return $raw !== '' ? $raw : '';
+    return substr($d, 0, 2) . '-' . substr($d, 2, 4) . '-' . substr($d, 6, 4) . '-' . substr($d, 10, 4);
 }
 
 /** ****1234 for a mobile / Aadhaar-linked target hint. */
@@ -154,19 +154,39 @@ try {
             }
 
             $out = [];
-            foreach ($accounts as $acc) {
-                if (!is_array($acc)) continue;
-                $name = trim((string) ($acc['name'] ??
-                    trim(($acc['firstName'] ?? '') . ' ' . ($acc['lastName'] ?? ''))));
-                $status = strtoupper(trim((string) (
-                    $acc['status'] ?? $acc['accountStatus'] ?? $acc['kycStatus'] ?? ''
-                )));
-                $out[] = [
-                    'name'          => $name !== '' ? $name : '—',
-                    'abha_number'   => mask_abha_number((string) ($acc['ABHANumber'] ?? '')),
-                    'abha_address'  => (string) ($acc['preferredAbhaAddress'] ?? $acc['abhaAddress'] ?? ''),
-                    'status'        => $status !== '' ? $status : 'ACTIVE',
-                ];
+            if (!empty($accounts)) {
+                foreach ($accounts as $acc) {
+                    if (!is_array($acc)) continue;
+                    $name = trim((string) ($acc['name'] ??
+                        trim(($acc['firstName'] ?? '') . ' ' . ($acc['lastName'] ?? ''))));
+                    $status = strtoupper(trim((string) (
+                        $acc['status'] ?? $acc['accountStatus'] ?? $acc['kycStatus'] ?? ''
+                    )));
+                    $out[] = [
+                        'name'          => $name !== '' ? $name : '—',
+                        'abha_number'   => format_abha_number((string) ($acc['ABHANumber'] ?? $acc['healthIdNumber'] ?? '')),
+                        'abha_address'  => (string) ($acc['preferredAbhaAddress'] ?? $acc['abhaAddress'] ?? $acc['healthId'] ?? ''),
+                        'gender'        => (string) ($acc['gender'] ?? ''),
+                        'yearOfBirth'   => (string) ($acc['yearOfBirth'] ?? ''),
+                        'status'        => $status !== '' ? $status : 'ACTIVE',
+                    ];
+                }
+            } else {
+                $transferTok = $res['token'] ?? $res['tokens']['id_token'] ?? $res['tokens']['token'] ?? $res['ABHAToken'] ?? '';
+                if (!empty($transferTok)) {
+                    $profile = $abdm->getProfile($transferTok);
+                    if (!empty($profile['ABHANumber']) || !empty($profile['healthIdNumber'])) {
+                        $pnum = $profile['ABHANumber'] ?? $profile['healthIdNumber'];
+                        $out[] = [
+                            'name'          => $profile['name'] ?? trim(($profile['firstName'] ?? '') . ' ' . ($profile['lastName'] ?? '')),
+                            'abha_number'   => format_abha_number((string)$pnum),
+                            'abha_address'  => (string)($profile['preferredAbhaAddress'] ?? $profile['healthId'] ?? ''),
+                            'gender'        => (string)($profile['gender'] ?? ''),
+                            'yearOfBirth'   => (string)($profile['yearOfBirth'] ?? ''),
+                            'status'        => $profile['status'] ?? 'ACTIVE',
+                        ];
+                    }
+                }
             }
 
             unset($_SESSION['fabha_txn'], $_SESSION['fabha_method']);

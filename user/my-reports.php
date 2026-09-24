@@ -2,7 +2,9 @@
 include_once "../config/connect.php";
 include_once "../util/function.php";
 
-// session_start(); // Uncomment if not already started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     header("Location: " . BASE_URL . "login.php");
     exit();
@@ -225,49 +227,6 @@ $contact = contact_us();
             margin-bottom: 30px;
         }
 
-        .sidebar {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            height: fit-content;
-        }
-
-        .sidebar a {
-            display: block;
-            padding: 12px 15px;
-            margin: 5px 0;
-            color: #333;
-            text-decoration: none;
-            border-radius: 5px;
-            transition: all 0.3s;
-        }
-
-        .sidebar a:hover,
-        .sidebar a.active {
-            background: #02c9b8;
-            color: white;
-            padding-left: 20px;
-        }
-
-        .user-avatar {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 3px solid #02c9b8;
-            margin-bottom: 15px;
-        }
-
-        .menu-btn {
-            display: none;
-            background: #02c9b8;
-            color: white;
-            padding: 10px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-bottom: 15px;
-        }
-
         .empty-state {
             text-align: center;
             padding: 50px 20px;
@@ -280,7 +239,7 @@ $contact = contact_us();
         }
 
         .badge-type {
-            background: #02c9b8;
+            background: var(--primary);
             color: white;
             padding: 3px 10px;
             border-radius: 15px;
@@ -294,26 +253,6 @@ $contact = contact_us();
         }
 
         @media (max-width: 768px) {
-            .sidebar {
-                display: none;
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 280px;
-                height: 100vh;
-                z-index: 1000;
-                overflow-y: auto;
-                background: white;
-            }
-
-            .sidebar.show {
-                display: block;
-            }
-
-            .menu-btn {
-                display: block;
-            }
-
             .document-card {
                 padding: 15px;
             }
@@ -321,22 +260,23 @@ $contact = contact_us();
     </style>
 </head>
 
-<body>
+<body class="patient-body">
     <?php $sidebar_active = 'reports';
     include("sidebar.php"); ?>
     <main class="patient-content">
         <!-- Page Header -->
-        <div class="profile-card shadow mb-4">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h5 class="mb-1">My Medical Reports</h5>
-                    <p class="text-muted">Access all your medical documents and reports in one place</p>
-                </div>
-                <div class="text-end">
-                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#helpModal">
-                        <i class="fa fa-question-circle me-1"></i> Help
-                    </button>
-                </div>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+            <div>
+                <h1 class="ap-h mb-1"><i class="fa fa-chart-area me-2 text-primary-theme"></i>Diagnostic Reports & Documents</h1>
+                <div class="ap-sub">ABDM-compliant digital health records, diagnostic tests, pathology reports, and imaging scans</div>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="<?= BASE_URL ?>user/my-lab-bookings.php" class="btn btn-sm btn-outline-primary">
+                    <i class="fa fa-flask me-1"></i> Lab Bookings
+                </a>
+                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#helpModal">
+                    <i class="fa fa-question-circle me-1"></i> Help Guide
+                </button>
             </div>
         </div>
 
