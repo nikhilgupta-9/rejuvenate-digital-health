@@ -89,6 +89,13 @@ $ORDER = [
     'migration_core_foreign_keys.sql',
 ];
 
+// STDOUT is normally predefined by the CLI SAPI, but some hosts run this
+// script through php-cgi or a web-based script runner (observed on
+// production alongside the $argv issue above), where it's never defined.
+if (!defined('STDOUT')) {
+    define('STDOUT', fopen('php://stdout', 'wb') ?: fopen('php://output', 'wb'));
+}
+
 function out(string $s = ''): void { fwrite(STDOUT, $s . "\n"); }
 
 /* ── locate the mysql client ── */
