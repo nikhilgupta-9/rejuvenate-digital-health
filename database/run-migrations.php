@@ -20,6 +20,11 @@
 
 require __DIR__ . '/../config/connect.php';   // $conn + $_ENV
 
+// $argv is normally populated for a CLI request, but some hosts run PHP
+// with register_argc_argv disabled even in CLI (observed on production),
+// leaving it null instead of an array — fall back to an empty list so the
+// in_array() calls below don't fatal.
+$argv  = $argv ?? [];
 $DRY   = in_array('--dry-run', $argv, true);
 $FORCE = in_array('--force', $argv, true);
 $DIR   = __DIR__;
