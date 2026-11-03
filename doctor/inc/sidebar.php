@@ -5,6 +5,10 @@
  * Set $sidebar_active before including (e.g. 'dashboard', 'patients', 'appointments')
  * Requires $doctor_id to be set (from JWT guard).
  */
+if (!function_exists('doctor_display_name')) {
+    require_once __DIR__ . '/../../util/function.php';
+}
+
 $sidebar_active = $sidebar_active ?? '';
 $doctor_id = $doctor_id ?? (int)($_SESSION['doctor_id'] ?? 0);
 
@@ -15,7 +19,7 @@ $_d_stmt->bind_param('i', $doctor_id);
 $_d_stmt->execute();
 $_d = $_d_stmt->get_result()->fetch_assoc();
 
-$_d_name    = htmlspecialchars($_d['name'] ?? ($doctor_name ?? 'Doctor'));
+$_d_name    = htmlspecialchars(doctor_display_name($_d['name'] ?? ($doctor_name ?? '')));
 $_d_email   = htmlspecialchars($_d['email'] ?? '');
 $_d_spec    = htmlspecialchars($_d['specialization'] ?? 'Doctor');
 $_d_hpr_id  = htmlspecialchars($_d['hpr_id'] ?? '');
@@ -84,7 +88,7 @@ $_menu = [
         <?php else: ?>
             <div class="sidebar-logo"><i class="fa fa-user"></i></div>
         <?php endif; ?>
-        <div class="s-name">Dr. <?= $_d_name ?></div>
+        <div class="s-name"><?= $_d_name ?></div>
         <div class="s-sub"><?= $_d_spec ?></div>
         <?php if ($_d_hpr_id): ?>
             <div style="margin-top:5px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
@@ -193,7 +197,7 @@ $_menu = [
             <i class="fa fa-user-plus"></i> New ABHA (M1)
         </a>
         <div style="text-align:right;display:none;" id="doctorTopbarName">
-            <span style="font-weight:600;font-size:.82rem;display:block;">Dr. <?= $_d_name ?></span>
+            <span style="font-weight:600;font-size:.82rem;display:block;"><?= $_d_name ?></span>
             <span style="font-size:.7rem;color:#9ca3af;"><?= $_d_spec ?></span>
         </div>
         <div class="avatar-circle" style="width:34px;height:34px;font-size:.85rem;flex-shrink:0;overflow:hidden;">

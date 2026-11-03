@@ -17,7 +17,7 @@
                 <i class="fa fa-user-md"></i>
             </div>
             <div>
-                <div class="fw-bold">Dr. <?= htmlspecialchars($doctor['name'] ?? '') ?></div>
+                <div class="fw-bold"><?= htmlspecialchars(doctor_display_name($doctor['name'] ?? '')) ?></div>
                 <div class="text-muted small"><?= htmlspecialchars($doctor['degrees'] ?? '') ?></div>
             </div>
         </div>

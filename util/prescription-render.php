@@ -18,6 +18,10 @@
  * $documents : rows from `patient_documents` (document_name, description, file_path, file_type)
  */
 
+if (!function_exists('doctor_display_name')) {
+    require_once __DIR__ . '/function.php';
+}
+
 if (!function_exists('render_prescription_view')) {
 
 function _rxv_e($v): string { return htmlspecialchars((string)($v ?? ''), ENT_QUOTES); }
@@ -84,7 +88,7 @@ function render_prescription_view(array $rx, array $doctor = [], array $patient 
       <h3><i class="fa fa-file-medical me-1"></i><?= _rxv_e($title) ?></h3>
       <div class="rxv-meta">
         <?php if (!empty($rx['visit_date'])): ?>Visit: <?= _rxv_e(date('d M Y', strtotime($rx['visit_date']))) ?> &nbsp;·&nbsp;<?php endif; ?>
-        Dr. <?= _rxv_e($doctor['name'] ?? '') ?><?php if (!empty($doctor['specialization'])): ?> (<?= _rxv_e($doctor['specialization']) ?>)<?php endif; ?>
+        <?= _rxv_e(doctor_display_name($doctor['name'] ?? '')) ?><?php if (!empty($doctor['specialization'])): ?> (<?= _rxv_e($doctor['specialization']) ?>)<?php endif; ?>
         <?php if (!empty($doctor['hpr_id'])): ?> &nbsp;·&nbsp; HPR: <?= _rxv_e($doctor['hpr_id']) ?><?php endif; ?>
       </div>
     </div>

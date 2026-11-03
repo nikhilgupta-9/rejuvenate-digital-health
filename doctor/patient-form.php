@@ -377,7 +377,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
                 $wa = new WhatsAppNotifier($conn);
                 $wa->sendEvent('prescription_ready', $patientMobile, [
                     'patient_name' => $patientName,
-                    'doctor_name'  => 'Dr. ' . ($doctor['name'] ?? 'your doctor'),
+                    'doctor_name'  => doctor_display_name($doctor['name'] ?? ''),
                     'date'         => date('d M Y'),
                     'download_link'=> $slipUrl,
                 ], 'prescription', (int) ($rxId ?: $appt_id));
@@ -390,12 +390,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
         if (!empty($patientEmail)) {
             try {
                 require_once dirname(__DIR__) . '/util/mail_config.php';
-                $mailSub = "Your Medical Prescription & OPD Slip - Dr. " . ($doctor['name'] ?? 'Rejuvenate');
+                $mailSub = "Your Medical Prescription & OPD Slip - " . doctor_display_name($doctor['name'] ?? '');
                 $mailBody = "
                 <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;'>
                     <h2 style='color: #0C74C5; margin-top: 0;'>Rejuvenate Digital Health</h2>
                     <p>Dear <strong>" . htmlspecialchars($patientName) . "</strong>,</p>
-                    <p>Dr. <strong>" . htmlspecialchars($doctor['name'] ?? 'Doctor') . "</strong> (" . htmlspecialchars($doctor['specialization'] ?? 'Consultant') . ") has completed your consultation and issued your digital prescription.</p>
+                    <p><strong>" . htmlspecialchars(doctor_display_name($doctor['name'] ?? '')) . "</strong> (" . htmlspecialchars($doctor['specialization'] ?? 'Consultant') . ") has completed your consultation and issued your digital prescription.</p>
                     <div style='background: #f8fafc; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #0C74C5;'>
                         <p style='margin: 0 0 8px 0;'><strong>Date:</strong> " . date('d M Y') . "</p>
                         " . (!empty($diag) ? "<p style='margin: 0 0 8px 0;'><strong>Diagnosis:</strong> " . htmlspecialchars($diag) . "</p>" : "") . "
@@ -543,6 +543,10 @@ $sidebar_active = 'patient-form';
         }
         body { background: #f4f7fb; font-size: .9rem; color: #1f2937; }
         body { font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif; }
+        .form-control:focus, .form-select:focus {
+            border-color: var(--rdh-blue);
+            box-shadow: 0 0 0 3px rgba(12,116,197,.12);
+        }
 
         /* ── Mode toggle tabs ── */
         .mode-tabs {
@@ -1500,7 +1504,7 @@ $sidebar_active = 'patient-form';
                                     <button class="accordion-button <?= $pidx > 0 ? 'collapsed' : '' ?> py-2 px-3" type="button"
                                         data-bs-toggle="collapse" data-bs-target="#prx<?= $pidx ?>">
                                         <span class="fw-semibold"><?= date('d M Y', strtotime($prx['created_at'])) ?></span>
-                                        <span class="ms-2 text-muted small">&mdash; Dr. <?= htmlspecialchars($prx['doctor_name'] ?? 'Unknown') ?></span>
+                                        <span class="ms-2 text-muted small">&mdash; <?= htmlspecialchars($prx['doctor_name'] ? doctor_display_name($prx['doctor_name']) : 'Unknown') ?></span>
                                     </button>
                                 </h2>
                                 <div id="prx<?= $pidx ?>" class="accordion-collapse collapse <?= $pidx === 0 ? 'show' : '' ?>">

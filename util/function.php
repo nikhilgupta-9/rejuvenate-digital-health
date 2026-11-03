@@ -1,4 +1,20 @@
 <?php
+
+/**
+ * Display a doctor's name with exactly one "Dr." prefix.
+ * doctors.name is sometimes stored already including "Dr." (e.g. "Dr. Raj
+ * Kumar") and sometimes not (e.g. "Raj Kumar") — callers across the doctor
+ * panel used to hardcode their own "Dr. " prefix, producing "Dr. Dr. Raj
+ * Kumar" for the former case. Route every such display through here.
+ */
+function doctor_display_name(?string $name): string
+{
+    $name = trim((string) $name);
+    if ($name === '') {
+        return 'Doctor';
+    }
+    return preg_match('/^dr\.?\s/i', $name) ? $name : 'Dr. ' . $name;
+}
 include_once __DIR__ . '/../config/connect.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/mail_config.php';
