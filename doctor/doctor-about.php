@@ -133,6 +133,8 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/swiper-bundle.min.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/style.css">
   <style>
     /* ── Profile header ── */
     .profile-header {
@@ -417,7 +419,7 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
             <?php endif; ?>
           </div>
           <div class="p-fee"><i class="fa fa-money-bill-wave mr-1" style="color:var(--primary);"></i> Consultation Fee:
-            <strong>₹<?= number_format($doctor['consultation_fee'], 2) ?></strong></div>
+            <strong>₹<?= number_format($doctor['consultation_fee'] ?? 0, 2) ?></strong></div>
         </div>
         <div>
           <a href="my-contact.php" class="btn btn-sm btn-outline-primary"><i class="fa fa-edit mr-1"></i> Edit
@@ -488,7 +490,7 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
 
           <div class="info-section">
             <div class="section-title"><i class="fa fa-stethoscope"></i> Area of Expertise</div>
-            <div class="info-value"><?= htmlspecialchars($doctor['area_of_expertise']) ?: '—' ?></div>
+            <div class="info-value"><?= htmlspecialchars($doctor['area_of_expertise'] ?? '') ?: '—' ?></div>
           </div>
 
           <?php if (!empty($doctor['short_bio']) || !empty($doctor['long_bio'])): ?>
@@ -498,7 +500,7 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
                 <div class="info-value mb-2"><?= htmlspecialchars($doctor['short_bio']) ?></div>
               <?php endif; ?>
               <?php if (!empty($doctor['long_bio'])): ?>
-                <div class="bio-box"><?= nl2br(htmlspecialchars($doctor['long_bio'])) ?></div>
+                <div class="bio-box"><?= $doctor['long_bio'] ?></div>
               <?php endif; ?>
             </div>
           <?php endif; ?>
@@ -628,7 +630,7 @@ $doctor_profile_image = !empty($doctor['profile_image']) ?
           </div>
           <div class="info-row">
             <div class="info-label">Consultation Fee</div>
-            <div class="info-value">₹<?= number_format($doctor['consultation_fee'], 2) ?></div>
+            <div class="info-value">₹<?= number_format($doctor['consultation_fee'] ?? 0, 2) ?></div>
           </div>
           <div class="info-row">
             <div class="info-label">Experience Level</div>

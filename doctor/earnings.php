@@ -110,6 +110,8 @@ $settlements = $settle_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
   <title>Earnings &amp; Bank Details | REJUVENATE Doctor Portal</title>
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/style.css">
   <style>
     .earn-stat { border-radius: 12px; padding: 18px 20px; color: #fff; }
     .earn-stat .num { font-size: 1.6rem; font-weight: 700; }

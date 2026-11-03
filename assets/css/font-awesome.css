@@ -17,6 +17,14 @@
        url("../fonts/fa-regular-400.woff") format("woff");
 }
 @font-face {
+  font-family: 'Font Awesome 5 Pro';
+  font-style: normal;
+  font-weight: 300;
+  font-display: block;
+  src: url("../fonts/fa-light-300.woff2") format("woff2"),
+       url("../fonts/fa-light-300.woff") format("woff");
+}
+@font-face {
   font-family: 'Font Awesome 5 Brands';
   font-style: normal;
   font-weight: 400;
@@ -41,6 +49,10 @@
   font-family: "Font Awesome 6 Free", "Font Awesome 5 Pro", sans-serif;
   font-weight: 400;
 }
+.fal {
+  font-family: "Font Awesome 6 Free", "Font Awesome 5 Pro", sans-serif;
+  font-weight: 900;
+}
 .fab {
   font-family: "Font Awesome 6 Brands", "Font Awesome 5 Brands", sans-serif;
   font-weight: 400;
@@ -56,7 +68,7 @@
     font-family: "flaticon";
     src: url("../fonts/flaticon.woff2") format("woff2"),
 url("../fonts/flaticon.woff") format("woff"),
-url("../fonts/flaticond41d.eot?#iefix") format("embedded-opentype"),
+url("../fonts/flaticond41d.eot?#iefix") format("embedded-opentype");
 }
 
 

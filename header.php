@@ -60,7 +60,7 @@ $logo = get_header_logo();
                     </div>
                 </div>
                 <a href="<?= BASE_URL ?>book-appointment/" class="theme-btn">
-                    <i class="far fa-chevron-right"></i>
+                    <i class="fas fa-chevron-right"></i>
                     Appointment
                 </a>
             </div>
@@ -85,13 +85,13 @@ $logo = get_header_logo();
                 // instead of showing the login picker.
                 $rdh_logged_in = null;
                 if (!empty($_SESSION['logged_in'])) {
-                    $rdh_logged_in = ['icon' => 'fal fa-user', 'label' => $_SESSION['user_name'] ?? 'My Account', 'url' => BASE_URL . 'user/user-dashboard.php'];
+                    $rdh_logged_in = ['icon' => 'fas fa-user', 'label' => $_SESSION['user_name'] ?? 'My Account', 'url' => BASE_URL . 'user/user-dashboard.php'];
                 } elseif (!empty($_SESSION['school_logged_in'])) {
-                    $rdh_logged_in = ['icon' => 'fal fa-school', 'label' => $_SESSION['school_user_name'] ?? 'School', 'url' => BASE_URL . 'school/dashboard.php'];
+                    $rdh_logged_in = ['icon' => 'fas fa-school', 'label' => $_SESSION['school_user_name'] ?? 'School', 'url' => BASE_URL . 'school/dashboard.php'];
                 } elseif (!empty($_SESSION['student_logged_in'])) {
-                    $rdh_logged_in = ['icon' => 'fal fa-user-graduate', 'label' => $_SESSION['student_name'] ?? 'Student', 'url' => BASE_URL . 'school/student/dashboard.php'];
+                    $rdh_logged_in = ['icon' => 'fas fa-user-graduate', 'label' => $_SESSION['student_name'] ?? 'Student', 'url' => BASE_URL . 'school/student/dashboard.php'];
                 } elseif (!empty($_SESSION['teacher_logged_in'])) {
-                    $rdh_logged_in = ['icon' => 'fal fa-chalkboard-teacher', 'label' => $_SESSION['teacher_name'] ?? 'Teacher', 'url' => BASE_URL . 'school/teacher/dashboard.php'];
+                    $rdh_logged_in = ['icon' => 'fas fa-chalkboard-teacher', 'label' => $_SESSION['teacher_name'] ?? 'Teacher', 'url' => BASE_URL . 'school/teacher/dashboard.php'];
                 }
                 ?>
                 <li>
@@ -99,18 +99,18 @@ $logo = get_header_logo();
                         <i class="<?= $rdh_logged_in['icon'] ?>"></i>
                         <a href="<?= $rdh_logged_in['url'] ?>"><?= htmlspecialchars($rdh_logged_in['label']) ?></a>
                     <?php else: ?>
-                        <i class="fal fa-user"></i>
+                        <i class="fas fa-user"></i>
                         <a href="#" data-bs-toggle="modal" data-bs-target="#loginRoleModal">Login / Signup</a>
                     <?php endif; ?>
                 </li>
                 <li class="suport">
-                    <i class="far fa-phone"></i>
+                    <i class="fas fa-phone-alt"></i>
                     <p>
                         Customer Support: +91-<?= $contact['phone'] ?>
                     </p>
                 </li>
                 <li class="suport">
-                    <i class="fal fa-envelope"></i>
+                    <i class="fas fa-envelope"></i>
                     <p>
                         <?= $contact['email'] ?>
                     </p>
@@ -137,35 +137,35 @@ $logo = get_header_logo();
                 <div class="row g-3">
                     <div class="col-6 col-sm-4">
                         <a href="<?= BASE_URL ?>user-login/" class="role-select-card">
-                            <i class="fal fa-user"></i>
+                            <i class="fas fa-user"></i>
                             <span class="role-name">Patient</span>
                             <span class="role-desc">Book &amp; manage appointments</span>
                         </a>
                     </div>
                     <div class="col-6 col-sm-4">
                         <a href="<?= BASE_URL ?>doctor-login/" class="role-select-card">
-                            <i class="fal fa-user-md"></i>
+                            <i class="fas fa-user-md"></i>
                             <span class="role-name">Doctor</span>
                             <span class="role-desc">Doctor panel access</span>
                         </a>
                     </div>
                     <div class="col-6 col-sm-4">
                         <a href="<?= BASE_URL ?>school-login.php" class="role-select-card">
-                            <i class="fal fa-school"></i>
+                            <i class="fas fa-school"></i>
                             <span class="role-name">School</span>
                             <span class="role-desc">School admin login</span>
                         </a>
                     </div>
                     <div class="col-6 col-sm-4">
                         <a href="<?= BASE_URL ?>student-login.php" class="role-select-card">
-                            <i class="fal fa-user-graduate"></i>
+                            <i class="fas fa-user-graduate"></i>
                             <span class="role-name">Student</span>
                             <span class="role-desc">School student login</span>
                         </a>
                     </div>
                     <div class="col-6 col-sm-4">
                         <a href="<?= BASE_URL ?>teacher-login.php" class="role-select-card">
-                            <i class="fal fa-chalkboard-teacher"></i>
+                            <i class="fas fa-chalkboard-teacher"></i>
                             <span class="role-name">Teacher</span>
                             <span class="role-desc">School teacher login</span>
                         </a>
@@ -326,7 +326,7 @@ $logo = get_header_logo();
                     </div>
                     <div class="header__hamburger my-auto">
                         <button type="button" class="sidebar__toggle" aria-label="Open navigation menu" aria-controls="site-navigation-drawer" aria-expanded="false">
-                            <i class="fal fa-bars"></i>
+                            <i class="fas fa-bars"></i>
                         </button>
                     </div>
                 </div>

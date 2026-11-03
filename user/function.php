@@ -119,12 +119,18 @@ if (isset($_POST['profile_update'])) {
             header("Location: " . BASE_URL . "user/my-profile.php?updated=1");
             exit;
         } else {
-            $error_message = "Failed to update profile. Please try again.";
+            $update_stmt->close();
+            $_SESSION['profile_error_message'] = "Failed to update profile. Please try again.";
+            header("Location: " . BASE_URL . "user/my-profile.php");
+            exit;
         }
 
         $update_stmt->close();
     } else {
-        $error_message = "Please correct the errors below.";
+        $_SESSION['profile_errors'] = $errors;
+        $_SESSION['profile_error_message'] = "Please correct the errors below.";
+        header("Location: " . BASE_URL . "user/my-profile.php");
+        exit;
     }
 }
 
@@ -192,9 +198,9 @@ function update_profile_picture($user_id, $file)
 
             // Delete old profile picture if it exists and is not the default
             if (!empty($old_data['profile_pic']) && $old_data['profile_pic'] !== 'dummy.png') {
-                $old_file_path = $_SERVER['DOCUMENT_ROOT'] . BASE_URL . 'assets/img/' . $old_data['profile_pic'];
+                $old_file_path = dirname(__DIR__) . '/assets/img/' . $old_data['profile_pic'];
                 if (file_exists($old_file_path) && is_file($old_file_path)) {
-                    unlink($old_file_path);
+                    @unlink($old_file_path);
                 }
             }
 

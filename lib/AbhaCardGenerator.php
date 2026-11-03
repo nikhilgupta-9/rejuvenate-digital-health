@@ -77,8 +77,8 @@ class AbhaCardGenerator
         // Draw silhouette avatar
         $cAvCircle = imagecolorallocate($im, 203, 213, 225);
         $cAvBody   = imagecolorallocate($im, 148, 163, 184);
-        imagefilledellipse($im, $avX + ($avW / 2), $avY + 75, 60, 60, $cAvCircle);
-        imagefilledarc($im, $avX + ($avW / 2), $avY + 185, 120, 100, 180, 360, $cAvBody, IMG_ARC_PIE);
+        imagefilledellipse($im, (int)($avX + ($avW / 2)), $avY + 75, 60, 60, $cAvCircle);
+        imagefilledarc($im, (int)($avX + ($avW / 2)), $avY + 185, 120, 100, 180, 360, $cAvBody, IMG_ARC_PIE);
 
         // Patient Details parsing
         $name    = trim($d['name'] ?? 'Authorized User');
@@ -179,7 +179,11 @@ class AbhaCardGenerator
     public static function generatePdf(array $d): string
     {
         $pngData = self::generatePng($d);
-        $tmpFile = tempnam(sys_get_temp_dir(), 'abha_card_') . '.png';
+        $tempDir = is_writable(sys_get_temp_dir()) ? sys_get_temp_dir() : (is_writable('/tmp') ? '/tmp' : (dirname(__DIR__) . '/uploads'));
+        $tmpFile = tempnam($tempDir, 'abha_card_');
+        if (!$tmpFile) {
+            $tmpFile = $tempDir . '/abha_card_' . bin2hex(random_bytes(8));
+        }
         file_put_contents($tmpFile, $pngData);
 
         $pdf = new FPDF('P', 'mm', 'A4');
@@ -204,7 +208,7 @@ class AbhaCardGenerator
         // A4 width = 210mm. Card width = 160mm. Left margin = (210 - 160) / 2 = 25mm.
         $cardW = 160;
         $cardH = 101; // ~1.58 ratio
-        $pdf->Image($tmpFile, 25, 42, $cardW, $cardH);
+        $pdf->Image($tmpFile, 25, 42, $cardW, $cardH, 'PNG');
 
         @unlink($tmpFile);
 
@@ -292,8 +296,8 @@ class AbhaCardGenerator
 
             // Center logo box
             $boxS = 46;
-            $midX = $x + ($size / 2) - ($boxS / 2);
-            $midY = $y + ($size / 2) - ($boxS / 2);
+            $midX = (int) round($x + ($size / 2) - ($boxS / 2));
+            $midY = (int) round($y + ($size / 2) - ($boxS / 2));
             imagefilledrectangle($im, $midX, $midY, $midX + $boxS, $midY + $boxS, $cWhite);
             imagerectangle($im, $midX, $midY, $midX + $boxS, $midY + $boxS, $cBlack);
 

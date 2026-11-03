@@ -13,8 +13,13 @@
  * On failure: redirects to auth/login.php (or returns null if $return_null).
  */
 
-if (!defined('JWT_SECRET')) {
-    define('JWT_SECRET', $_ENV['JWT_SECRET'] ?? '');
+if (!defined('JWT_SECRET') || JWT_SECRET === '') {
+    if (!isset($conn) || !isset($_ENV['JWT_SECRET'])) {
+        require_once dirname(__DIR__) . '/db-conn.php';
+    }
+    if (!defined('JWT_SECRET')) {
+        define('JWT_SECRET', $_ENV['JWT_SECRET'] ?? '');
+    }
 }
 require_once __DIR__ . '/../../lib/JWT.php';
 

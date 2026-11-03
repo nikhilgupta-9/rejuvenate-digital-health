@@ -219,3 +219,8 @@ Do **not** `CREATE TABLE` / `ALTER TABLE` at runtime in PHP — add a migration 
 - ABDM sandbox client id: `SBXID_038789` (`.env` `ABDM_CLIENT_ID`; also used as AUA code)
 - HPR sandbox doctor handle: `sanjay8273@hpr.abdm`
 - MySQL socket (XAMPP dev): `/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock` — CLI needs `/Applications/XAMPP/xamppfiles/bin/php`
+
+
+
+https://rejuvenatedigitalhealth.com/webhook/razorpay.php
+webhook

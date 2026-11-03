@@ -48,22 +48,21 @@ $_page_titles = [
 $_page_title = $_page_titles[$sidebar_active] ?? 'Patient Portal';
 
 $_menu = [
-    'dashboard'       => ['icon' => 'fa fa-th-large',     'label' => 'Dashboard',                 'url' => BASE_URL . 'user/user-dashboard.php',         'section' => 'Main'],
-    'abha'            => ['icon' => 'fa fa-id-card',      'label' => 'ABHA Health ID & Card',     'url' => BASE_URL . 'user/my-abha.php',                'section' => 'Digital Health (ABDM)'],
-    'health'          => ['icon' => 'fa fa-heartbeat',    'label' => 'Health Profile (PHR)',      'url' => BASE_URL . 'user/health-profile.php',         'section' => 'Digital Health (ABDM)'],
-    'medical-history' => ['icon' => 'fa fa-file-medical', 'label' => 'Medical & Clinical History','url' => BASE_URL . 'user/medical-history.php',      'section' => 'Digital Health (ABDM)'],
-    'reports'         => ['icon' => 'fa fa-chart-area',   'label' => 'Diagnostic Reports',       'url' => BASE_URL . 'user/my-reports.php',             'section' => 'Digital Health (ABDM)'],
-    'appointments'    => ['icon' => 'fa fa-stethoscope',  'label' => 'My Consultations',          'url' => BASE_URL . 'user/my-doctor-appointments.php', 'section' => 'Consultations'],
-    'bookings'        => ['icon' => 'fa fa-calendar-plus','label' => 'Book Consultation',         'url' => BASE_URL . 'user/my-bookings.php',            'section' => 'Consultations'],
-    'pharmacy'        => ['icon' => 'fa fa-pills',        'label' => 'Medicine Orders',           'url' => BASE_URL . 'user/my-medicine-orders.php',    'section' => 'Pharmacy & Labs'],
-    'lab'             => ['icon' => 'fa fa-flask',        'label' => 'Lab Test Bookings',         'url' => BASE_URL . 'user/my-lab-bookings.php',        'section' => 'Pharmacy & Labs'],
-    'orders'          => ['icon' => 'fa fa-shopping-bag', 'label' => 'Supplement Orders',         'url' => BASE_URL . 'user/my-supplement-order.php',    'section' => 'Pharmacy & Labs'],
-    'address'         => ['icon' => 'fa fa-map-marker',   'label' => 'Saved Addresses',           'url' => BASE_URL . 'user/manage-address.php',         'section' => 'Account & Support'],
-    'profile'         => ['icon' => 'fa fa-user',         'label' => 'Account Profile',           'url' => BASE_URL . 'user/my-profile.php',             'section' => 'Account & Support'],
-    'help'            => ['icon' => 'fa fa-life-ring',    'label' => 'Help & ABDM Support',       'url' => BASE_URL . 'user/help-and-contact.php',       'section' => 'Account & Support'],
+    'dashboard'       => ['icon' => 'fas fa-th-large',     'label' => 'Dashboard',                 'url' => BASE_URL . 'user/user-dashboard.php',         'section' => 'Main'],
+    'abha'            => ['icon' => 'fas fa-id-card',      'label' => 'ABHA Health ID & Card',     'url' => BASE_URL . 'user/my-abha.php',                'section' => 'Digital Health (ABDM)'],
+    'health'          => ['icon' => 'fas fa-heartbeat',    'label' => 'Health Profile (PHR)',      'url' => BASE_URL . 'user/health-profile.php',         'section' => 'Digital Health (ABDM)'],
+    'medical-history' => ['icon' => 'fas fa-file-medical', 'label' => 'Medical & Clinical History','url' => BASE_URL . 'user/medical-history.php',      'section' => 'Digital Health (ABDM)'],
+    'reports'         => ['icon' => 'fas fa-chart-area',   'label' => 'Diagnostic Reports',       'url' => BASE_URL . 'user/my-reports.php',             'section' => 'Digital Health (ABDM)'],
+    'appointments'    => ['icon' => 'fas fa-stethoscope',  'label' => 'My Consultations',          'url' => BASE_URL . 'user/my-doctor-appointments.php', 'section' => 'Consultations'],
+    'bookings'        => ['icon' => 'fas fa-calendar-plus','label' => 'Book Consultation',         'url' => BASE_URL . 'user/my-bookings.php',            'section' => 'Consultations'],
+    'pharmacy'        => ['icon' => 'fas fa-pills',        'label' => 'Medicine Orders',           'url' => BASE_URL . 'user/my-medicine-orders.php',    'section' => 'Pharmacy & Labs'],
+    'lab'             => ['icon' => 'fas fa-flask',        'label' => 'Lab Test Bookings',         'url' => BASE_URL . 'user/my-lab-bookings.php',        'section' => 'Pharmacy & Labs'],
+    'orders'          => ['icon' => 'fas fa-shopping-bag', 'label' => 'Supplement Orders',         'url' => BASE_URL . 'user/my-supplement-order.php',    'section' => 'Pharmacy & Labs'],
+    'address'         => ['icon' => 'fas fa-location-dot', 'label' => 'Saved Addresses',           'url' => BASE_URL . 'user/manage-address.php',         'section' => 'Account & Support'],
+    'profile'         => ['icon' => 'fas fa-user',         'label' => 'Account Profile',           'url' => BASE_URL . 'user/my-profile.php',             'section' => 'Account & Support'],
+    'help'            => ['icon' => 'fas fa-life-ring',    'label' => 'Help & ABDM Support',       'url' => BASE_URL . 'user/help-and-contact.php',       'section' => 'Account & Support'],
 ];
 ?>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
 
 <!-- Sidebar Overlay (mobile) -->
@@ -84,7 +83,7 @@ $_menu = [
         <?php if ($_u_abha_linked): ?>
             <div style="margin-top:6px;">
                 <span style="background:#02c9b8;border-radius:10px;padding:2px 8px;font-size:.62rem;font-weight:700;color:#fff;display:inline-block;">
-                    <i class="fa fa-shield"></i> ABDM Verified
+                    <i class="fas fa-shield-alt"></i> ABDM Verified
                 </span>
                 <?php if (!empty($_u_abha_id)): ?>
                     <div style="font-size:.65rem;color:rgba(255,255,255,.75);margin-top:2px;font-family:monospace;letter-spacing:.3px;">
@@ -95,14 +94,14 @@ $_menu = [
         <?php elseif ($_abha_pending): ?>
             <div style="margin-top:6px;">
                 <span style="background:#d97706;border-radius:10px;padding:2px 8px;font-size:.62rem;font-weight:700;color:#fff;display:inline-block;">
-                    <i class="fa fa-clock-o"></i> ABHA Pending
+                    <i class="fas fa-clock"></i> ABHA Pending
                 </span>
             </div>
         <?php else: ?>
             <div style="margin-top:6px;">
                 <a href="<?= BASE_URL ?>user/my-abha.php"
                     style="font-size:.68rem;color:rgba(255,255,255,.75);background:rgba(255,255,255,.15);border-radius:6px;padding:2px 8px;display:inline-block;text-decoration:none;">
-                    <i class="fa fa-id-card"></i> Link ABHA ID
+                    <i class="fas fa-id-card"></i> Link ABHA ID
                 </a>
             </div>
         <?php endif; ?>
@@ -127,21 +126,55 @@ $_menu = [
 
         <div class="nav-label">Session</div>
         <a href="<?= BASE_URL ?>logout.php">
-            <span class="nav-icon"><i class="fa fa-sign-out"></i></span>
+            <span class="nav-icon"><i class="fas fa-sign-out-alt"></i></span>
             Logout
         </a>
     </nav>
 
     <div class="sidebar-footer">
-        <i class="fa fa-user-circle" style="margin-right:5px;"></i><?= $_u_email ?>
+        <i class="fas fa-user-circle" style="margin-right:5px;"></i><?= $_u_email ?>
     </div>
 </aside>
+
+<script>
+(function () {
+    // Every page load is a full navigation, so the sidebar's internal
+    // scroll (.sidebar-nav) resets to 0 by default — annoying when the
+    // active link is further down the list. Persist it per-tab and
+    // restore immediately (before paint-worthy content loads further
+    // down) so the list doesn't visibly jump on every page switch.
+    var nav = document.querySelector('.sidebar-nav');
+    if (!nav) return;
+    var KEY = 'rdh_patient_sidebar_scroll';
+
+    var saved = sessionStorage.getItem(KEY);
+    if (saved !== null) {
+        nav.scrollTop = parseInt(saved, 10) || 0;
+    } else {
+        var activeLink = nav.querySelector('a.active');
+        if (activeLink) activeLink.scrollIntoView({ block: 'nearest' });
+    }
+
+    var saveTimer = null;
+    nav.addEventListener('scroll', function () {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(function () {
+            sessionStorage.setItem(KEY, String(nav.scrollTop));
+        }, 100);
+    });
+    // Belt-and-suspenders: capture the latest position right before
+    // navigating away, in case the debounce above hasn't fired yet.
+    window.addEventListener('pagehide', function () {
+        sessionStorage.setItem(KEY, String(nav.scrollTop));
+    });
+})();
+</script>
 
 <!-- Top Bar -->
 <div class="patient-topbar">
     <div class="topbar-left">
-        <button class="sidebar-toggler" id="patientSidebarToggle">
-            <i class="fa fa-bars"></i>
+        <button class="sidebar-toggler" id="patientSidebarToggle" aria-label="Toggle Sidebar Navigation">
+            <i class="fas fa-bars"></i>
         </button>
         <div class="topbar-title-wrap">
             <div class="topbar-title"><?= htmlspecialchars($_page_title) ?></div>
@@ -161,10 +194,10 @@ $_menu = [
             <?php endif; ?>
         </div>
         <a href="<?= BASE_URL ?>" class="btn btn-sm btn-outline-primary topbar-home-btn" title="Visit Site">
-            <i class="fa fa-home"></i>
+            <i class="fas fa-home"></i>
         </a>
         <a href="<?= BASE_URL ?>logout.php" class="btn btn-sm btn-outline-danger" title="Logout">
-            <i class="fa fa-sign-out"></i>
+            <i class="fas fa-sign-out-alt"></i>
         </a>
     </div>
 </div>

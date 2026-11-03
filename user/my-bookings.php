@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include_once "../config/connect.php";
 include_once "../util/function.php";
 
@@ -616,14 +618,17 @@ if ($pre_doctor_id) {
     <?php $sidebar_active = 'bookings'; include("sidebar.php"); ?>
     <main class="patient-content">
 
-        <div class="profile-card shadow">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h4 class="mb-0">Book New Appointment</h4>
-                <a href="my-doctor-appointments.php" class="btn btn-outline-secondary btn-sm">
-                    <i class="fa fa-arrow-left me-1"></i> My Appointments
-                </a>
+        <div class="acc-header-banner">
+            <div>
+                <h1><i class="fa fa-calendar-plus me-2"></i>Book New Appointment</h1>
+                <div class="ap-sub">Pick a department, doctor, date and time in a few quick steps</div>
             </div>
+            <a href="my-doctor-appointments.php" class="btn btn-outline-secondary btn-sm">
+                <i class="fa fa-arrow-left me-1"></i> My Appointments
+            </a>
+        </div>
 
+        <div class="profile-card shadow">
             <?php if ($reschedule_appointment): ?>
                 <div class="alert alert-info" style="font-size:.88rem;">
                     <i class="fa fa-info-circle me-1"></i>

@@ -376,6 +376,8 @@ $earnings = $earnings_result->fetch_assoc();
   <title>Dashboard | REJUVENATE Doctor Portal</title>
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     /* ── Page-level overrides ── */

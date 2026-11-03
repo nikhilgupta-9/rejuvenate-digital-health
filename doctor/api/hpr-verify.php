@@ -89,9 +89,22 @@ try {
         /* ── START: issue a 5-minute Aadhaar link ──────────────────── */
         case 'start':
             $startRl = Security::rlKey('hpr_start', $ip, (string) $doctorId);
-            if (Security::isRateLimited($startRl, 5, 600)) {
+            if (Security::isRateLimited($startRl, 10, 600)) {
                 $logger->logApiAnomaly('doctor/api/hpr-verify.php', 'start', 'link rate limit exceeded', $doctorId, 429);
                 fail('Too many verification attempts. Please wait 10 minutes before trying again.', 429);
+            }
+
+            // Doctor can optionally pass hpr_id directly from the client input
+            $passedHpr = trim((string)($data['hpr_id'] ?? ''));
+            if ($passedHpr !== '') {
+                $cleanDigits = preg_replace('/\D/', '', $passedHpr);
+                if (strlen($cleanDigits) === 14) {
+                    $passedHpr = substr($cleanDigits, 0, 2) . '-' . substr($cleanDigits, 2, 4) . '-' . substr($cleanDigits, 6, 4) . '-' . substr($cleanDigits, 10, 4);
+                }
+                $updHpr = $conn->prepare("UPDATE doctors SET hpr_id = ? WHERE id = ?");
+                $updHpr->bind_param('si', $passedHpr, $doctorId);
+                $updHpr->execute();
+                $updHpr->close();
             }
 
             // Doctor must have entered + saved an HPR ID first.
@@ -246,6 +259,50 @@ try {
                 'hprIdNumber' => (string) ($ck['data']['hprIdNumber'] ?? ''),
                 'name'        => trim(($ck['data']['firstName'] ?? '') . ' ' . ($ck['data']['lastName'] ?? '')),
             ]);
+
+        /* ── SANDBOX SIMULATION (available only in ABDM_ENV === 'sandbox') ── */
+        case 'sandbox_test_verify':
+            if (defined('ABDM_ENV') && ABDM_ENV !== 'sandbox') {
+                fail('Sandbox simulation is disabled in production.');
+            }
+            $dq = $conn->prepare("SELECT hpr_id, name FROM doctors WHERE id = ? LIMIT 1");
+            $dq->bind_param('i', $doctorId);
+            $dq->execute();
+            $doc = $dq->get_result()->fetch_assoc() ?: [];
+            $dq->close();
+
+            $hprVal = trim((string)($data['hpr_id'] ?? $doc['hpr_id'] ?? ''));
+            if ($hprVal === '') {
+                $hprVal = '27-' . mt_rand(1000, 9999) . '-' . mt_rand(1000, 9999) . '-' . mt_rand(1000, 9999);
+            } else {
+                $cleanDigits = preg_replace('/\D/', '', $hprVal);
+                if (strlen($cleanDigits) === 14) {
+                    $hprVal = substr($cleanDigits, 0, 2) . '-' . substr($cleanDigits, 2, 4) . '-' . substr($cleanDigits, 6, 4) . '-' . substr($cleanDigits, 10, 4);
+                }
+            }
+
+            $sbxTxn = 'SBX-HPR-' . bin2hex(random_bytes(8));
+            $upd = $conn->prepare("UPDATE doctors SET hpr_id = ?, hpr_verified = 1, hpr_verified_at = NOW(), hpr_verification_source = 'sandbox_test', hpr_txn_id = ? WHERE id = ?");
+            $upd->bind_param('ssi', $hprVal, $sbxTxn, $doctorId);
+            $upd->execute();
+            $upd->close();
+
+            $logger->logAbhaAuth($doctorId, 'doctor', 'HPR_SANDBOX', $sbxTxn, 'SUCCESS', 'Y', ['hpr_id' => $hprVal]);
+            ok([
+                'state'       => 'verified',
+                'hprIdNumber' => $hprVal,
+                'name'        => $doc['name'] ?? 'Doctor',
+                'sandbox'     => true,
+            ]);
+
+        /* ── RESET HPR VERIFICATION (when updating HPR ID) ── */
+        case 'reset_hpr':
+            $upd = $conn->prepare("UPDATE doctors SET hpr_verified = 0, hpr_verified_at = NULL, hpr_verification_source = NULL, hpr_txn_id = NULL WHERE id = ?");
+            $upd->bind_param('i', $doctorId);
+            $upd->execute();
+            $upd->close();
+
+            ok(['state' => 'unverified', 'message' => 'HPR verification status reset.']);
 
         default:
             fail('Unknown action: ' . htmlspecialchars($action));

@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include_once "../config/connect.php";
 include_once "../util/function.php";
 
@@ -257,24 +259,23 @@ if (isset($_GET['set_default'])) {
 <body class="patient-body">
     <?php $sidebar_active = 'address'; include("sidebar.php"); ?>
     <main class="patient-content">
-        <div class="profile-card shadow-sm border-0">
-            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-                <div>
-                    <h1 class="ap-h mb-1"><i class="fa fa-map-marker me-2 text-primary-theme"></i>Manage Delivery Addresses</h1>
-                    <div class="ap-sub">Saved shipping addresses for medicine deliveries, lab sample collection, and supplements</div>
-                </div>
-                <a href="<?= BASE_URL ?>user/user-dashboard.php" class="btn btn-outline-secondary btn-sm">
-                    <i class="fa fa-arrow-left me-1"></i> Back to Dashboard
-                </a>
+        <div class="acc-header-banner">
+            <div>
+                <h1><i class="fa fa-map-marker me-2"></i>Manage Delivery Addresses</h1>
+                <div class="ap-sub">Saved shipping addresses for medicine deliveries, lab sample collection, and supplements</div>
             </div>
-                        
+            <a href="<?= BASE_URL ?>user/user-dashboard.php" class="btn btn-outline-secondary btn-sm">
+                <i class="fa fa-arrow-left me-1"></i> Back to Dashboard
+            </a>
+        </div>
+
                         <?php if ($success_message): ?>
                             <div class="alert alert-success alert-dismissible fade show" role="alert">
                                 <?= $success_message ?>
                                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                             </div>
                         <?php endif; ?>
-                        
+
                         <?php if ($error_message): ?>
                             <div class="alert alert-danger alert-dismissible fade show" role="alert">
                                 <?= $error_message ?>
@@ -283,8 +284,14 @@ if (isset($_GET['set_default'])) {
                         <?php endif; ?>
 
                         <!-- Add New Address Form -->
-                        <div class="mb-5">
-                            <h5 class="mb-3">Add New Address</h5>
+                        <div class="acc-card">
+                            <div class="acc-card-head">
+                                <span class="acc-icon"><i class="fa fa-plus"></i></span>
+                                <div>
+                                    <h2>Add New Address</h2>
+                                    <small>Used for medicine delivery and home sample collection</small>
+                                </div>
+                            </div>
                             <form method="POST" action="" novalidate>
                                 <div class="row mt-4">
                                     <div class="col-md-6 mb-3">
@@ -369,9 +376,15 @@ if (isset($_GET['set_default'])) {
                         </div>
 
                         <!-- Existing Addresses -->
-                        <div class="existing-addresses">
-                            <h5 class="mb-3">Your Addresses</h5>
-                            
+                        <div class="acc-card existing-addresses">
+                            <div class="acc-card-head">
+                                <span class="acc-icon"><i class="fa fa-list"></i></span>
+                                <div>
+                                    <h2>Your Addresses</h2>
+                                    <small><?= count($addresses) ?> saved address<?= count($addresses) === 1 ? '' : 'es' ?></small>
+                                </div>
+                            </div>
+
                             <?php if (empty($addresses)): ?>
                                 <div class="alert alert-info">
                                     You haven't added any addresses yet. Add your first address above.
@@ -414,7 +427,6 @@ if (isset($_GET['set_default'])) {
                                 </div>
                             <?php endif; ?>
                         </div>
-                    </div>
     </main>
     <?php include("inc/scripts.php") ?>
 

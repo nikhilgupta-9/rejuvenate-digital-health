@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+  session_start();
+}
 include_once "../config/connect.php";
 include_once "../config/abdm.php";
 include_once "../util/function.php";
@@ -106,7 +108,6 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/animate.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
-  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <style>
     :root {
       --ab: #00875a;
@@ -1144,6 +1145,7 @@ if (!empty($user['dob']) && $user['dob'] !== '0000-00-00') {
           </div><!-- /row -->
   </main>
   <?php include("inc/scripts.php") ?>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="<?= BASE_URL ?>assets/js/abha-qr-scanner.js"></script>
   <script>
     /* ── QR scan: fill ABHA number/address from a scanned card/app QR ── */

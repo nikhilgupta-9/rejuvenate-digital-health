@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include_once "../config/connect.php";
 include_once "../util/function.php";
 
@@ -17,9 +19,9 @@ $doctor_filter = (int) ($_GET['doctor_id'] ?? 0);
 // Every finalised OPD prescription for this patient — the doctor panel's
 // patient-form.php (OPD) is what writes these rows; opd-slip.php (also OPD)
 // generates the PDF linked from each row below.
-$where = ["p.patient_id = ?", "p.status = 'final'"];
-$params = [$user_id];
-$types = "i";
+$where = ["(p.patient_id = ? OR a.user_id = ?)", "p.status = 'final'"];
+$params = [$user_id, $user_id];
+$types = "ii";
 
 if ($doctor_filter > 0) {
     $where[] = "p.doctor_id = ?";
@@ -40,14 +42,14 @@ $sql = "
     SELECT
         p.*,
         a.appointment_time,
-        d.name AS doctor_name,
-        d.specialization,
+        COALESCE(d.name, 'Assigned Medical Specialist') AS doctor_name,
+        COALESCE(d.specialization, 'General Medicine') AS specialization,
         d.degrees,
         d.profile_image,
         DATE_FORMAT(p.visit_date, '%d %M %Y') AS fmt_visit_date
     FROM prescriptions p
-    JOIN appointments a ON a.id = p.appointment_id
-    JOIN doctors d ON d.id = p.doctor_id
+    LEFT JOIN appointments a ON a.id = p.appointment_id
+    LEFT JOIN doctors d ON d.id = p.doctor_id
     $where_sql
     ORDER BY p.visit_date DESC, a.appointment_time DESC
 ";
@@ -69,12 +71,13 @@ $history_page = array_slice($history, ($page - 1) * $per_page, $per_page);
 $stats_stmt = $conn->prepare("
     SELECT
         COUNT(*) AS total_rx,
-        COUNT(DISTINCT doctor_id) AS total_doctors,
-        SUM(CASE WHEN YEAR(visit_date) = YEAR(CURDATE()) THEN 1 ELSE 0 END) AS this_year
-    FROM prescriptions
-    WHERE patient_id = ? AND status = 'final'
+        COUNT(DISTINCT p.doctor_id) AS total_doctors,
+        SUM(CASE WHEN YEAR(p.visit_date) = YEAR(CURDATE()) THEN 1 ELSE 0 END) AS this_year
+    FROM prescriptions p
+    LEFT JOIN appointments a ON a.id = p.appointment_id
+    WHERE (p.patient_id = ? OR a.user_id = ?) AND p.status = 'final'
 ");
-$stats_stmt->bind_param('i', $user_id);
+$stats_stmt->bind_param('ii', $user_id, $user_id);
 $stats_stmt->execute();
 $stats = $stats_stmt->get_result()->fetch_assoc();
 $stats_stmt->close();
@@ -83,11 +86,12 @@ $stats_stmt->close();
 $doc_list_stmt = $conn->prepare("
     SELECT DISTINCT d.id, d.name
     FROM prescriptions p
+    LEFT JOIN appointments a ON a.id = p.appointment_id
     JOIN doctors d ON d.id = p.doctor_id
-    WHERE p.patient_id = ? AND p.status = 'final'
+    WHERE (p.patient_id = ? OR a.user_id = ?) AND p.status = 'final'
     ORDER BY d.name
 ");
-$doc_list_stmt->bind_param('i', $user_id);
+$doc_list_stmt->bind_param('ii', $user_id, $user_id);
 $doc_list_stmt->execute();
 $doctor_options = $doc_list_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $doc_list_stmt->close();
@@ -247,7 +251,7 @@ function mh_url($overrides, $doctor_filter, $search_query)
                                                 <span class="doctor-avatar"><i class="fa fa-user-md"></i></span>
                                             <?php endif; ?>
                                             <div>
-                                                <strong>Dr. <?= htmlspecialchars($rx['doctor_name']) ?></strong><br>
+                                                <strong><?= htmlspecialchars(str_starts_with($rx['doctor_name'], 'Dr.') || str_starts_with($rx['doctor_name'], 'Assigned') ? $rx['doctor_name'] : 'Dr. ' . $rx['doctor_name']) ?></strong><br>
                                                 <small class="text-muted"><?= htmlspecialchars($rx['specialization']) ?></small>
                                             </div>
                                         </div>
@@ -280,7 +284,7 @@ function mh_url($overrides, $doctor_filter, $search_query)
                                         <span class="doctor-avatar"><i class="fa fa-user-md"></i></span>
                                     <?php endif; ?>
                                     <div>
-                                        <strong>Dr. <?= htmlspecialchars($rx['doctor_name']) ?></strong>
+                                        <strong><?= htmlspecialchars(str_starts_with($rx['doctor_name'], 'Dr.') || str_starts_with($rx['doctor_name'], 'Assigned') ? $rx['doctor_name'] : 'Dr. ' . $rx['doctor_name']) ?></strong>
                                         <div class="ac-meta"><?= htmlspecialchars($rx['specialization']) ?></div>
                                     </div>
                                 </div>

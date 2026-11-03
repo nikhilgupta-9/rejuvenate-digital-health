@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include_once "../config/connect.php";
 include_once "../util/function.php";
 
@@ -111,7 +113,7 @@ $orders = $orders_query->get_result();
                         <div class="small text-muted mb-1 font-weight-bold">Shipping Address:</div>
                         <div class="small text-dark">
                             <i class="fa fa-map-marker text-muted me-1"></i>
-                            <?= nl2br(htmlspecialchars($ord['shipping_address'])) ?>
+                            <?= nl2br(htmlspecialchars($ord['shipping_address'] ?? '')) ?>
                         </div>
                         <?php if (!empty($ord['delivery_date'])): ?>
                             <div class="small text-success mt-1 fw-bold">

@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include_once "../config/connect.php";
 include_once "../util/function.php";
 
@@ -29,10 +31,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 $sql = "
     SELECT 
         a.*,
-        d.name as doctor_name,
-        d.specialization,
+        COALESCE(d.name, 'Assigned Medical Specialist') as doctor_name,
+        COALESCE(d.specialization, 'General Consultation') as specialization,
         d.degrees,
-        d.consultation_fee,
+        COALESCE(d.consultation_fee, a.payment_amount, 0) as consultation_fee,
         d.profile_image,
         d.experience_years,
         d.rating,
@@ -49,7 +51,7 @@ $sql = "
             ELSE 'past'
         END as appointment_status
     FROM appointments a
-    JOIN doctors d ON a.doctor_id = d.id
+    LEFT JOIN doctors d ON a.doctor_id = d.id
     WHERE a.user_id = ?
 ";
 
@@ -271,12 +273,12 @@ $STATUS_META = [
             </div>
           <?php endif; ?>
           
-          <div class="d-flex align-items-center justify-content-between mb-3">
+          <div class="acc-header-banner">
             <div>
-              <h1 class="ap-h">My Appointments</h1>
+              <h1><i class="fa fa-stethoscope me-2"></i>My Appointments</h1>
               <div class="ap-sub">Your consultations with Rejuvenate doctors</div>
             </div>
-            <a href="my-bookings.php" class="btn btn-primary btn-sm d-none d-lg-inline-flex align-items-center" style="background:var(--primary);border-color:var(--primary);">
+            <a href="my-bookings.php" class="btn btn-light btn-sm d-none d-lg-inline-flex align-items-center fw-bold" style="color:var(--primary);">
               <i class="fa fa-plus me-1"></i> Book New Appointment
             </a>
           </div>
@@ -408,7 +410,7 @@ $STATUS_META = [
                               <span class="doctor-avatar"><i class="fa fa-user-md"></i></span>
                             <?php endif; ?>
                             <div>
-                              <strong>Dr. <?= htmlspecialchars($appointment['doctor_name']) ?></strong><br>
+                              <strong><?= htmlspecialchars(str_starts_with($appointment['doctor_name'], 'Dr.') || str_starts_with($appointment['doctor_name'], 'Assigned') ? $appointment['doctor_name'] : 'Dr. ' . $appointment['doctor_name']) ?></strong><br>
                               <small class="text-muted"><?= htmlspecialchars($appointment['specialization']) ?></small>
                             </div>
                           </div>
@@ -447,20 +449,20 @@ $STATUS_META = [
                           <span class="doctor-avatar"><i class="fa fa-user-md"></i></span>
                         <?php endif; ?>
                         <div>
-                          <strong>Dr. <?= htmlspecialchars($appointment['doctor_name']) ?></strong>
+                          <strong><?= htmlspecialchars(str_starts_with($appointment['doctor_name'], 'Dr.') || str_starts_with($appointment['doctor_name'], 'Assigned') ? $appointment['doctor_name'] : 'Dr. ' . $appointment['doctor_name']) ?></strong>
                           <div class="ac-meta"><?= htmlspecialchars($appointment['specialization']) ?></div>
                         </div>
                       </div>
                       <span class="badge-status" style="background:<?= $meta[2] ?>;color:<?= $meta[1] ?>;"><?= $meta[0] ?></span>
                     </div>
                     <div class="ac-meta mt-2">
-                      <i class="fa fa-clock-o me-1"></i><?= $appointment['formatted_time'] ?>
+                      <i class="fa fa-clock me-1"></i><?= $appointment['formatted_time'] ?>
                       &nbsp;·&nbsp; <i class="fa fa-calendar me-1"></i><?= $appointment['formatted_date'] ?>
-                      &nbsp;·&nbsp; <i class="fa fa-rupee-sign me-1"></i><?= number_format($appointment['consultation_fee']) ?>
+                      &nbsp;·&nbsp; <i class="fa fa-inr me-1"></i><?= number_format($appointment['consultation_fee']) ?>
                       <?php if ($is_today): ?> &nbsp;<span class="badge-status" style="background:#e7f2fb;color:var(--primary);">Today</span><?php endif; ?>
                     </div>
                     <?php if (!empty($appointment['purpose'])): ?>
-                      <div class="ac-meta mt-1"><i class="fa fa-comment-o me-1"></i><?= htmlspecialchars(substr($appointment['purpose'], 0, 100)) ?><?= strlen($appointment['purpose']) > 100 ? '…' : '' ?></div>
+                      <div class="ac-meta mt-1"><i class="fa fa-comment me-1"></i><?= htmlspecialchars(substr($appointment['purpose'], 0, 100)) ?><?= strlen($appointment['purpose']) > 100 ? '…' : '' ?></div>
                     <?php endif; ?>
                     <div class="ac-row"><?= $render_actions($appointment) ?></div>
                   </div>

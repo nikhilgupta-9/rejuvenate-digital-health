@@ -62,8 +62,10 @@ $student_rx = null;   // latest student prescription (for pre-fill)
 /* ── Today's appointment list for sidebar ── */
 $today = date('Y-m-d');
 $ts = $conn->prepare("
-    SELECT a.id, u.name, u.last_name, a.appointment_time
-    FROM appointments a JOIN users u ON a.user_id = u.id
+    SELECT a.id, COALESCE(u.name, sm.name, a.patient_name, 'Patient') as name, u.last_name, a.appointment_time
+    FROM appointments a
+    LEFT JOIN users u ON a.user_id = u.id
+    LEFT JOIN school_members sm ON a.school_member_id = sm.id
     WHERE a.doctor_id = ? AND a.appointment_date = ?
       AND a.status IN ('approved','pending','confirmed')
     ORDER BY a.appointment_time ASC
@@ -76,9 +78,16 @@ $ts->close();
 /* ── Recent appointments for quick resume when none selected ── */
 $recent_appts = [];
 $ra = $conn->prepare("
-    SELECT a.id, u.name, u.last_name, u.mobile, u.abha_id, a.appointment_date, a.appointment_time, a.status,
+    SELECT a.id, 
+           COALESCE(u.name, sm.name, a.patient_name, 'Patient') as name, 
+           u.last_name, 
+           COALESCE(u.mobile, sm.phone, a.patient_phone) as mobile, 
+           COALESCE(u.abha_id, sm.abha_id, a.abha_number) as abha_id, 
+           a.appointment_date, a.appointment_time, a.status,
            (SELECT COUNT(*) FROM prescriptions p WHERE p.appointment_id = a.id) as has_rx
-    FROM appointments a JOIN users u ON a.user_id = u.id
+    FROM appointments a
+    LEFT JOIN users u ON a.user_id = u.id
+    LEFT JOIN school_members sm ON a.school_member_id = sm.id
     WHERE a.doctor_id = ?
     ORDER BY a.appointment_date DESC, a.appointment_time DESC
     LIMIT 12
@@ -108,18 +117,19 @@ $save_error   = '';
 if ($mode === 'patient' && $appointment_id > 0) {
     $as = $conn->prepare("
         SELECT a.*,
-               u.id           AS patient_id,
-               u.name         AS patient_name,
-               u.last_name    AS patient_last_name,
-               u.mobile       AS patient_phone,
-               u.email        AS patient_email,
-               u.dob,
-               u.gender,
-               u.blood_group,
+               COALESCE(u.id, 0) AS patient_id,
+               COALESCE(u.name, sm.name, a.patient_name, 'Patient') AS patient_name,
+               COALESCE(u.last_name, '') AS patient_last_name,
+               COALESCE(u.mobile, sm.phone, a.patient_phone, '') AS patient_phone,
+               COALESCE(u.email, sm.email, a.patient_email, '') AS patient_email,
+               COALESCE(u.dob, sm.dob) AS dob,
+               COALESCE(u.gender, sm.gender, '—') AS gender,
+               COALESCE(u.blood_group, sm.blood_group, '') AS blood_group,
                " . Abha::selectAliases('aa', 'u') . ",
-               TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) AS patient_age
+               TIMESTAMPDIFF(YEAR, COALESCE(u.dob, sm.dob), CURDATE()) AS patient_age
         FROM appointments a
-        JOIN users u ON a.user_id = u.id
+        LEFT JOIN users u ON a.user_id = u.id
+        LEFT JOIN school_members sm ON a.school_member_id = sm.id
         " . Abha::joinClause('patient', 'u', 'aa') . "
         WHERE a.id = ? AND a.doctor_id = ?
         LIMIT 1
@@ -134,6 +144,12 @@ if ($mode === 'patient' && $appointment_id > 0) {
         exit();
     }
     $patient = $appointment;
+    $patient['name'] = $patient['patient_name'];
+    $patient['mobile'] = $patient['patient_phone'];
+    $patient['email'] = $patient['patient_email'];
+    if ($patient['patient_age'] === null) {
+        $patient['patient_age'] = '—';
+    }
 
     $rx_s = $conn->prepare("SELECT * FROM prescriptions WHERE appointment_id = ? LIMIT 1");
     $rx_s->bind_param('i', $appointment_id);
@@ -145,13 +161,14 @@ if ($mode === 'patient' && $appointment_id > 0) {
 /* ── Report attachments for this visit ── */
 $rx_attachments = [];
 if ($mode === 'patient' && $appointment_id > 0 && $patient) {
+    $att_pid = (int)($patient['patient_id'] ?? 0);
     $att_s = $conn->prepare("
         SELECT id, document_name, document_type, description, file_path, file_type, uploaded_at
         FROM patient_documents
-        WHERE patient_id = ? AND appointment_id = ?
+        WHERE (appointment_id = ? OR (patient_id > 0 AND patient_id = ?))
         ORDER BY uploaded_at DESC
     ");
-    $att_s->bind_param('ii', $patient['patient_id'], $appointment_id);
+    $att_s->bind_param('ii', $appointment_id, $att_pid);
     $att_s->execute();
     $rx_attachments = $att_s->get_result()->fetch_all(MYSQLI_ASSOC);
     $att_s->close();
@@ -325,19 +342,87 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
         }
 
         // Notify patient that prescription is ready
-        if (!empty($patient['mobile'])) {
+        $patientMobile = $patient['mobile'] ?? $patient['patient_phone'] ?? '';
+        $patientEmail = $patient['email'] ?? $patient['patient_email'] ?? '';
+        $patientName = $patient['name'] ?? $patient['patient_name'] ?? 'Patient';
+        $slipUrl = BASE_URL . 'doctor/opd-slip.php?appointment_id=' . $appt_id;
+
+        if (!empty($patientMobile)) {
             try {
                 require_once dirname(__DIR__) . '/lib/WhatsAppNotifier.php';
                 $wa = new WhatsAppNotifier($conn);
-                $slipUrl = BASE_URL . 'doctor/opd-slip.php?appointment_id=' . $appt_id;
-                $wa->sendEvent('prescription_ready', $patient['mobile'], [
-                    'patient_name' => $patient['name'] ?? 'Patient',
+                $wa->sendEvent('prescription_ready', $patientMobile, [
+                    'patient_name' => $patientName,
                     'doctor_name'  => 'Dr. ' . ($doctor['name'] ?? 'your doctor'),
                     'date'         => date('d M Y'),
                     'download_link'=> $slipUrl,
                 ], 'prescription', (int) ($rxId ?: $appt_id));
             } catch (Throwable $e) {
                 error_log('[patient-form] prescription whatsapp alert failed: ' . $e->getMessage());
+            }
+        }
+
+        // Email notification with digital prescription link
+        if (!empty($patientEmail)) {
+            try {
+                require_once dirname(__DIR__) . '/util/mail_config.php';
+                $mailSub = "Your Medical Prescription & OPD Slip - Dr. " . ($doctor['name'] ?? 'Rejuvenate');
+                $mailBody = "
+                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;'>
+                    <h2 style='color: #0C74C5; margin-top: 0;'>Rejuvenate Digital Health</h2>
+                    <p>Dear <strong>" . htmlspecialchars($patientName) . "</strong>,</p>
+                    <p>Dr. <strong>" . htmlspecialchars($doctor['name'] ?? 'Doctor') . "</strong> (" . htmlspecialchars($doctor['specialization'] ?? 'Consultant') . ") has completed your consultation and issued your digital prescription.</p>
+                    <div style='background: #f8fafc; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #0C74C5;'>
+                        <p style='margin: 0 0 8px 0;'><strong>Date:</strong> " . date('d M Y') . "</p>
+                        " . (!empty($diag) ? "<p style='margin: 0 0 8px 0;'><strong>Diagnosis:</strong> " . htmlspecialchars($diag) . "</p>" : "") . "
+                        " . (!empty($fu_date) ? "<p style='margin: 0;'><strong>Follow-up Date:</strong> " . date('d M Y', strtotime($fu_date)) . "</p>" : "") . "
+                    </div>
+                    <p style='margin: 20px 0;'>
+                        <a href='" . htmlspecialchars($slipUrl) . "' style='background-color: #0C74C5; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;'>View & Download OPD Slip / Prescription</a>
+                    </p>
+                    <p style='font-size: 13px; color: #64748b;'>You can also access your complete health records anytime by logging into your patient dashboard.</p>
+                </div>";
+                send_custom_email($patientEmail, $mailSub, $mailBody);
+            } catch (Throwable $e) {
+                error_log('[patient-form] prescription email alert failed: ' . $e->getMessage());
+            }
+        }
+
+        // Mirror diagnosis to school student health record if applicable
+        if (!empty($patient['school_member_id'])) {
+            try {
+                $schMemberId = (int)$patient['school_member_id'];
+                $smRes = $conn->query("SELECT school_id FROM school_members WHERE id = {$schMemberId} LIMIT 1");
+                $smRow = $smRes ? $smRes->fetch_assoc() : null;
+                $schId = (int)($smRow['school_id'] ?? 0);
+
+                $medTextLines = [];
+                foreach ($meds as $m) {
+                    $medTextLines[] = "• " . $m['name'] . ($m['dose'] ? " (" . $m['dose'] . ")" : "") . ($m['frequency'] ? " - " . $m['frequency'] : "") . ($m['duration'] ? " for " . $m['duration'] : "");
+                }
+                $schRxText = implode("\n", $medTextLines);
+                if (empty($schRxText)) $schRxText = $advice ?: 'Consultation completed.';
+
+                $schVitals = $vitals;
+                $checkSch = $conn->prepare("SELECT id FROM school_member_prescriptions WHERE member_id = ? AND doctor_id = ? AND DATE(created_at) = CURDATE() LIMIT 1");
+                $checkSch->bind_param('ii', $schMemberId, $doctor_id);
+                $checkSch->execute();
+                $existsSch = $checkSch->get_result()->fetch_assoc();
+                $checkSch->close();
+
+                if ($existsSch) {
+                    $uSch = $conn->prepare("UPDATE school_member_prescriptions SET diagnosis=?, symptoms=?, prescription_text=?, advice=?, follow_up_date=?, vitals=? WHERE id=?");
+                    $uSch->bind_param('ssssssi', $diag, $chief, $schRxText, $advice, $fu_date, $schVitals, $existsSch['id']);
+                    $uSch->execute();
+                    $uSch->close();
+                } else {
+                    $iSch = $conn->prepare("INSERT INTO school_member_prescriptions (member_id, school_id, doctor_id, diagnosis, symptoms, prescription_text, advice, follow_up_date, vitals, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                    $iSch->bind_param('iiissssss', $schMemberId, $schId, $doctor_id, $diag, $chief, $schRxText, $advice, $fu_date, $schVitals);
+                    $iSch->execute();
+                    $iSch->close();
+                }
+            } catch (Throwable $e) {
+                error_log('[patient-form] school sync failed: ' . $e->getMessage());
             }
         }
     }
@@ -409,6 +494,7 @@ if ($student_rx && !empty($student_rx['vitals'])) {
     $s_vt_data = json_decode($student_rx['vitals'], true) ?: [];
 }
 $svt = fn($k) => htmlspecialchars($s_vt_data[$k] ?? '');
+$sidebar_active = 'patient-form';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -429,8 +515,8 @@ $svt = fn($k) => htmlspecialchars($s_vt_data[$k] ?? '');
             --rdh-teal: #02c9b8;
             --rdh-green: #16a34a;
         }
-        body { background: #f4f6fb; font-size: .9rem; color: #1f2937; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        body { background: #f4f7fb; font-size: .9rem; color: #1f2937; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif; }
 
         /* ── Mode toggle tabs ── */
         .mode-tabs {
@@ -456,29 +542,30 @@ $svt = fn($k) => htmlspecialchars($s_vt_data[$k] ?? '');
         .mode-tab.active-student { background: var(--rdh-green); color: #fff; }
         .mode-tab:hover:not(.active-patient):not(.active-student) { background: #cbd5e1; color: #1e293b; }
 
-        /* ── Section card ── */
+        /* ── Section card — matches the dashboard's .form-section / .form-section-title ── */
         .rx-card {
             background: #fff;
-            border: 1px solid #e7e8f0;
             border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(20,23,40,.04);
-            margin-bottom: 16px;
+            box-shadow: 0 1px 6px rgba(0, 0, 0, .06);
+            margin-bottom: 20px;
             overflow: hidden;
         }
         .rx-card-header {
-            background: #f7f8fb;
-            color: #1f2233;
-            border-bottom: 1px solid #eef0f5;
-            padding: 12px 16px;
+            background: transparent;
+            color: #6b7280;
+            border-bottom: 1px solid #f3f4f6;
+            padding: 14px 18px 12px;
             font-weight: 700;
-            font-size: .85rem;
+            font-size: .78rem;
+            text-transform: uppercase;
+            letter-spacing: .8px;
             display: flex;
             align-items: center;
             gap: 8px;
         }
         .rx-card-header i { color: var(--rdh-blue); }
         .rx-card-header.student-header i { color: var(--rdh-green); }
-        .rx-card-body { padding: 16px; }
+        .rx-card-body { padding: 18px; }
 
         /* ── Patient / Student banner ── */
         .patient-banner {
@@ -575,7 +662,7 @@ $svt = fn($k) => htmlspecialchars($s_vt_data[$k] ?? '');
         /* ── Action bar ── */
         .action-bar {
             position: sticky;
-            top: 0;
+            top: var(--topbar-h, 60px);
             z-index: 200;
             background: #fff;
             border-bottom: 2px solid #e2e8f0;
@@ -632,6 +719,8 @@ $svt = fn($k) => htmlspecialchars($s_vt_data[$k] ?? '');
     </style>
 </head>
 <body>
+<?php include __DIR__ . '/inc/sidebar.php'; ?>
+<main class="doctor-content">
 
 <!-- ── Action Bar ── -->
 <div class="action-bar no-print">
@@ -1389,6 +1478,7 @@ $svt = fn($k) => htmlspecialchars($s_vt_data[$k] ?? '');
     <?php endif; /* mode */ ?>
 
 </div><!-- /container -->
+</main>
 
 <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
 <script>

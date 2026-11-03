@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include_once "../config/connect.php";
 include_once "../util/function.php";
 
@@ -19,10 +21,10 @@ if (!$appt_id) {
 $stmt = $conn->prepare("
     SELECT
         a.*,
-        d.name           AS doctor_name,
-        d.specialization,
+        COALESCE(d.name, 'Assigned Medical Specialist')   AS doctor_name,
+        COALESCE(d.specialization, 'General Consultation') AS specialization,
         d.degrees,
-        d.consultation_fee,
+        COALESCE(d.consultation_fee, a.payment_amount, 0) AS consultation_fee,
         d.profile_image,
         d.experience_years,
         d.rating,
@@ -34,7 +36,7 @@ $stmt = $conn->prepare("
         DATE_FORMAT(a.appointment_date, '%d %M %Y')      AS fmt_date,
         DATE_FORMAT(a.created_at,       '%d %M %Y %H:%i') AS fmt_booked
     FROM appointments a
-    JOIN doctors d ON a.doctor_id = d.id
+    LEFT JOIN doctors d ON a.doctor_id = d.id
     WHERE a.id = ? AND a.user_id = ?
     LIMIT 1
 ");
@@ -220,9 +222,11 @@ if ($rx) {
                             <div class="doc-avatar-placeholder"><i class="fa fa-user-md"></i></div>
                         <?php endif; ?>
                         <div>
-                            <div class="doc-name">Dr. <?= htmlspecialchars($appt['doctor_name']) ?></div>
-                            <div class="doc-spec"><?= htmlspecialchars($appt['specialization']) ?></div>
-                            <div class="doc-deg"><?= htmlspecialchars($appt['degrees']) ?></div>
+                            <div class="doc-name"><?= htmlspecialchars(str_starts_with($appt['doctor_name'], 'Dr.') || str_starts_with($appt['doctor_name'], 'Assigned') ? $appt['doctor_name'] : 'Dr. ' . $appt['doctor_name']) ?></div>
+                            <div class="doc-spec"><?= htmlspecialchars($appt['specialization'] ?? 'General Consultation') ?></div>
+                            <?php if (!empty($appt['degrees'])): ?>
+                                <div class="doc-deg"><?= htmlspecialchars($appt['degrees']) ?></div>
+                            <?php endif; ?>
                             <?php if (!empty($appt['rating'])): ?>
                                 <div class="star-rating mt-1">
                                     <?php for ($i = 1; $i <= 5; $i++): ?>

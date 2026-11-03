@@ -56,9 +56,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_profile']) || i
         if ($name === '')  throw new Exception('Full name is required.');
         if (!preg_match('/^[6-9]\d{9}$/', $phone)) throw new Exception('Enter a valid 10-digit mobile number.');
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) throw new Exception('Enter a valid email address.');
-        // ABDM HPR ID format: NN-NNNN-NNNN-NNNN (14 digits). Optional — only checked if filled.
-        if ($hpr_id !== '' && !preg_match('/^\d{2}-\d{4}-\d{4}-\d{4}$/', $hpr_id)) {
-            throw new Exception('HPR ID must be in the format 27-1234-5678-9012 (14 digits).');
+        
+        // ABDM HPR ID format: NN-NNNN-NNNN-NNNN (14 digits) or HPR handle (name@hpr.abdm)
+        if ($hpr_id !== '') {
+            $cleanDigits = preg_replace('/\D/', '', $hpr_id);
+            if (strlen($cleanDigits) === 14) {
+                $hpr_id = substr($cleanDigits, 0, 2) . '-' . substr($cleanDigits, 2, 4) . '-' . substr($cleanDigits, 6, 4) . '-' . substr($cleanDigits, 10, 4);
+            }
+            if (!preg_match('/^\d{2}-\d{4}-\d{4}-\d{4}$/', $hpr_id) && !preg_match('/^[a-zA-Z0-9._-]+(@hpr\.(abdm|sbx))?$/', $hpr_id)) {
+                throw new Exception('HPR ID must be a 14-digit number (e.g. 27-1234-5678-9012) or official HPR handle.');
+            }
+        }
+
+        // Security: If HPR ID is modified by an already verified doctor, reset verification state
+        $hpr_changed = ($hpr_id !== ($doctor['hpr_id'] ?? ''));
+        if ($hpr_changed && !empty($doctor['hpr_verified'])) {
+            $conn->query("UPDATE doctors SET hpr_verified=0, hpr_verified_at=NULL, hpr_verification_source=NULL, hpr_txn_id=NULL WHERE id={$doctor_id}");
+            $doctor['hpr_verified'] = 0;
+            $doctor['hpr_verified_at'] = null;
+            $info_message = 'HPR ID was updated. Please re-verify your new HPR ID with Aadhaar.';
         }
 
         /* Profile image */
@@ -196,7 +212,9 @@ $pct   = $total ? round($done / $total * 100) : 0;
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>My Profile — REJUVENATE Doctor Portal</title>
 <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+<link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
 <style>
     .mp-head{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:18px;}
     .mp-head h1{font-size:1.2rem;font-weight:800;color:#1f2937;margin:0;}
@@ -381,27 +399,64 @@ include __DIR__ . '/inc/sidebar.php';
 
             <!-- ── HPR / ABDM ── -->
             <div class="form-section" id="hpr">
-                <div class="form-section-title"><i class="fa fa-shield mr-2" style="color:#0C74C5;"></i>HPR / ABDM Registration</div>
+                <div class="form-section-title"><i class="fa-solid fa-shield-halved me-2" style="color:#0C74C5;"></i>Healthcare Professional Registry (HPR / ABDM)</div>
 
                 <?php if ($doctor['hpr_verified']): ?>
-                    <div class="hpr-banner v-ok">
-                        <i class="fa fa-check-circle"></i>
-                        <div><strong>HPR Verified.</strong>
-                            <?php if (!empty($doctor['hpr_verified_at'])): ?> Verified on <?= date('d M Y', strtotime($doctor['hpr_verified_at'])) ?>.<?php endif; ?>
-                            Your profile shows the verified HPR badge to patients.</div>
+                    <div class="card border-0 mb-3" style="background:linear-gradient(135deg, #f0fdf4 0%, #e6fcf5 100%); border-left: 4px solid #10b981 !important; border-radius:10px; box-shadow:0 2px 8px rgba(16,185,129,0.08);">
+                        <div class="card-body p-3">
+                            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span style="width:38px;height:38px;border-radius:50%;background:#dcfce7;color:#15803d;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">
+                                        <i class="fa-solid fa-circle-check"></i>
+                                    </span>
+                                    <div>
+                                        <div class="fw-bold text-success" style="font-size:.95rem;">
+                                            Healthcare Professional Registry (HPR) Verified
+                                        </div>
+                                        <div class="text-muted" style="font-size:.78rem;">
+                                            ABDM M4 Compliant · Verified profile badge active on patient OPD slips &amp; doctor listings
+                                        </div>
+                                    </div>
+                                </div>
+                                <span class="badge bg-success text-white px-2 py-1" style="font-size:.75rem;">
+                                    <i class="fa-solid fa-shield-halved me-1"></i> VERIFIED
+                                </span>
+                            </div>
+
+                            <hr style="margin:10px 0;opacity:0.15;">
+
+                            <div class="row g-2 align-items-center" style="font-size:.82rem;">
+                                <div class="col-sm-4 col-6">
+                                    <span class="text-muted d-block" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;">Verified HPR ID</span>
+                                    <strong class="text-dark font-monospace"><?= htmlspecialchars($doctor['hpr_id']) ?></strong>
+                                </div>
+                                <div class="col-sm-4 col-6">
+                                    <span class="text-muted d-block" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;">Verified On</span>
+                                    <span class="text-dark"><?= !empty($doctor['hpr_verified_at']) ? date('d M Y, h:i A', strtotime($doctor['hpr_verified_at'])) : 'Verified' ?></span>
+                                </div>
+                                <div class="col-sm-4 col-12 text-sm-end mt-2 mt-sm-0">
+                                    <button type="button" class="btn btn-sm btn-outline-danger" id="hprResetBtn" style="font-size:.75rem;">
+                                        <i class="fa-solid fa-arrow-rotate-right me-1"></i> Update or Re-verify HPR
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 <?php elseif ($hpr_pending): ?>
                     <div class="hpr-banner v-pending">
-                        <i class="fa fa-clock"></i>
-                        <div><strong>Verification under review.</strong> Submitted <?= date('d M Y', strtotime($hpr_request['requested_at'])) ?>.
-                            Our compliance team is verifying your details against the Health Professional Registry.</div>
+                        <i class="fa-solid fa-clock"></i>
+                        <div>
+                            <strong>Verification request under review.</strong> Submitted on <?= date('d M Y, h:i A', strtotime($hpr_request['requested_at'])) ?>.
+                            Our compliance team is verifying your registration against the National Health Authority registry. You may also complete instant Aadhaar verification below to activate immediately.
+                        </div>
                     </div>
                 <?php else: ?>
                     <div class="hpr-banner v-none">
-                        <i class="fa fa-info-circle"></i>
-                        <div><strong>Not verified yet.</strong> Fill in your HPR &amp; NMC details below and submit for verification.
+                        <i class="fa-solid fa-circle-info"></i>
+                        <div>
+                            <strong>Not verified yet.</strong> Fill in your HPR &amp; NMC details below. You can verify instantly with Aadhaar OTP or submit for compliance desk review.
                             <?php if ($hpr_request && $hpr_request['status'] === 'rejected'): ?>
-                                <span class="text-danger d-block mt-1">Previous request was not approved<?= $hpr_request['review_note'] ? ': ' . htmlspecialchars($hpr_request['review_note']) : '.' ?></span>
+                                <span class="text-danger d-block mt-1"><i class="fa-solid fa-triangle-exclamation me-1"></i> Previous review note: <?= htmlspecialchars($hpr_request['review_note'] ?: 'Request was not approved.') ?></span>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -409,14 +464,14 @@ include __DIR__ . '/inc/sidebar.php';
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label-sm">HPR ID</label>
-                        <input type="text" name="hpr_id" id="mpHpr" class="form-control form-control-sm" maxlength="17"
-                               placeholder="27-1234-5678-9012" value="<?= htmlspecialchars($doctor['hpr_id'] ?? '') ?>">
-                        <div class="text-muted" style="font-size:.72rem;">14-digit Health Professional Registry ID.</div>
+                        <label class="form-label-sm">HPR ID / Handle</label>
+                        <input type="text" name="hpr_id" id="mpHpr" class="form-control form-control-sm" maxlength="40"
+                               placeholder="27-1234-5678-9012 or handle@hpr.abdm" value="<?= htmlspecialchars($doctor['hpr_id'] ?? '') ?>">
+                        <div class="text-muted" style="font-size:.72rem;">14-digit Health Professional Registry ID or official @hpr.abdm handle.</div>
                     </div>
                     <div class="col-md-6 mb-3">
-                        <label class="form-label-sm">HFR ID <span class="text-muted fw-normal">(if clinic-based)</span></label>
-                        <input type="text" name="hfr_id" class="form-control form-control-sm" placeholder="Health Facility Registry ID" value="<?= htmlspecialchars($doctor['hfr_id'] ?? '') ?>">
+                        <label class="form-label-sm">HFR ID <span class="text-muted fw-normal">(if clinic / facility based)</span></label>
+                        <input type="text" name="hfr_id" class="form-control form-control-sm" placeholder="Health Facility Registry ID (e.g. IN0810000001)" value="<?= htmlspecialchars($doctor['hfr_id'] ?? '') ?>">
                     </div>
                     <div class="col-md-6 mb-3">
                         <label class="form-label-sm">NMC Registration Number</label>
@@ -436,53 +491,70 @@ include __DIR__ . '/inc/sidebar.php';
                     </div>
                     <?php if (!$doctor['hpr_verified'] && !$hpr_pending): ?>
                     <div class="col-12 mb-3">
-                        <label class="form-label-sm">Note to reviewer <span class="text-muted fw-normal">(optional)</span></label>
-                        <textarea name="hpr_note" class="form-control form-control-sm" rows="2" placeholder="Anything our compliance team should know"></textarea>
+                        <label class="form-label-sm">Note to reviewer <span class="text-muted fw-normal">(optional, for manual review)</span></label>
+                        <textarea name="hpr_note" class="form-control form-control-sm" rows="2" placeholder="State council registration details or anything our compliance team should know"></textarea>
                     </div>
-                    <?php endif; ?>
-                </div>
-
-                <div class="mp-note">
-                    <i class="fa fa-info-circle mr-1"></i>
-                    Under <strong>ABDM</strong> guidelines, Health Professional Registry verification is done through an
-                    Aadhaar-based OTP flow with the National Health Authority. Create or check your HPR ID at
-                    <a href="https://hpr.abdm.gov.in/" target="_blank" rel="noopener">hpr.abdm.gov.in</a>. We never store your
-                    Aadhaar number — only your HPR / NMC identifiers and a consent record.
-                    <?php if (!$doctor['hpr_verified'] && !$hpr_pending): ?>
-                        <div class="mt-2">
-                            <button type="submit" name="submit_hpr_request" value="1" class="btn btn-sm btn-outline-secondary">
-                                <i class="fa fa-file-text-o mr-1"></i> Save &amp; request manual review
-                            </button>
-                        </div>
                     <?php endif; ?>
                 </div>
 
                 <?php if ($hpr_api_ready && !$doctor['hpr_verified']): ?>
-                <div class="mp-note" id="hprVerifyBox" style="border:1px solid #cfe3f5;background:#f2f8fd;">
-                    <div style="font-weight:600;color:#0C74C5;margin-bottom:4px;">
-                        <i class="fa fa-shield mr-1"></i> Verify your HPR ID instantly (Aadhaar)
-                    </div>
-                    <div style="font-size:.8rem;color:#334155;">
-                        We open the National Health Authority page in a new tab. Authenticate there with your
-                        Aadhaar OTP, then return here — we confirm the HPR ID linked to your Aadhaar matches the
-                        one on this profile. Nothing about your Aadhaar is stored.
-                    </div>
+                <div class="card border mb-3" id="hprVerifyBox" style="border-color:#b9e2fe !important;background:#f8fbff;border-radius:10px;">
+                    <div class="card-body p-3">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <span style="width:32px;height:32px;border-radius:6px;background:#0C74C5;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.9rem;">
+                                    <i class="fa-solid fa-shield-halved"></i>
+                                </span>
+                                <div>
+                                    <div class="fw-bold" style="color:#0C74C5;font-size:.9rem;">
+                                        Instant ABDM Gateway Verification (Aadhaar OTP)
+                                    </div>
+                                    <div class="text-muted" style="font-size:.74rem;">
+                                        Government of India National Health Authority (NHA) Gateway
+                                    </div>
+                                </div>
+                            </div>
+                            <?php if (defined('ABDM_ENV') && ABDM_ENV === 'sandbox'): ?>
+                                <span class="badge bg-warning text-dark" style="font-size:.68rem;">
+                                    <i class="fa-solid fa-flask me-1"></i> Sandbox Mode
+                                </span>
+                            <?php endif; ?>
+                        </div>
 
-                    <div class="mt-2">
-                        <button type="button" id="hprVerifyBtn"
-                                class="btn btn-sm btn-primary"
-                                style="background:#0C74C5;border-color:#0C74C5;"
-                                data-hpr-id="<?= htmlspecialchars($doctor['hpr_id'] ?? '') ?>">
-                            <i class="fa fa-shield mr-1"></i> Verify HPR ID with Aadhaar
-                        </button>
-                        <span id="hprVerifyHint" class="text-muted ms-2" style="font-size:.74rem;">
-                            <?php if (empty($doctor['hpr_id'])): ?>Enter your HPR ID above and click <em>Save Changes</em> first.<?php endif; ?>
-                        </span>
-                    </div>
+                        <div style="font-size:.8rem;color:#475569;line-height:1.45;" class="mb-3">
+                            Authenticate instantly via official NHA Aadhaar OTP. We will open the secure NHA verification portal in a new tab. Once authenticated, your profile will be marked verified without storing any Aadhaar numbers.
+                        </div>
 
-                    <div id="hprVerifyStatus" class="mt-2" style="display:none;font-size:.82rem;"></div>
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <button type="button" id="hprVerifyBtn" class="btn btn-sm btn-primary" style="background:#0C74C5;border-color:#0C74C5;font-weight:600;">
+                                <i class="fa-solid fa-shield-halved me-1"></i> Verify HPR ID with Aadhaar
+                            </button>
+                            <?php if (defined('ABDM_ENV') && ABDM_ENV === 'sandbox'): ?>
+                                <button type="button" id="hprSandboxBtn" class="btn btn-sm btn-outline-info" style="font-weight:600;" title="Simulate instant verification for sandbox development">
+                                    <i class="fa-solid fa-flask me-1"></i> Instant Sandbox Test
+                                </button>
+                            <?php endif; ?>
+                            <span id="hprVerifyHint" class="text-muted" style="font-size:.74rem;"></span>
+                        </div>
+
+                        <div id="hprVerifyStatus" class="mt-3" style="display:none;font-size:.82rem;"></div>
+                    </div>
                 </div>
                 <?php endif; ?>
+
+                <div class="mp-note">
+                    <i class="fa-solid fa-info-circle me-1"></i>
+                    Under <strong>ABDM M4 guidelines</strong>, Health Professional Registry verification links your verified digital credential to all prescriptions and OPD slips.
+                    Create or check your HPR ID at <a href="https://hpr.abdm.gov.in/" target="_blank" rel="noopener" class="fw-semibold">hpr.abdm.gov.in</a>. We never store your Aadhaar number — only your HPR / NMC registry identifier and consent record.
+                    <?php if (!$doctor['hpr_verified'] && !$hpr_pending): ?>
+                        <div class="mt-2 pt-2 border-top" style="border-color:rgba(191,219,254,.6) !important;">
+                            <span class="text-muted me-2" style="font-size:.76rem;">Prefer manual document check?</span>
+                            <button type="submit" name="submit_hpr_request" value="1" class="btn btn-sm btn-outline-secondary">
+                                <i class="fa-solid fa-file-signature me-1"></i> Submit for Compliance Desk Review
+                            </button>
+                        </div>
+                    <?php endif; ?>
+                </div>
             </div>
 
             <!-- ── Bio ── -->
@@ -496,8 +568,8 @@ include __DIR__ . '/inc/sidebar.php';
                 </div>
                 <div>
                     <label class="form-label-sm">Detailed Bio</label>
-                    <textarea name="long_bio" class="form-control form-control-sm" rows="5"
-                              placeholder="Background, training, memberships, notable work…"><?= htmlspecialchars($doctor['long_bio']) ?></textarea>
+                    <textarea name="long_bio" id="longBio" class="form-control form-control-sm" rows="5"
+                              placeholder="Background, training, memberships, notable work…"><?= $doctor['long_bio'] ?? '' ?></textarea>
                 </div>
             </div>
 
@@ -582,7 +654,10 @@ include __DIR__ . '/inc/sidebar.php';
 </main>
 
 <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.ckeditor.com/4.21.0/standard/ckeditor.js"></script>
 <script>
+CKEDITOR.replace('longBio');
+
 function mpPreview(input) {
     if (input.files && input.files[0]) {
         const r = new FileReader();
@@ -597,59 +672,82 @@ const mpShortCount = document.getElementById('mpShortCount');
 function syncShort(){ mpShortCount.textContent = mpShort.value.length; }
 mpShort.addEventListener('input', syncShort); syncShort();
 
-// HPR ID auto-format XX-XXXX-XXXX-XXXX
+// HPR ID auto-format XX-XXXX-XXXX-XXXX while allowing handles (e.g. handle@hpr.abdm)
 const mpHpr = document.getElementById('mpHpr');
-mpHpr.addEventListener('input', function () {
-    const d = this.value.replace(/\D/g, '').slice(0, 14);
-    this.value = d.replace(/(\d{2})(\d{0,4})(\d{0,4})(\d{0,4})/, (_, a, b, c, e) => [a, b, c, e].filter(Boolean).join('-'));
-});
+if (mpHpr) {
+    mpHpr.addEventListener('input', function () {
+        const val = this.value;
+        if (/[a-zA-Z@]/.test(val)) {
+            return;
+        }
+        const d = val.replace(/\D/g, '').slice(0, 14);
+        if (d.length > 0) {
+            this.value = d.replace(/(\d{2})(\d{0,4})(\d{0,4})(\d{0,4})/, (_, a, b, c, e) => [a, b, c, e].filter(Boolean).join('-'));
+        }
+    });
+}
 
 // Client validation
 document.getElementById('mpForm').addEventListener('submit', function (e) {
     const phone = document.querySelector('[name=phone]').value.replace(/\D/g, '');
     if (!/^[6-9]\d{9}$/.test(phone)) { e.preventDefault(); alert('Enter a valid 10-digit mobile number.'); return; }
-    const hpr = mpHpr.value.trim();
-    if (hpr && !/^\d{2}-\d{4}-\d{4}-\d{4}$/.test(hpr)) { e.preventDefault(); alert('HPR ID must look like 27-1234-5678-9012.'); return; }
+    if (mpHpr) {
+        const hpr = mpHpr.value.trim();
+        if (hpr && !/^\d{2}-\d{4}-\d{4}-\d{4}$/.test(hpr) && !/^[a-zA-Z0-9._-]+(@hpr\.(abdm|sbx))?$/.test(hpr)) {
+            e.preventDefault();
+            alert('HPR ID must be a 14-digit number (e.g. 27-1234-5678-9012) or official HPR handle.');
+            return;
+        }
+    }
 });
 
 // DOB -> nothing to compute visibly (age stored server-side)
 
 /* ──────────────────────────────────────────────────────────────
    HPR ID verification — Aadhaar flow (doctor/api/hpr-verify.php)
-   Polling pattern mirrors telemedicine/assets/js/room.js.
+   ABDM M4 Healthcare Professional Registry compliance.
    ────────────────────────────────────────────────────────────── */
 (function () {
-    const btn = document.getElementById('hprVerifyBtn');
-    if (!btn) return;
+    const btn      = document.getElementById('hprVerifyBtn');
+    const sbxBtn   = document.getElementById('hprSandboxBtn');
+    const resetBtn = document.getElementById('hprResetBtn');
+    const mpHpr    = document.getElementById('mpHpr');
+    const API      = '<?= BASE_URL ?>doctor/api/hpr-verify.php';
+    const CSRF     = '<?= htmlspecialchars($hpr_csrf, ENT_QUOTES) ?>';
+    const box      = document.getElementById('hprVerifyStatus');
+    const hint     = document.getElementById('hprVerifyHint');
+    const POLL_MS  = 3500;
 
-    const API   = '<?= BASE_URL ?>doctor/api/hpr-verify.php';
-    const CSRF  = '<?= htmlspecialchars($hpr_csrf, ENT_QUOTES) ?>';
-    const box   = document.getElementById('hprVerifyStatus');
-    const hint  = document.getElementById('hprVerifyHint');
-    const POLL_MS = 3500;
-
-    let txnId = null;
-    let pollTimer = null;
-    let pollInFlight = false;
+    let txnId             = null;
+    let pollTimer         = null;
+    let pollInFlight      = false;
+    let countdownInterval = null;
+    let secondsRemaining  = 0;
 
     function show(html, kind) {
+        if (!box) return;
         box.style.display = 'block';
-        box.className = 'mt-2 alert py-2 px-3 ' + ({
+        box.className = 'mt-3 alert py-2 px-3 ' + ({
             info: 'alert-info', ok: 'alert-success', err: 'alert-danger', warn: 'alert-warning'
         }[kind] || 'alert-info');
         box.innerHTML = html;
     }
 
-    function stopPolling() {
+    function stopTimers() {
         if (pollTimer) clearInterval(pollTimer);
         pollTimer = null;
+        if (countdownInterval) clearInterval(countdownInterval);
+        countdownInterval = null;
     }
 
     function setBusy(busy) {
-        btn.disabled = busy;
-        btn.innerHTML = busy
-            ? '<i class="fa fa-spinner fa-spin mr-1"></i> Verifying…'
-            : '<i class="fa fa-shield mr-1"></i> Verify HPR ID with Aadhaar';
+        if (btn) {
+            btn.disabled = busy;
+            btn.innerHTML = busy
+                ? '<i class="fa fa-spinner fa-spin me-1"></i> Verifying…'
+                : '<i class="fa-solid fa-shield-halved me-1"></i> Verify HPR ID with Aadhaar';
+        }
+        if (sbxBtn) sbxBtn.disabled = busy;
     }
 
     function post(action, extra) {
@@ -660,48 +758,142 @@ document.getElementById('mpForm').addEventListener('submit', function (e) {
         }).then(r => r.json());
     }
 
-    btn.addEventListener('click', function () {
-        if (!btn.dataset.hprId || !btn.dataset.hprId.trim()) {
-            show('Enter your HPR ID above, click <strong>Save Changes</strong>, then come back to verify.', 'warn');
-            return;
-        }
-        if (hint) hint.textContent = '';
-        setBusy(true);
-        show('Starting verification…', 'info');
-
-        post('start').then(res => {
-            if (!res.success) { setBusy(false); show(esc(res.message || 'Could not start verification.'), 'err'); return; }
-            if (res.alreadyVerified || res.state === 'verified') { onVerified(res); return; }
-
-            txnId = res.txnId;
-            const w = window.open(res.url, '_blank', 'noopener');
-            if (!w) {
-                show('Pop-up blocked. <a href="' + esc(res.url) + '" target="_blank" rel="noopener">Open the Aadhaar page</a> in a new tab, authenticate, then keep this tab open.', 'warn');
-            } else {
-                show('A new tab opened for Aadhaar authentication. Complete it there, then return here — this can take up to ' + Math.round((res.expiresIn || 300) / 60) + ' minutes. <strong>Waiting…</strong>', 'info');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+            if (!confirm('Are you sure you want to update or re-verify your HPR ID? Your verified status badge will be cleared until re-verification.')) {
+                return;
             }
-            pollTimer = setInterval(pollOnce, POLL_MS);
-        }).catch(() => { setBusy(false); show('Network error. Please try again.', 'err'); });
-    });
+            resetBtn.disabled = true;
+            resetBtn.innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i> Resetting…';
+            post('reset_hpr').then(res => {
+                if (res.success) {
+                    window.location.reload();
+                } else {
+                    alert(res.message || 'Could not reset HPR status.');
+                    resetBtn.disabled = false;
+                    resetBtn.innerHTML = '<i class="fa-solid fa-arrow-rotate-right me-1"></i> Update or Re-verify HPR';
+                }
+            }).catch(() => {
+                alert('Network error while resetting. Please try again.');
+                resetBtn.disabled = false;
+            });
+        });
+    }
+
+    if (sbxBtn) {
+        sbxBtn.addEventListener('click', function () {
+            const hprVal = mpHpr ? mpHpr.value.trim() : '';
+            if (!confirm('Simulate instant ABDM verification in Sandbox mode with HPR ID: ' + (hprVal || '(Auto-generated)') + '?')) {
+                return;
+            }
+            setBusy(true);
+            show('<i class="fa fa-spinner fa-spin me-1"></i> Running ABDM Sandbox verification simulation…', 'info');
+            post('sandbox_test_verify', { hpr_id: hprVal }).then(res => {
+                setBusy(false);
+                if (res.success) {
+                    onVerified(res);
+                } else {
+                    show(esc(res.message || 'Sandbox simulation failed.'), 'err');
+                }
+            }).catch(() => {
+                setBusy(false);
+                show('Network error during sandbox simulation.', 'err');
+            });
+        });
+    }
+
+    if (btn) {
+        btn.addEventListener('click', function () {
+            const hprVal = mpHpr ? mpHpr.value.trim() : '';
+            if (!hprVal) {
+                show('Please enter your 14-digit HPR ID (e.g. 27-1234-5678-9012) or handle in the field above before verifying.', 'warn');
+                if (mpHpr) mpHpr.focus();
+                return;
+            }
+            if (hint) hint.textContent = '';
+            setBusy(true);
+            show('<i class="fa fa-spinner fa-spin me-1"></i> Connecting to NHA Gateway & generating secure Aadhaar link…', 'info');
+
+            post('start', { hpr_id: hprVal }).then(res => {
+                if (!res.success) {
+                    setBusy(false);
+                    show(esc(res.message || 'Could not start verification.'), 'err');
+                    return;
+                }
+                if (res.alreadyVerified || res.state === 'verified') {
+                    onVerified(res);
+                    return;
+                }
+
+                txnId = res.txnId;
+                secondsRemaining = res.expiresIn || 300;
+
+                // Open window
+                const w = window.open(res.url, '_blank', 'noopener');
+
+                function formatTimer(sec) {
+                    const m = Math.floor(sec / 60);
+                    const s = sec % 60;
+                    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+                }
+
+                function renderStatusHtml() {
+                    let html = '<div class="d-flex align-items-center justify-content-between mb-2">' +
+                        '<strong><i class="fa fa-spinner fa-spin me-1"></i> Waiting for Aadhaar OTP completion on NHA Portal...</strong>' +
+                        '<span class="badge bg-secondary font-monospace"><i class="fa-solid fa-clock me-1"></i> Link active: ' + formatTimer(secondsRemaining) + '</span>' +
+                        '</div>' +
+                        '<div class="mb-2" style="font-size:.78rem;color:#334155;">' +
+                        'Complete the Aadhaar OTP step on the National Health Authority page, then keep this window open.' +
+                        '</div>';
+
+                    html += '<div class="mt-2 pt-2 border-top d-flex flex-wrap align-items-center gap-2">' +
+                        '<a href="' + esc(res.url) + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" style="font-size:.75rem;">' +
+                        '<i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Open NHA Aadhaar Auth Page Again' +
+                        '</a>' +
+                        '<span class="text-muted" style="font-size:.72rem;">(Use if pop-up was blocked or closed)</span>' +
+                        '</div>';
+
+                    show(html, 'info');
+                }
+
+                renderStatusHtml();
+
+                countdownInterval = setInterval(() => {
+                    secondsRemaining--;
+                    if (secondsRemaining <= 0) {
+                        stopTimers();
+                        setBusy(false);
+                        show('The verification session expired. Please click "Verify HPR ID with Aadhaar" to try again.', 'warn');
+                    } else {
+                        renderStatusHtml();
+                    }
+                }, 1000);
+
+                pollTimer = setInterval(pollOnce, POLL_MS);
+            }).catch(() => {
+                setBusy(false);
+                show('Network error connecting to verification gateway. Please try again.', 'err');
+            });
+        });
+    }
 
     function pollOnce() {
         if (pollInFlight || !txnId) return;
         pollInFlight = true;
         post('poll', { txnId: txnId })
             .then(res => {
-                if (!res || !res.success) return; // transient — next tick retries
+                if (!res || !res.success) return;
                 if (res.state === 'authenticated' || res.ready) {
-                    stopPolling();
-                    show('Aadhaar authenticated. Confirming your HPR ID…', 'info');
+                    stopTimers();
+                    show('<i class="fa fa-spinner fa-spin me-1"></i> Aadhaar authenticated successfully! Finalizing HPR registry verification…', 'info');
                     finish();
                 } else if (res.state === 'expired') {
-                    stopPolling(); setBusy(false);
-                    show('The verification link expired. Click the button to try again.', 'warn');
+                    stopTimers(); setBusy(false);
+                    show('The verification link expired. Please click the button to try again.', 'warn');
                 } else if (res.state === 'failed') {
-                    stopPolling(); setBusy(false);
-                    show('Verification could not be completed. Please try again.', 'err');
+                    stopTimers(); setBusy(false);
+                    show('Verification could not be completed by NHA. Please try again.', 'err');
                 }
-                // state 'pending' → keep waiting
             })
             .catch(() => { /* transient */ })
             .finally(() => { pollInFlight = false; });
@@ -714,14 +906,15 @@ document.getElementById('mpForm').addEventListener('submit', function (e) {
                 if (res.success && res.state === 'verified') { onVerified(res); return; }
                 show(esc(res.message || 'HPR verification failed.'), 'err');
             })
-            .catch(() => { setBusy(false); show('Network error while confirming. Please try again.', 'err'); });
+            .catch(() => { setBusy(false); show('Network error while confirming verification with HPR Registry. Please try again.', 'err'); });
     }
 
     function onVerified(res) {
-        stopPolling();
+        stopTimers();
         const who = res && res.name ? (' as <strong>Dr. ' + esc(res.name) + '</strong>') : '';
-        show('<i class="fa fa-check-circle mr-1"></i> HPR ID verified' + who + '. Refreshing…', 'ok');
-        setTimeout(() => window.location.reload(), 1400);
+        const num = res && res.hprIdNumber ? (' (HPR ID: <code>' + esc(res.hprIdNumber) + '</code>)') : '';
+        show('<i class="fa-solid fa-circle-check me-1 text-success"></i> <strong>HPR Verified successfully' + who + num + '!</strong> Refreshing profile…', 'ok');
+        setTimeout(() => window.location.reload(), 1500);
     }
 
     function esc(s) {

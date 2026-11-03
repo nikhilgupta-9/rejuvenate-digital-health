@@ -17,6 +17,8 @@ $prefill_mobile = preg_replace('/\D/', '', ($_GET['mobile'] ?? ''));
   <title>Register Patient — Rejuvenate</title>
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/style.css">
   <style>
     /* ---- Page header ---- */
     .ap-head {

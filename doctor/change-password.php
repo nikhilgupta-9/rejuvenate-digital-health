@@ -249,6 +249,8 @@ function sendPasswordChangeEmail($email, $name) {
     <title>REJUVENATE Digital Health - Change Password</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/style.css">
     <style>
         .userd-image {
             width: 100px;

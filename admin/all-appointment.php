@@ -446,6 +446,9 @@ function appt_actions(int $id, string $status, bool $hasDoctor): string
         $b[] = '<button class="btn btn-sm btn-outline-info" data-appt-act="completed" data-id="' . $id . '" title="Mark completed"><i class="fas fa-clipboard-check"></i></button>';
         $b[] = '<button class="btn btn-sm btn-outline-secondary" data-appt-act="no_show" data-id="' . $id . '" title="Mark no-show"><i class="fas fa-user-slash"></i></button>';
     }
+    if ($status === 'completed') {
+        $b[] = '<a class="btn btn-sm btn-outline-primary" href="' . BASE_URL . 'doctor/opd-slip.php?appointment_id=' . $id . '" target="_blank" title="Download OPD Slip / Prescription"><i class="fas fa-file-pdf"></i></a>';
+    }
     if (!$hasDoctor) {
         $b[] = '<button class="btn btn-sm btn-outline-warning" data-appt-act="assign" data-id="' . $id . '" title="Assign doctor"><i class="fas fa-user-md"></i></button>';
     }

@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include_once "../config/connect.php";
 include_once "../util/function.php";
 include_once "../lib/PatientHealthProfile.php";
@@ -66,16 +68,78 @@ $u_stmt->close();
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>user/assets/style.css">
     <style>
-        .phr-section-header {
-            font-size: .92rem;
-            font-weight: 700;
-            color: var(--primary);
-            border-bottom: 2px solid #e2e8f0;
-            padding-bottom: 6px;
-            margin-bottom: 16px;
+        .phr-card {
+            background: #fff;
+            border-radius: 14px;
+            padding: 22px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 6px rgba(0, 0, 0, .06);
+            border: 1px solid #f1f5f9;
+        }
+        .phr-card-head {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 12px;
+            margin-bottom: 18px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        .phr-card-head .phr-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dk));
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+        .phr-card-head h2 {
+            font-size: .95rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin: 0;
+        }
+        .phr-card-head small {
+            display: block;
+            font-size: .72rem;
+            color: #9ca3af;
+            margin-top: 2px;
+        }
+        .phr-header-banner {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dk));
+            color: #fff;
+            border-radius: 14px;
+            padding: 22px 26px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, .07);
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+        }
+        .phr-header-banner h1 {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #fff;
+            margin: 0 0 4px;
+        }
+        .phr-header-banner .ap-sub {
+            color: rgba(255, 255, 255, .82);
+            font-size: .82rem;
+        }
+        .phr-header-banner .btn-outline-secondary {
+            color: #fff;
+            border-color: rgba(255, 255, 255, .5);
+            background: rgba(255, 255, 255, .08);
+        }
+        .phr-header-banner .btn-outline-secondary:hover {
+            background: rgba(255, 255, 255, .18);
+            border-color: #fff;
+            color: #fff;
         }
         .form-label {
             font-weight: 600;
@@ -93,25 +157,55 @@ $u_stmt->close();
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(12,116,197,.12);
         }
+        .phr-save-bar {
+            background: #fff;
+            border-radius: 14px;
+            padding: 18px 22px;
+            box-shadow: 0 1px 6px rgba(0, 0, 0, .06);
+            border: 1px solid #f1f5f9;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        @media (max-width: 575.98px) {
+            .phr-card, .phr-save-bar {
+                padding: 16px 14px;
+                border-radius: 12px;
+            }
+            .phr-header-banner {
+                padding: 18px;
+                border-radius: 12px;
+            }
+            .phr-header-banner .btn-outline-secondary {
+                width: 100%;
+                text-align: center;
+            }
+            .phr-save-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .phr-save-bar .btn {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 
 <body class="patient-body">
     <?php $sidebar_active = 'health'; include("sidebar.php"); ?>
-    
-    <main class="patient-content">
-        <div class="profile-card shadow-sm border-0">
-            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-                <div>
-                    <h1 class="ap-h mb-1"><i class="fa fa-heartbeat me-2 text-primary-theme"></i>Personal Health Record (PHR)</h1>
-                    <div class="ap-sub">ABDM-compliant biometric vitals, medical history, immunizations, and clinical notes</div>
-                </div>
-                <a href="<?= BASE_URL ?>user/user-dashboard.php" class="btn btn-outline-secondary btn-sm">
-                    <i class="fa fa-arrow-left me-1"></i> Back to Dashboard
-                </a>
-            </div>
 
-            <?php if ($success_message): ?>
+    <main class="patient-content">
+        <div class="phr-header-banner">
+            <div>
+                <h1><i class="fa fa-heartbeat me-2"></i>Personal Health Record (PHR)</h1>
+                <div class="ap-sub">ABDM-compliant biometric vitals, medical history, immunizations, and clinical notes</div>
+            </div>
+            <a href="<?= BASE_URL ?>user/user-dashboard.php" class="btn btn-outline-secondary btn-sm">
+                <i class="fa fa-arrow-left me-1"></i> Back to Dashboard
+            </a>
+        </div>
+
+        <?php if ($success_message): ?>
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
                     <i class="fa fa-check-circle me-2"></i><?= $success_message ?>
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
@@ -139,10 +233,15 @@ $u_stmt->close();
 
             <form method="POST" action="" novalidate>
                 <!-- Vitals & Biometrics -->
-                <div class="phr-section-header">
-                    <i class="fa fa-stethoscope"></i> Vital Signs & Biometric Indicators
-                </div>
-                <div class="row g-3 mb-4">
+                <div class="phr-card">
+                    <div class="phr-card-head">
+                        <span class="phr-icon"><i class="fa fa-stethoscope"></i></span>
+                        <div>
+                            <h2>Vital Signs & Biometric Indicators</h2>
+                            <small>Height, weight, BMI, blood group and basic vitals</small>
+                        </div>
+                    </div>
+                <div class="row g-3">
                     <div class="col-6 col-md-3">
                         <label class="form-label">Height (cm)</label>
                         <input type="number" step="0.1" min="0" class="form-control" name="height_cm" id="hpHeight" value="<?= htmlspecialchars($health['height_cm'] ?? '') ?>" placeholder="e.g. 175">
@@ -181,12 +280,18 @@ $u_stmt->close();
                         <input type="text" class="form-control" name="vision_right" placeholder="e.g. 6/6" value="<?= htmlspecialchars($health['vision_right'] ?? '') ?>">
                     </div>
                 </div>
+                </div>
 
                 <!-- Clinical History -->
-                <div class="phr-section-header">
-                    <i class="fa fa-notes-medical"></i> Clinical History & Chronic Conditions
-                </div>
-                <div class="row g-3 mb-4">
+                <div class="phr-card">
+                    <div class="phr-card-head">
+                        <span class="phr-icon"><i class="fa fa-notes-medical"></i></span>
+                        <div>
+                            <h2>Clinical History & Chronic Conditions</h2>
+                            <small>Allergies, chronic conditions, medications and surgical history</small>
+                        </div>
+                    </div>
+                <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label">Known Allergies (Food / Drug / Environmental)</label>
                         <textarea class="form-control" name="known_allergies" rows="2" placeholder="e.g. Penicillin, Peanuts, Pollen"><?= htmlspecialchars($health['known_allergies'] ?? '') ?></textarea>
@@ -208,12 +313,18 @@ $u_stmt->close();
                         <input type="text" class="form-control" name="disability" value="<?= htmlspecialchars($health['disability'] ?? '') ?>" placeholder="None or specify details">
                     </div>
                 </div>
+                </div>
 
                 <!-- Vaccination -->
-                <div class="phr-section-header">
-                    <i class="fa fa-syringe"></i> Immunization & Vaccination Records
-                </div>
-                <div class="row g-3 mb-4">
+                <div class="phr-card">
+                    <div class="phr-card-head">
+                        <span class="phr-icon"><i class="fa fa-syringe"></i></span>
+                        <div>
+                            <h2>Immunization & Vaccination Records</h2>
+                            <small>Vaccination status and dose history</small>
+                        </div>
+                    </div>
+                <div class="row g-3">
                     <div class="col-md-4">
                         <div class="form-check mt-3">
                             <input class="form-check-input" type="checkbox" name="is_vaccinated" id="is_vaccinated" value="1" <?= !empty($health['is_vaccinated']) ? 'checked' : '' ?>>
@@ -227,12 +338,18 @@ $u_stmt->close();
                         <input type="text" class="form-control" name="vaccination_details" value="<?= htmlspecialchars($health['vaccination_details'] ?? '') ?>" placeholder="e.g. Covishield Dose 1 & 2 + Precautionary, Hepatitis B">
                     </div>
                 </div>
+                </div>
 
                 <!-- Emergency Contact -->
-                <div class="phr-section-header">
-                    <i class="fa fa-phone-square"></i> Emergency Caregiver Contact
-                </div>
-                <div class="row g-3 mb-4">
+                <div class="phr-card">
+                    <div class="phr-card-head">
+                        <span class="phr-icon"><i class="fa fa-phone-square"></i></span>
+                        <div>
+                            <h2>Emergency Caregiver Contact</h2>
+                            <small>Who to contact in a medical emergency</small>
+                        </div>
+                    </div>
+                <div class="row g-3">
                     <div class="col-md-4">
                         <label class="form-label">Contact Person Name</label>
                         <input type="text" class="form-control" name="emergency_contact_name" value="<?= htmlspecialchars($health['emergency_contact_name'] ?? '') ?>" placeholder="Name">
@@ -246,12 +363,18 @@ $u_stmt->close();
                         <input type="text" class="form-control" name="emergency_contact_relation" value="<?= htmlspecialchars($health['emergency_contact_relation'] ?? '') ?>" placeholder="e.g. Spouse, Parent, Sibling">
                     </div>
                 </div>
+                </div>
 
                 <!-- Checkup Schedule -->
-                <div class="phr-section-header">
-                    <i class="fa fa-calendar-alt"></i> Routine Health Checkup Schedule
-                </div>
-                <div class="row g-3 mb-4">
+                <div class="phr-card">
+                    <div class="phr-card-head">
+                        <span class="phr-icon"><i class="fa fa-calendar-alt"></i></span>
+                        <div>
+                            <h2>Routine Health Checkup Schedule</h2>
+                            <small>Track past and upcoming checkups</small>
+                        </div>
+                    </div>
+                <div class="row g-3">
                     <div class="col-md-4">
                         <label class="form-label">Last Comprehensive Checkup</label>
                         <input type="date" class="form-control" name="last_checkup_date" value="<?= htmlspecialchars($health['last_checkup_date'] ?? '') ?>">
@@ -265,12 +388,18 @@ $u_stmt->close();
                         <input type="text" class="form-control" name="checkup_notes" value="<?= htmlspecialchars($health['checkup_notes'] ?? '') ?>" placeholder="Brief observations">
                     </div>
                 </div>
+                </div>
 
                 <!-- Insurance -->
-                <div class="phr-section-header">
-                    <i class="fa fa-shield-alt"></i> Health Insurance & ABHA PM-JAY Details
-                </div>
-                <div class="row g-3 mb-4">
+                <div class="phr-card">
+                    <div class="phr-card-head">
+                        <span class="phr-icon"><i class="fa fa-shield-alt"></i></span>
+                        <div>
+                            <h2>Health Insurance & ABHA PM-JAY Details</h2>
+                            <small>Insurance or government scheme coverage</small>
+                        </div>
+                    </div>
+                <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label">Insurance Provider / TPA</label>
                         <input type="text" class="form-control" name="insurance_provider" value="<?= htmlspecialchars($health['insurance_provider'] ?? '') ?>" placeholder="e.g. Star Health, HDFC ERGO, Ayushman PM-JAY">
@@ -280,21 +409,20 @@ $u_stmt->close();
                         <input type="text" class="form-control" name="insurance_number" value="<?= htmlspecialchars($health['insurance_number'] ?? '') ?>" placeholder="e.g. POL-987654321">
                     </div>
                 </div>
+                </div>
 
-                <?php if ($health): ?>
-                    <div class="text-muted mb-3" style="font-size:.78rem;">
-                        <i class="fa fa-clock-o me-1"></i>Last updated <?= date('d M Y, h:i A', strtotime($health['updated_at'])) ?> by <?= $health['last_updated_role'] === 'patient' ? 'you' : ucfirst($health['last_updated_role'] ?: 'healthcare provider') ?>
-                    </div>
-                <?php endif; ?>
-
-                <div class="d-flex align-items-center gap-3 pt-3 border-top">
+                <div class="phr-save-bar">
                     <button type="submit" class="btn btn-primary px-4 fw-bold">
                         <i class="fa fa-save me-1"></i> Save Health Profile (PHR)
                     </button>
                     <a href="<?= BASE_URL ?>user/user-dashboard.php" class="btn btn-outline-secondary">Cancel</a>
+                    <?php if ($health): ?>
+                        <div class="text-muted ms-auto" style="font-size:.76rem;">
+                            <i class="fa fa-clock-o me-1"></i>Last updated <?= date('d M Y, h:i A', strtotime($health['updated_at'])) ?> by <?= $health['last_updated_role'] === 'patient' ? 'you' : ucfirst($health['last_updated_role'] ?: 'healthcare provider') ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </form>
-        </div>
     </main>
 
     <?php include("inc/scripts.php"); ?>

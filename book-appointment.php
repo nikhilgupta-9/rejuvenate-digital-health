@@ -1182,12 +1182,14 @@ $pre_doctor_id  = intval($_GET['doctor_id'] ?? 0);
 
         // Doctor has a fee — get a Razorpay order for the exact amount
         // (computed server-side from doctors.consultation_fee) before
-        // opening Checkout.
+        // opening Checkout. The full form goes along with it (not just
+        // doctor_id) so the server can store the booking details against
+        // this order — see util/create-razorpay-order.php — and recover
+        // the booking from a webhook even if this tab never comes back
+        // after a successful payment.
         busy('Preparing payment…');
-        const orderData = new FormData();
-        orderData.append('doctor_id', state.doctor.id);
 
-        fetch(BASE_URL + 'util/create-razorpay-order.php', { method: 'POST', body: orderData })
+        fetch(BASE_URL + 'util/create-razorpay-order.php', { method: 'POST', body: formData })
           .then(r => r.json())
           .then(order => {
             if (!order.success) {

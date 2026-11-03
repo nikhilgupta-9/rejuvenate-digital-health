@@ -390,6 +390,120 @@
 }
 
 /* =============================================
+   ACCOUNT & SUPPORT PAGES — shared theme components
+   (header banner, section cards with icon badges, save bar)
+   Used by: my-profile.php, manage-address.php, help-and-contact.php,
+   health-profile.php
+   ============================================= */
+.acc-header-banner {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dk));
+  color: #fff;
+  border-radius: 14px;
+  padding: 22px 26px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .07);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.acc-header-banner h1 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 4px;
+}
+.acc-header-banner .ap-sub {
+  color: rgba(255, 255, 255, .82);
+  font-size: .82rem;
+}
+.acc-header-banner .btn-outline-secondary {
+  color: #fff;
+  border-color: rgba(255, 255, 255, .5);
+  background: rgba(255, 255, 255, .08);
+}
+.acc-header-banner .btn-outline-secondary:hover {
+  background: rgba(255, 255, 255, .18);
+  border-color: #fff;
+  color: #fff;
+}
+
+.acc-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 22px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, .06);
+  border: 1px solid #f1f5f9;
+}
+.acc-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #f3f4f6;
+}
+.acc-card-head .acc-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dk));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.acc-card-head h2 {
+  font-size: .95rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+}
+.acc-card-head small {
+  display: block;
+  font-size: .72rem;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+.acc-save-bar {
+  background: #fff;
+  border-radius: 14px;
+  padding: 18px 22px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, .06);
+  border: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+@media (max-width: 575.98px) {
+  .acc-card, .acc-save-bar {
+    padding: 16px 14px;
+    border-radius: 12px;
+  }
+  .acc-header-banner {
+    padding: 18px;
+    border-radius: 12px;
+  }
+  .acc-header-banner .btn-outline-secondary {
+    width: 100%;
+    text-align: center;
+  }
+  .acc-save-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .acc-save-bar .btn {
+    width: 100%;
+  }
+}
+
+/* =============================================
    WELCOME HEADER
    ============================================= */
 .welcome-message,
@@ -703,4 +817,41 @@ table.ap-table tr.is-today td { background: #f0f7ff; }
     font-size: .76rem;
     white-space: nowrap;
 }
+
+  /* Enhanced mobile responsiveness */
+  .filter-bar {
+    width: 100%;
+  }
+  .filter-bar .form-control,
+  .filter-bar .form-select {
+    width: 100% !important;
+  }
+  .filter-bar button,
+  .filter-bar a.btn {
+    flex: 1;
+    text-align: center;
+  }
+  .order-card,
+  .lab-booking-card {
+    padding: 14px 12px;
+  }
+  .ap-panel {
+    padding: 14px 10px;
+    border-radius: 10px;
+  }
+  .btn-group.ap-actions {
+    display: flex;
+    width: 100%;
+  }
+  .btn-group.ap-actions .btn {
+    flex: 1;
+    text-align: center;
+  }
+  .info-label {
+    min-width: 120px;
+  }
+  .doc-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }

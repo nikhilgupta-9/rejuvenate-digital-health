@@ -226,6 +226,9 @@ if ($tab === 'requests') {
                         <p>Central management hub for all ABHA digital health IDs across patients, school students, teachers and staff. Approve self-service requests, link IDs manually, and monitor coverage.</p>
                     </div>
                     <div class="d-flex gap-2 ms-auto flex-shrink-0 flex-wrap">
+                        <a href="abha-m1.php" class="btn btn-sm btn-light fw-bold text-dark shadow-sm">
+                            <i class="fas fa-plus-circle me-1 text-success"></i>Create New ABHA (M1)
+                        </a>
                         <button type="button" class="btn btn-sm btn-light fw-bold text-dark shadow-sm" onclick="openFindAbhaModal()">
                             <i class="fas fa-search me-1 text-primary"></i>Find ABHA Number
                         </button>
@@ -426,6 +429,10 @@ if ($tab === 'requests') {
                                               <i class="fas fa-<?= $u['abha_linked']?'pen':'link' ?> me-1"></i><?= $u['abha_linked']?'Update':'Link' ?>
                                             </button>
                                             <?php if ($u['abha_linked']): ?>
+                                            <button type="button" class="btn btn-sm btn-outline-success" style="font-size:.71rem;padding:3px 8px;"
+                                                    onclick="openAbhaCardModal(<?= $u['id'] ?>, 'patient', '<?= addslashes($u['name']) ?>')">
+                                                <i class="fas fa-id-card me-1"></i>Card
+                                            </button>
                                             <form method="POST" class="d-inline" onsubmit="return confirm('Remove ABHA for <?= addslashes($u['name']) ?>?')">
                                                 <input type="hidden" name="action" value="unlink_user_abha">
                                                 <input type="hidden" name="uid"    value="<?= $u['id'] ?>">
@@ -557,6 +564,35 @@ if ($tab === 'requests') {
       <div class="modal-body"><p class="text-muted" style="font-size:.83rem;">Rejecting request from <strong id="ru_name"></strong>.</p><textarea class="form-control" name="notes" rows="2" placeholder="Reason (optional)"></textarea></div>
       <div class="modal-footer border-0 pt-0"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-sm btn-danger">Reject</button></div>
       </form>
+    </div>
+  </div>
+</div>
+
+<!-- ABHA Card Viewer Modal -->
+<div class="modal fade" id="abhaCardModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:560px;">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header border-0" style="background:#00875a;color:#fff;">
+        <h6 class="modal-title fw-bold"><i class="fas fa-id-card me-2"></i>Official ABHA Card — <span id="cardModalHolderName"></span></h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4 text-center">
+        <div id="cardModalLoading" class="py-4">
+          <i class="fas fa-spinner fa-spin fa-2x text-primary"></i>
+          <div class="mt-2 text-muted" style="font-size:.85rem;">Generating official card via ABDM...</div>
+        </div>
+        <div id="cardModalContent" style="display:none;">
+          <img id="cardModalImg" src="" alt="ABHA Card" class="img-fluid rounded-3 shadow border mb-3" style="max-width:100%;">
+          <div class="d-flex justify-content-center gap-2">
+            <button type="button" class="btn btn-sm btn-primary fw-semibold" id="btnCardModalPdf" onclick="downloadModalCard('pdf')">
+              <i class="fas fa-file-pdf me-1"></i> Download PDF
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" id="btnCardModalPng" onclick="downloadModalCard('png')">
+              <i class="fas fa-image me-1"></i> Download PNG
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -927,6 +963,87 @@ function copyAdmText(text, btn) {
 function escapeHtmlAdm(s) {
     if (!s) return '';
     return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
+}
+
+/* ── ABHA Card Viewer Modal ── */
+let currentCardPatientId = 0;
+let currentCardEntityType = 'patient';
+let abhaCardModalInstance = null;
+
+function openAbhaCardModal(patientId, entityType, name) {
+    currentCardPatientId = patientId;
+    currentCardEntityType = entityType || 'patient';
+    document.getElementById('cardModalHolderName').textContent = name || 'Patient';
+    document.getElementById('cardModalLoading').style.display = 'block';
+    document.getElementById('cardModalContent').style.display = 'none';
+
+    if (!abhaCardModalInstance) {
+        abhaCardModalInstance = new bootstrap.Modal(document.getElementById('abhaCardModal'));
+    }
+    abhaCardModalInstance.show();
+
+    fetch('<?= BASE_URL ?>admin/api/abdm-m1-api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'get_card',
+            format: 'png',
+            patient_id: patientId,
+            entity_type: currentCardEntityType,
+            _csrf: '<?= Security::csrfToken() ?>'
+        })
+    })
+    .then(r => r.json())
+    .then(res => {
+        document.getElementById('cardModalLoading').style.display = 'none';
+        if (res.success && res.data) {
+            document.getElementById('cardModalContent').style.display = 'block';
+            document.getElementById('cardModalImg').src = 'data:' + res.mimeType + ';base64,' + res.data;
+        } else {
+            alert(res.message || 'Could not load ABHA card.');
+            abhaCardModalInstance.hide();
+        }
+    })
+    .catch(() => {
+        document.getElementById('cardModalLoading').style.display = 'none';
+        alert('Network error loading ABHA card.');
+        abhaCardModalInstance.hide();
+    });
+}
+
+function downloadModalCard(format) {
+    const btn = (format === 'pdf') ? document.getElementById('btnCardModalPdf') : document.getElementById('btnCardModalPng');
+    btn.disabled = true;
+
+    fetch('<?= BASE_URL ?>admin/api/abdm-m1-api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'get_card',
+            format: format,
+            patient_id: currentCardPatientId,
+            entity_type: currentCardEntityType,
+            _csrf: '<?= Security::csrfToken() ?>'
+        })
+    })
+    .then(r => r.json())
+    .then(res => {
+        btn.disabled = false;
+        if (res.success && res.data) {
+            const a = document.createElement('a');
+            a.href = 'data:' + res.mimeType + ';base64,' + res.data;
+            a.download = res.filename || ('ABHA-Card.' + format);
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        } else {
+            alert(res.message || 'Download failed.');
+        }
+    })
+    .catch(() => {
+        btn.disabled = false;
+        alert('Network error downloading card.');
+    });
 }
 </script>
 </body>

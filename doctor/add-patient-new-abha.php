@@ -20,6 +20,7 @@ $doctor_id = (int) ($payload['doctor_id'] ?? $payload['sub'] ?? 0);
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/style.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/style.css">
 </head>
 
 <body>

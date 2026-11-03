@@ -85,7 +85,7 @@ if (isset($_GET['unverify'])) {
 // HPR verification — approve / reject the doctor's HPR verification request
 // (or toggle hpr_verified directly). Mirrors the doctor verify flow above.
 if (isset($_GET['hpr_approve'])) {
-    $conn->query("UPDATE doctors SET hpr_verified = 1, hpr_verified_at = NOW() WHERE id = " . $doctor_id);
+    $conn->query("UPDATE doctors SET hpr_verified = 1, hpr_verified_at = NOW(), hpr_verification_source = 'manual_admin' WHERE id = " . $doctor_id);
     $conn->query("UPDATE hpr_verification_requests SET status = 'approved', reviewed_at = NOW(), reviewed_by = "
         . (int)($_SESSION['admin_id'] ?? 0) . " WHERE doctor_id = " . $doctor_id . " AND status = 'pending'");
     $_SESSION['success_message'] = "HPR verification approved.";
@@ -94,7 +94,7 @@ if (isset($_GET['hpr_approve'])) {
 }
 if (isset($_GET['hpr_reject'])) {
     $note = trim($_POST['hpr_review_note'] ?? $_GET['note'] ?? '');
-    $conn->query("UPDATE doctors SET hpr_verified = 0, hpr_verified_at = NULL WHERE id = " . $doctor_id);
+    $conn->query("UPDATE doctors SET hpr_verified = 0, hpr_verified_at = NULL, hpr_verification_source = NULL WHERE id = " . $doctor_id);
     $rej = $conn->prepare("UPDATE hpr_verification_requests SET status = 'rejected', reviewed_at = NOW(), reviewed_by = ?, review_note = ? WHERE doctor_id = ? AND status = 'pending'");
     $adm = (int)($_SESSION['admin_id'] ?? 0);
     $rej->bind_param('isi', $adm, $note, $doctor_id);

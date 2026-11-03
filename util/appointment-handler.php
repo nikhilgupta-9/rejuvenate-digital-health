@@ -196,6 +196,20 @@ if ($appointmentId) {
         // Audit failure must never block a successful booking
     }
 
+    // Mark the matching pending-booking row converted (housekeeping only —
+    // the UNIQUE key on appointments.razorpay_payment_id is what actually
+    // stops webhook/razorpay.php from double-booking a race on this same
+    // payment; this just keeps razorpay_pending_bookings from looking like
+    // every paid booking is stuck at 'created' forever).
+    if (!empty($data['razorpay_order_id'])) {
+        try {
+            $upd = $conn->prepare("UPDATE razorpay_pending_bookings SET status = 'converted' WHERE razorpay_order_id = ?");
+            $upd->bind_param('s', $data['razorpay_order_id']);
+            $upd->execute();
+        } catch (Throwable $e) {
+        }
+    }
+
     echo json_encode([
         'status'         => 'success',
         'message'        => 'Appointment request sent successfully.',

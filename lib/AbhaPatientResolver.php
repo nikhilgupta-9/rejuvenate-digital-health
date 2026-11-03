@@ -326,6 +326,9 @@ class AbhaPatientResolver
     /** Link doctor <-> patient. doctor_patients schema: database/migration_doctor_abha.sql */
     private static function linkToDoctor(mysqli $conn, int $doctorId, int $patientId): void
     {
+        if ($doctorId <= 0) {
+            return; // Only link if a valid doctor context exists
+        }
         $lnk = $conn->prepare("
             INSERT INTO doctor_patients (doctor_id, patient_id, added_via, abha_fetched)
             VALUES (?, ?, 'abha', 1)

@@ -1,10 +1,18 @@
 <?php
 /**
- * POST doctor_id -> creates a Razorpay order for that doctor's consultation
- * fee and returns what the browser needs to open Checkout.
+ * POST doctor_id (+ the rest of the booking form) -> creates a Razorpay
+ * order for that doctor's consultation fee and returns what the browser
+ * needs to open Checkout.
  *
  * The fee is read from the DB, never trusted from the client — this is the
  * one place that decides how much money changes hands.
+ *
+ * The full booking form is also persisted here (razorpay_pending_bookings),
+ * BEFORE Checkout ever opens. This is what lets webhook/razorpay.php create
+ * the appointment server-side on `payment.captured` if the browser never
+ * comes back to finish the booking after a successful payment (tab killed
+ * while switching to a UPI app, network drop, etc.) — see
+ * database/migration_razorpay_webhook.sql for the full rationale.
  *
  * Response shapes:
  *   {"success":true,"payment_required":false}                         doctor has no fee set
@@ -87,6 +95,21 @@ if ($curlErr || $httpCode !== 200) {
 $order = json_decode($response, true);
 if (empty($order['id'])) {
     error_log('[Razorpay] Unexpected order response: ' . $response);
+    echo json_encode(['success' => false, 'message' => 'Could not start the payment. Please try again.']);
+    exit;
+}
+
+// Persist the full booking form now, before Checkout opens, so the
+// webhook has everything it needs to create the appointment even if the
+// browser never comes back after a successful payment.
+$payload = $_POST;
+unset($payload['razorpay_order_id'], $payload['razorpay_payment_id'], $payload['razorpay_signature']);
+
+$pending = $conn->prepare("INSERT INTO razorpay_pending_bookings (razorpay_order_id, doctor_id, amount_paise, payload) VALUES (?,?,?,?)");
+$payloadJson = json_encode($payload);
+$pending->bind_param('siis', $order['id'], $doctorId, $amountPaise, $payloadJson);
+if (!$pending->execute()) {
+    error_log('[Razorpay] Could not store pending booking for order ' . $order['id'] . ': ' . $pending->error);
     echo json_encode(['success' => false, 'message' => 'Could not start the payment. Please try again.']);
     exit;
 }

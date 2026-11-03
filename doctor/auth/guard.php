@@ -85,7 +85,7 @@ function doctor_jwt_guard(bool $return_null = false): ?array
     $payload['_active_ok'] = true;
     if ($doctorId) {
         global $conn;
-        $gateStmt = $conn->prepare("SELECT id, is_verified, grace_period_until FROM doctors WHERE id = ? LIMIT 1");
+        $gateStmt = $conn->prepare("SELECT id, is_verified, is_approved, status, grace_period_until FROM doctors WHERE id = ? LIMIT 1");
         $gateStmt->bind_param('i', $doctorId);
         $gateStmt->execute();
         $gateDoctor = $gateStmt->get_result()->fetch_assoc();

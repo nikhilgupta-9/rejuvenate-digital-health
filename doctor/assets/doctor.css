@@ -493,7 +493,7 @@ body {
 
   .doctor-content {
     margin-left: 0 !important;
-    padding: 14px;
+    padding: 12px;
   }
 
   .sidebar-toggler {
@@ -507,6 +507,27 @@ body {
   .form-section {
     padding: 16px 14px;
   }
+
+  /* Form and grid adjustments */
+  .profile-card {
+    padding: 16px 14px !important;
+  }
+
+  .card-header {
+    padding: 12px 14px !important;
+  }
+
+  /* Stack button bars */
+  .btn-responsive-group {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .btn-responsive-group .btn {
+    width: 100%;
+  }
 }
 
 @media (min-width: 768px) {
@@ -516,7 +537,6 @@ body {
 }
 
 @media (max-width: 575.98px) {
-
   .table td,
   .table th {
     font-size: .78rem;
@@ -525,5 +545,35 @@ body {
 
   .doctor-topbar {
     padding: 0 12px;
+  }
+
+  /* Compact typography & inputs on small screens */
+  h1, .h1 { font-size: 1.35rem !important; }
+  h2, .h2 { font-size: 1.2rem !important; }
+  h3, .h3 { font-size: 1.1rem !important; }
+  h4, .h4 { font-size: 1.0rem !important; }
+
+  .form-control, .form-select {
+    font-size: .86rem;
+    padding: .42rem .65rem;
+  }
+
+  .btn-sm {
+    padding: .3rem .6rem;
+    font-size: .78rem;
+  }
+
+  /* Prescription row stacking */
+  .med-row {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 12px;
+  }
+
+  /* Modal full-width on mobile */
+  .modal-dialog {
+    margin: .5rem;
   }
 }

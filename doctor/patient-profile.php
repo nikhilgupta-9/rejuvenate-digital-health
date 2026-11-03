@@ -12,29 +12,31 @@ if (!$patient_id) {
   exit;
 }
 
-// Verify doctor has access to this patient
-$chk = $conn->prepare("SELECT 1 FROM doctor_patients WHERE doctor_id=? AND patient_id=? LIMIT 1");
-$chk->bind_param('ii', $doctor_id, $patient_id);
-$chk->execute();
-if (!$chk->get_result()->fetch_row()) {
-  // Also allow via appointments (old data)
-  $chk2 = $conn->prepare("SELECT 1 FROM appointments WHERE doctor_id=? AND user_id=? LIMIT 1");
-  $chk2->bind_param('ii', $doctor_id, $patient_id);
-  $chk2->execute();
-  if (!$chk2->get_result()->fetch_row()) {
-    header('Location: ' . BASE_URL . 'doctor/my-patients.php');
-    exit;
-  }
-}
-
 // Load patient
 $stmt = $conn->prepare("SELECT * FROM users WHERE id=? LIMIT 1");
 $stmt->bind_param('i', $patient_id);
 $stmt->execute();
 $p = $stmt->get_result()->fetch_assoc();
+$stmt->close();
 if (!$p) {
   header('Location: ' . BASE_URL . 'doctor/my-patients.php');
   exit;
+}
+
+// Ensure patient is linked in doctor_patients
+$chk = $conn->prepare("SELECT id FROM doctor_patients WHERE doctor_id=? AND patient_id=? LIMIT 1");
+$chk->bind_param('ii', $doctor_id, $patient_id);
+$chk->execute();
+$is_linked = $chk->get_result()->fetch_row();
+$chk->close();
+
+if (!$is_linked) {
+  $insDp = $conn->prepare("INSERT IGNORE INTO doctor_patients (doctor_id, patient_id, added_via, added_at) VALUES (?, ?, 'appointment', NOW())");
+  if ($insDp) {
+    $insDp->bind_param('ii', $doctor_id, $patient_id);
+    $insDp->execute();
+    $insDp->close();
+  }
 }
 
 // Family members — same family_group_id, and this doctor also has access to them

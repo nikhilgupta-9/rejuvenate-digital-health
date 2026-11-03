@@ -15,18 +15,19 @@ $appointments_sql = "
         a.appointment_date,
         a.appointment_time,
         a.status,
-        u.id as patient_id,
-        u.name as patient_name,
+        COALESCE(u.id, 0) as patient_id,
+        COALESCE(u.name, sm.name, a.patient_name, 'Patient') as patient_name,
         u.last_name as patient_last_name,
-        u.mobile as patient_phone,
-        u.gender,
-        u.profile_pic,
+        COALESCE(u.mobile, sm.phone, a.patient_phone, '') as patient_phone,
+        COALESCE(u.gender, sm.gender, '—') as gender,
+        COALESCE(u.profile_pic, sm.profile_pic) as profile_pic,
         " . Abha::selectAliases('aa', 'u') . ",
-        TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) as patient_age,
+        TIMESTAMPDIFF(YEAR, COALESCE(u.dob, sm.dob), CURDATE()) as patient_age,
         p.id as prescription_id,
         p.status as rx_status
     FROM appointments a
-    INNER JOIN users u ON a.user_id = u.id
+    LEFT JOIN users u ON a.user_id = u.id
+    LEFT JOIN school_members sm ON a.school_member_id = sm.id
     " . Abha::joinClause('patient', 'u', 'aa') . "
     LEFT JOIN prescriptions p ON p.appointment_id = a.id
     WHERE a.doctor_id = ?
@@ -48,12 +49,12 @@ $recent_slips_sql = "
         o.slip_number,
         o.diagnosis,
         o.generated_at,
-        u.name as patient_name,
+        COALESCE(u.name, 'Patient') as patient_name,
         u.last_name as patient_last_name,
-        u.mobile as patient_phone,
+        COALESCE(u.mobile, '') as patient_phone,
         " . Abha::selectAliases('aa', 'u') . "
     FROM opd_records o
-    INNER JOIN users u ON o.patient_id = u.id
+    LEFT JOIN users u ON o.patient_id = u.id
     " . Abha::joinClause('patient', 'u', 'aa') . "
     WHERE o.doctor_id = ?
     ORDER BY o.generated_at DESC

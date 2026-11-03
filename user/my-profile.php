@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include_once "../config/connect.php";
 include_once "../util/function.php";
 include_once "function.php";
@@ -22,6 +24,14 @@ $errors = [];
 if (isset($_GET['updated'])) {
     $success_message = "Your account profile has been updated successfully!";
 }
+if (!empty($_SESSION['profile_errors'])) {
+    $errors = $_SESSION['profile_errors'];
+    unset($_SESSION['profile_errors']);
+}
+if (!empty($_SESSION['profile_error_message'])) {
+    $error_message = $_SESSION['profile_error_message'];
+    unset($_SESSION['profile_error_message']);
+}
 
 // Fetch user data from database
 $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
@@ -35,12 +45,16 @@ if (!$user_data) {
     $error_message = "User data not found!";
 }
 
-// Calculate age from date of birth
+// Calculate age from date of birth safely
 $age = '';
 if (!empty($user_data['dob']) && $user_data['dob'] != '0000-00-00') {
-    $dob = new DateTime($user_data['dob']);
-    $today = new DateTime();
-    $age = $today->diff($dob)->y;
+    try {
+        $dob = new DateTime($user_data['dob']);
+        $today = new DateTime();
+        $age = $today->diff($dob)->y;
+    } catch (Throwable $e) {
+        $age = '';
+    }
 }
 
 $profile_pic_url = !empty($user_data['profile_pic']) ? BASE_URL . 'assets/img/' . htmlspecialchars($user_data['profile_pic']) : null;
@@ -110,16 +124,15 @@ $initials = strtoupper(substr($user_data['name'] ?? 'P', 0, 1));
     <?php $sidebar_active = 'profile'; include("sidebar.php"); ?>
     
     <main class="patient-content">
-        <div class="profile-card shadow-sm border-0">
-            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-                <div>
-                    <h1 class="ap-h mb-1"><i class="fa fa-user-circle me-2 text-primary-theme"></i>Account Profile</h1>
-                    <div class="ap-sub">Manage your personal demographics, contact info, and security settings</div>
-                </div>
-                <a href="<?= BASE_URL ?>user/user-dashboard.php" class="btn btn-outline-secondary btn-sm">
-                    <i class="fa fa-arrow-left me-1"></i> Back to Dashboard
-                </a>
+        <div class="acc-header-banner">
+            <div>
+                <h1><i class="fa fa-user-circle me-2"></i>Account Profile</h1>
+                <div class="ap-sub">Manage your personal demographics, contact info, and security settings</div>
             </div>
+            <a href="<?= BASE_URL ?>user/user-dashboard.php" class="btn btn-outline-secondary btn-sm">
+                <i class="fa fa-arrow-left me-1"></i> Back to Dashboard
+            </a>
+        </div>
 
             <?php if ($success_message): ?>
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -136,7 +149,8 @@ $initials = strtoupper(substr($user_data['name'] ?? 'P', 0, 1));
             <?php endif; ?>
 
             <!-- Profile Picture Uploader Box -->
-            <div class="avatar-box">
+            <div class="acc-card">
+            <div class="avatar-box mb-0">
                 <div id="avatarContainer">
                     <?php if ($profile_pic_url): ?>
                         <img src="<?= $profile_pic_url ?>" alt="Avatar" class="avatar-img-preview" id="profilePicImg">
@@ -153,6 +167,7 @@ $initials = strtoupper(substr($user_data['name'] ?? 'P', 0, 1));
                     </label>
                     <div id="uploadStatus" class="small mt-1 text-muted"></div>
                 </div>
+            </div>
             </div>
 
             <!-- ABHA Digital Identity Status Banner -->
@@ -181,6 +196,14 @@ $initials = strtoupper(substr($user_data['name'] ?? 'P', 0, 1));
                 </div>
             <?php endif; ?>
 
+            <div class="acc-card">
+                <div class="acc-card-head">
+                    <span class="acc-icon"><i class="fa fa-id-badge"></i></span>
+                    <div>
+                        <h2>Personal & Contact Details</h2>
+                        <small>Demographics and address used across your appointments</small>
+                    </div>
+                </div>
             <form method="POST" action="<?= BASE_URL ?>user/function.php" novalidate>
                 <div class="row g-3">
                     <!-- First Name -->
@@ -283,14 +306,14 @@ $initials = strtoupper(substr($user_data['name'] ?? 'P', 0, 1));
                     </div>
                 </div>
 
-                <div class="d-flex align-items-center gap-3 mt-4 pt-3 border-top">
+                <div class="acc-save-bar mt-4">
                     <button type="submit" class="btn btn-primary px-4 fw-bold" name="profile_update">
                         <i class="fa fa-save me-1"></i> Update Profile
                     </button>
                     <a href="<?= BASE_URL ?>user/user-dashboard.php" class="btn btn-outline-secondary">Cancel</a>
                 </div>
             </form>
-        </div>
+            </div>
     </main>
 
     <?php include("inc/scripts.php"); ?>

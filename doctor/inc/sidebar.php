@@ -47,7 +47,7 @@ $_page_title = $_page_titles[$sidebar_active] ?? 'Doctor Portal';
 $_menu = [
     'dashboard'        => ['icon' => 'fa fa-th-large',          'label' => 'Dashboard',                'url' => BASE_URL . 'doctor/doctor-dashboard.php',      'section' => 'Main'],
     'patient-form'     => ['icon' => 'fa fa-edit',   'label' => 'OPD Consultation (Rx)',   'url' => BASE_URL . 'doctor/patient-form.php',          'section' => 'Clinical & OPD'],
-    'opd-slips'        => ['icon' => 'fa-solid fa-file-lines',       'label' => 'Generate OPD Slip',        'url' => BASE_URL . 'doctor/select-opd-patient.php',    'section' => 'Clinical & OPD'],
+    'opd-slips'        => ['icon' => 'fa-solid fa-file-medical',     'label' => 'Generate OPD Slip',        'url' => BASE_URL . 'doctor/select-opd-patient.php',    'section' => 'Clinical & OPD'],
     'appointments'     => ['icon' => 'fa fa-book-medical',      'label' => 'Appointments',             'url' => BASE_URL . 'doctor/appointments.php',          'section' => 'Clinical & OPD'],
     'schedule'         => ['icon' => 'fa-solid fa-clock',           'label' => 'Manage Schedule',          'url' => BASE_URL . 'doctor/manage-schedule.php',       'section' => 'Clinical & OPD'],
     'reports'          => ['icon' => 'fa fa-calendar',         'label' => 'Calendar',                 'url' => BASE_URL . 'doctor/appointments-calendar.php', 'section' => 'Clinical & OPD'],
@@ -61,15 +61,13 @@ $_menu = [
     'school-students'  => ['icon' => 'fa fa-graduation-cap',   'label' => 'School Students',          'url' => BASE_URL . 'doctor/school-students.php',       'section' => 'School Health'],
 
     'contact'          => ['icon' => 'fa fa-user-md',           'label' => 'Profile & HPR ID',         'url' => BASE_URL . 'doctor/my-contact.php',            'section' => 'Account & HPR'],
-    'earnings'         => ['icon' => 'fa fa-inr',               'label' => 'Earnings & Bank',          'url' => BASE_URL . 'doctor/earnings.php',              'section' => 'Account & HPR'],
+    'earnings'         => ['icon' => 'fa fa-money-bill-wave',   'label' => 'Earnings & Bank',          'url' => BASE_URL . 'doctor/earnings.php',              'section' => 'Account & HPR'],
     'billing'          => ['icon' => 'fa fa-credit-card',       'label' => 'Payment History',          'url' => BASE_URL . 'doctor/payment-history.php',       'section' => 'Account & HPR'],
     'settings'         => ['icon' => 'fa fa-cog',               'label' => 'Settings',                 'url' => BASE_URL . 'doctor/account-settings.php',      'section' => 'Account & HPR'],
     'about'            => ['icon' => 'fa fa-info-circle',       'label' => 'About Us',                 'url' => BASE_URL . 'doctor/doctor-about.php',          'section' => 'Account & HPR'],
     'delete-account'   => ['icon' => 'fa fa-trash',             'label' => 'Delete Account',           'url' => BASE_URL . 'doctor/delete-account.php',        'section' => 'Account & HPR'],
 ];
 ?>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-<link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
 
 <!-- Sidebar Overlay (mobile) -->
 <div class="sidebar-overlay" id="doctorSidebarOverlay"></div>
@@ -89,19 +87,25 @@ $_menu = [
         <div class="s-name">Dr. <?= $_d_name ?></div>
         <div class="s-sub"><?= $_d_spec ?></div>
         <?php if ($_d_hpr_id): ?>
-            <div style="margin-top:5px;">
-                <span style="font-size:.65rem;color:rgba(255,255,255,.5);">HPR</span>
-                <span style="font-size:.7rem;color:rgba(255,255,255,.85);margin-left:4px;"><?= $_d_hpr_id ?>@hpr.abdm</span>
+            <div style="margin-top:5px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
+                <span style="font-size:.65rem;color:rgba(255,255,255,.6);">HPR</span>
+                <span style="font-size:.7rem;color:rgba(255,255,255,.9);font-weight:600;">
+                    <?= htmlspecialchars($_d_hpr_id) . (strpos($_d_hpr_id, '@') === false && !preg_match('/^\d{2}-\d{4}-\d{4}-\d{4}$/', $_d_hpr_id) ? '@hpr.abdm' : '') ?>
+                </span>
                 <?php if ($_d_hpr_ver): ?>
-                    <span style="background:#02c9b8;border-radius:10px;padding:1px 6px;font-size:.6rem;font-weight:700;color:#fff;margin-left:3px;">
+                    <span style="background:#02c9b8;border-radius:10px;padding:1px 6px;font-size:.6rem;font-weight:700;color:#fff;">
                         <i class="fa fa-check"></i> Verified
+                    </span>
+                <?php else: ?>
+                    <span style="background:rgba(255,255,255,.15);border-radius:10px;padding:1px 6px;font-size:.6rem;color:rgba(255,255,255,.8);">
+                        Unverified
                     </span>
                 <?php endif; ?>
             </div>
         <?php else: ?>
             <div style="margin-top:5px;">
                 <a href="<?= BASE_URL ?>doctor/my-contact.php"
-                    style="font-size:.68rem;color:rgba(255,255,255,.55);text-decoration:underline;">+ Add HPR ID</a>
+                    style="font-size:.68rem;color:rgba(255,255,255,.75);text-decoration:underline;">+ Add HPR ID</a>
             </div>
         <?php endif; ?>
     </div>
@@ -135,6 +139,40 @@ $_menu = [
         <i class="fa fa-user-circle" style="margin-right:5px;"></i><?= $_d_email ?>
     </div>
 </aside>
+
+<script>
+(function () {
+    // Every page load is a full navigation, so the sidebar's internal
+    // scroll (.sidebar-nav) resets to 0 by default — annoying when the
+    // active link is further down the list. Persist it per-tab and
+    // restore immediately (before paint-worthy content loads further
+    // down) so the list doesn't visibly jump on every page switch.
+    var nav = document.querySelector('.sidebar-nav');
+    if (!nav) return;
+    var KEY = 'rdh_doctor_sidebar_scroll';
+
+    var saved = sessionStorage.getItem(KEY);
+    if (saved !== null) {
+        nav.scrollTop = parseInt(saved, 10) || 0;
+    } else {
+        var activeLink = nav.querySelector('a.active');
+        if (activeLink) activeLink.scrollIntoView({ block: 'nearest' });
+    }
+
+    var saveTimer = null;
+    nav.addEventListener('scroll', function () {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(function () {
+            sessionStorage.setItem(KEY, String(nav.scrollTop));
+        }, 100);
+    });
+    // Belt-and-suspenders: capture the latest position right before
+    // navigating away, in case the debounce above hasn't fired yet.
+    window.addEventListener('pagehide', function () {
+        sessionStorage.setItem(KEY, String(nav.scrollTop));
+    });
+})();
+</script>
 
 <!-- Top Bar -->
 <div class="doctor-topbar">

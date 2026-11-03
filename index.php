@@ -36,8 +36,8 @@ $contact = contact_us();
         <div class="container">
             <div class="row g-4 align-items-center ">
                 <div class="col-lg-7">
-                    <div class="hero-content pt-4">
-                        <h1><span class="banner-tags">Online Doctor Consultation</span> from the <br> comfort of your
+                    <div class="hero-content">
+                        <h1><span class="banner-tags">Online Doctor Consultation</span> from the <br class="d-none d-md-inline"> comfort of your
                             home</h1>
                         <p>Doctor Consultation starts from <span class="tags">Rs 149/-</span></p>
                         <div class="search_input mt-4">
@@ -46,13 +46,13 @@ $contact = contact_us();
                                     class="form-control cutom_search"
                                     placeholder="Search by department or problem, e.g. Cardiology, chest pain..."
                                     autocomplete="off">
-                                <button type="submit" class="btn btn-search"><i class="far fa-search"></i></button>
+                                <button type="submit" class="btn btn-search" aria-label="Search"><i class="fas fa-search"></i></button>
                             </form>
                         </div>
 
                         <div class="hero-book-btn mt-3">
                             <a href="<?= BASE_URL ?>book-appointment/" class="theme-btn">
-                                <i class="far fa-calendar-check me-1"></i> Book an Appointment
+                                <i class="fas fa-calendar-check me-1"></i> Book an Appointment
                             </a>
                         </div>
 
@@ -77,7 +77,7 @@ $contact = contact_us();
                     <h2 class="service-text">Consult Doctor by Speciality</h2>
                     <p>Select speciality to find relevant doctors</p>
                 </div>
-                <a href="<?= BASE_URL ?>departments/" class=" p-2 btn-esanjeevni dept-view-all-btn">
+                <a href="<?= BASE_URL ?>departments/" class="btn-esanjeevni dept-view-all-btn">
                     View All Departments <i class="fas fa-arrow-right"></i>
                 </a>
             </div>
@@ -346,7 +346,7 @@ $contact = contact_us();
                                 echo '
                                     <li class="nav-item">
                                         <a href="#thumb' . $product['id'] . '" data-bs-toggle="tab" class="nav-link ' . $active_class . '">
-                                            ' . $product['pro_name'] . ' <i class="far fa-chevron-right"></i>
+                                             ' . $product['pro_name'] . ' <i class="fas fa-chevron-right"></i>
                                         </a>
                                     </li>
                                     ';
@@ -366,14 +366,14 @@ $contact = contact_us();
                                         <div class="service-box-items">
                                             <div class="service-icon-box">
                                                 <div class="icon">
-                                                    <i class="flaticon-good-heart"></i>
+                                                    <i class="flaticon-good-heart fas fa-heart-pulse"></i>
                                                 </div>
                                                 <h3>
                                                     <a href="' . $product['slug_url'] . '">' . $product['pro_name'] . '</a>
                                                 </h3>
                                                 <p>' . $product['short_desc'] . '</p>
-                                               <a href="' . BASE_URL . 'online-services/' . $product['slug_url'] . '" class="theme-btn mt-5">
-                                                    <i class="far fa-chevron-right"></i>
+                                               <a href="' . BASE_URL . 'online-services/' . $product['slug_url'] . '" class="theme-btn mt-2">
+                                                    <i class="fas fa-chevron-right"></i>
                                                     More Details
                                                 </a>
 
@@ -428,7 +428,7 @@ $contact = contact_us();
                     <div class="feature-treatment-items item_right_1 h-100">
                         <div class="feature-icon-box">
                             <h3>Digital Health Services</h3>
-                            <i class="flaticon-heartbeat"></i>
+                            <i class="flaticon-heartbeat fas fa-heartbeat"></i>
                         </div>
                         <p>
                             Access online healthcare services, teleconsultations, digital health records, preventive
@@ -442,7 +442,7 @@ $contact = contact_us();
                     <div class="feature-treatment-items h-100">
                         <div class="feature-icon-box">
                             <h3>ABHA Integrated Healthcare</h3>
-                            <i class="flaticon-social-care"></i>
+                            <i class="flaticon-social-care fas fa-hand-holding-heart"></i>
                         </div>
                         <p>
                             Create, link, and manage your ABHA account to securely access digital health records and
@@ -456,7 +456,7 @@ $contact = contact_us();
                     <div class="feature-treatment-items item_left_1 h-100">
                         <div class="feature-icon-box">
                             <h3>School Digital Health Program</h3>
-                            <i class="flaticon-health-insurance-1"></i>
+                            <i class="flaticon-health-insurance-1 fas fa-shield-heart"></i>
                         </div>
                         <p>
                             Promote student wellness through digital health screening, health awareness programs,
@@ -648,10 +648,9 @@ $contact = contact_us();
 
                     </div>
                     <div class="col-lg-4">
-                        <div class="appointment-image" style="position:relative;">
-                            <img src="assets/img/home-1/appointment-img.jpg" alt="img">
-                            <div
-                                style="position:absolute;left:16px;right:16px;bottom:16px;background:#fff;border-radius:12px;padding:14px 16px;box-shadow:0 8px 24px rgba(0,0,0,.18);">
+                        <div class="appointment-image">
+                            <img src="assets/img/home-1/appointment-img.jpg" alt="Doctor Consultation">
+                            <div class="appt-floating-card">
                                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
                                     <span
                                         style="width:32px;height:32px;border-radius:8px;background:#e9f9f0;color:#009f4d;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem;"><i
@@ -906,12 +905,12 @@ $contact = contact_us();
                             </div>
                             <div class="faq-button ">
                                 <a href="tel:<?= $contact['phone'] ?>" class="theme-btn">
-                                    <i class="far fa-chevron-right"></i>
+                                    <i class="fas fa-chevron-right"></i>
                                     Contact With Us
                                 </a>
                                 <div class="icon-items">
                                     <div class="icon">
-                                        <i class="flaticon-support"></i>
+                                        <i class="flaticon-support fas fa-headset"></i>
                                     </div>
                                     <div class="content">
                                         <p>Call Emergency</p>
@@ -999,7 +998,7 @@ $contact = contact_us();
             </div>
             <div class="text-center mt-4">
                 <a href="<?= BASE_URL ?>blogs/" class="theme-btn">
-                    <i class="far fa-chevron-right"></i>
+                    <i class="fas fa-chevron-right"></i>
                     View All Articles
                 </a>
             </div>
@@ -1260,10 +1259,11 @@ $contact = contact_us();
                 loader.classList.remove("d-none");
                 btnText.textContent = "Preparing payment...";
 
-                const orderData = new FormData();
-                orderData.append('doctor_id', doctorSelect.value);
-
-                fetch('util/create-razorpay-order.php', { method: 'POST', body: orderData })
+                // The full form (not just doctor_id) goes with the order
+                // request so the server can recover this booking from a
+                // webhook even if this tab never returns after payment —
+                // see util/create-razorpay-order.php.
+                fetch('util/create-razorpay-order.php', { method: 'POST', body: formData })
                     .then(r => r.json())
                     .then(order => {
                         loader.classList.add("d-none");

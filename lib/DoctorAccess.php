@@ -28,10 +28,19 @@ function doctor_has_active_subscription(mysqli $conn, int $doctorId): bool
  */
 function doctor_qualifies_active(mysqli $conn, array $doctor): bool
 {
+    // 1. Within active grace period
     if (!empty($doctor['grace_period_until']) && strtotime($doctor['grace_period_until']) > time()) {
         return true;
     }
-    return !empty($doctor['is_verified']) && doctor_has_active_subscription($conn, (int) $doctor['id']);
+    // 2. Has paid unexpired subscription
+    if (doctor_has_active_subscription($conn, (int) $doctor['id'])) {
+        return true;
+    }
+    // 3. Admin-verified & Active / Approved doctor
+    if (!empty($doctor['is_verified']) && (($doctor['status'] ?? '') === 'Active' || !empty($doctor['is_approved']))) {
+        return true;
+    }
+    return false;
 }
 
 /**
@@ -43,13 +52,11 @@ function doctor_qualifies_active(mysqli $conn, array $doctor): bool
 function doctor_active_sql_condition(string $alias = 'd'): string
 {
     return "(
-        ({$alias}.grace_period_until IS NOT NULL AND {$alias}.grace_period_until > NOW())
-        OR (
-            {$alias}.is_verified = 1
-            AND EXISTS (
-                SELECT 1 FROM doctor_subscriptions ds
-                WHERE ds.doctor_id = {$alias}.id AND ds.status = 'paid' AND ds.expires_at > NOW()
-            )
-        )
+        ({$alias}.status = 'Active' AND {$alias}.is_verified = 1)
+        OR ({$alias}.grace_period_until IS NOT NULL AND {$alias}.grace_period_until > NOW())
+        OR ({$alias}.is_verified = 1 AND EXISTS (
+            SELECT 1 FROM doctor_subscriptions ds
+            WHERE ds.doctor_id = {$alias}.id AND ds.status = 'paid' AND ds.expires_at > NOW()
+        ))
     )";
 }

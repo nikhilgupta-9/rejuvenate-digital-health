@@ -490,16 +490,17 @@ $contact = contact_us();
                                         <?= $file_size ?>
                                     </td>
                                     <td>
+                                        <?php $doc_link = BASE_URL . ltrim(str_replace(['../', '..\\'], '', $document['file_path']), '/'); ?>
                                         <div class="btn-group btn-group-sm" role="group">
-                                            <a href="../<?= $document['file_path'] ?>" class="btn btn-primary" target="_blank"
-                                                download>
+                                            <a href="<?= htmlspecialchars($doc_link) ?>" class="btn btn-primary" target="_blank"
+                                                download title="Download Document">
                                                 <i class="fa fa-download"></i>
                                             </a>
-                                            <a href="../<?= $document['file_path'] ?>" class="btn btn-info" target="_blank">
+                                            <a href="<?= htmlspecialchars($doc_link) ?>" class="btn btn-info" target="_blank" title="View Document">
                                                 <i class="fa fa-eye"></i>
                                             </a>
                                             <button type="button" class="btn btn-outline-secondary"
-                                                onclick="shareDocument('<?= htmlspecialchars($document['document_name']) ?>', '<?= $document['file_path'] ?>')">
+                                                onclick="shareDocument('<?= htmlspecialchars($document['document_name']) ?>', '<?= htmlspecialchars($doc_link) ?>')" title="Share">
                                                 <i class="fa fa-share"></i>
                                             </button>
                                         </div>

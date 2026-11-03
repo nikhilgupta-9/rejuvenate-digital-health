@@ -79,6 +79,7 @@ $ORDER = [
     'migration_pharmacy_module.sql',
     'migration_lab_diagnostics.sql',
     'migration_abdm_m2_m3.sql',
+    'migration_razorpay_webhook.sql',
     // 12. referential integrity — LAST (needs every table + type fix in place)
     'migration_core_foreign_keys.sql',
 ];

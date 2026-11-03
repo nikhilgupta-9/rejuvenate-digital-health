@@ -65,15 +65,19 @@ if (!$appointment_id) opd_notice('No appointment specified.');
 
 /* ── load appointment + patient + doctor ───────────────────── */
 $as = $conn->prepare("
-    SELECT a.id, a.user_id, a.doctor_id, a.appointment_date, a.appointment_time,
-           u.name AS patient_name, u.last_name AS patient_last, u.mobile AS patient_phone,
-           u.gender, u.blood_group,
+    SELECT a.id, a.user_id, a.doctor_id, a.appointment_date, a.appointment_time, a.school_member_id,
+           COALESCE(u.name, sm.name, a.patient_name, 'Patient') AS patient_name,
+           COALESCE(u.last_name, '') AS patient_last,
+           COALESCE(u.mobile, sm.phone, a.patient_phone, '') AS patient_phone,
+           COALESCE(u.gender, sm.gender, '—') AS gender,
+           COALESCE(u.blood_group, sm.blood_group, '') AS blood_group,
            " . Abha::selectAliases('aa', 'u') . ",
-           TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) AS patient_age,
+           TIMESTAMPDIFF(YEAR, COALESCE(u.dob, sm.dob), CURDATE()) AS patient_age,
            d.name AS doctor_name, d.degrees, d.specialization, d.phone AS doctor_phone,
            d.email AS doctor_email, d.hpr_id, d.nmc_reg_number
     FROM appointments a
-    JOIN users u   ON a.user_id = u.id
+    LEFT JOIN users u   ON a.user_id = u.id
+    LEFT JOIN school_members sm ON a.school_member_id = sm.id
     JOIN doctors d ON a.doctor_id = d.id
     " . Abha::joinClause('patient', 'u', 'aa') . "
     WHERE a.id = ? LIMIT 1
@@ -84,8 +88,27 @@ $row = $as->get_result()->fetch_assoc();
 $as->close();
 if (!$row) opd_notice('Appointment not found.');
 
-if ($viewer_role === 'doctor'  && (int)$row['doctor_id'] !== $viewer_id) opd_notice('This appointment is not assigned to you.');
-if ($viewer_role === 'patient' && (int)$row['user_id']   !== $viewer_id) opd_notice('This appointment does not belong to your account.');
+if ($viewer_role === 'doctor' && (int)$row['doctor_id'] !== $viewer_id) {
+    opd_notice('This appointment is not assigned to you.');
+}
+if ($viewer_role === 'patient') {
+    $allowed = false;
+    if (!empty($row['user_id']) && (int)$row['user_id'] === $viewer_id) {
+        $allowed = true;
+    } else {
+        $chkU = $conn->prepare("SELECT mobile FROM users WHERE id = ? LIMIT 1");
+        $chkU->bind_param('i', $viewer_id);
+        $chkU->execute();
+        $uData = $chkU->get_result()->fetch_assoc();
+        $chkU->close();
+        if ($uData && !empty($uData['mobile']) && !empty($row['patient_phone']) && $uData['mobile'] === $row['patient_phone']) {
+            $allowed = true;
+        }
+    }
+    if (!$allowed) {
+        opd_notice('This appointment does not belong to your account.');
+    }
+}
 
 $rs = $conn->prepare("SELECT * FROM prescriptions WHERE appointment_id = ? LIMIT 1");
 $rs->bind_param('i', $appointment_id);
@@ -192,7 +215,7 @@ $pdf->Cell(96, 4.6, enc(trim(($row['degrees'] ?? '') . '  ' . ($row['specializat
 $pdf->Cell(0, 4.6, enc(trim(($row['patient_age'] !== null ? $row['patient_age'] . ' yrs' : '') . '  |  ' . ($row['gender'] ?: '-')
     . ($row['blood_group'] ? '  |  ' . $row['blood_group'] : ''))), 0, 1, 'L');
 
-$doc_hpr_str = !empty($row['hpr_id']) ? ('HPR ID: ' . $row['hpr_id'] . (str_contains($row['hpr_id'], '@') ? '' : '@hpr.abdm')) : 'HPR ID: Not Registered';
+$doc_hpr_str = !empty($row['hpr_id']) ? ('HPR ID: ' . $row['hpr_id'] . (str_contains($row['hpr_id'], '@') || preg_match('/^\d{2}-\d{4}-\d{4}-\d{4}$/', $row['hpr_id']) ? '' : '@hpr.abdm')) : 'HPR ID: Not Registered';
 $pat_raw_abha = !empty($row['abha_number']) ? $row['abha_number'] : (!empty($row['abha_id']) ? $row['abha_id'] : '');
 $pat_abha_str = $pat_raw_abha ? ('ABHA: ' . Abha::formatNumber($pat_raw_abha)) : 'ABHA: Not Linked';
 $pat_addr_str = !empty($row['abha_address']) ? ('  |  ' . $row['abha_address']) : '';

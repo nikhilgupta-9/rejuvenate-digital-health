@@ -11,9 +11,37 @@ if (!$member_id) {
     exit;
 }
 
-// Require a recent OTP-verified identity check (set by doctor/api/school-lookup-verify.php)
+// Require a recent OTP-verified identity check OR doctor has an appointment or assigned school
 $verified_until = $_SESSION['school_verified_members'][$member_id] ?? 0;
-if ($verified_until < time()) {
+$has_authorized_access = ($verified_until >= time());
+
+if (!$has_authorized_access) {
+    // Check if doctor has an appointment with this student
+    $chkAppt = $conn->prepare("SELECT id FROM appointments WHERE doctor_id = ? AND school_member_id = ? LIMIT 1");
+    if ($chkAppt) {
+        $chkAppt->bind_param('ii', $doctor_id, $member_id);
+        $chkAppt->execute();
+        if ($chkAppt->get_result()->fetch_row()) {
+            $has_authorized_access = true;
+            $_SESSION['school_verified_members'][$member_id] = time() + 3600;
+        }
+        $chkAppt->close();
+    }
+}
+if (!$has_authorized_access) {
+    // Check if doctor is assigned to the school of this member
+    $chkSch = $conn->prepare("SELECT 1 FROM school_doctor_assignments sda JOIN school_members sm ON sm.school_id = sda.school_id WHERE sda.doctor_id = ? AND sm.id = ? AND (sda.status = 'active' OR sda.status IS NULL) LIMIT 1");
+    if ($chkSch) {
+        $chkSch->bind_param('ii', $doctor_id, $member_id);
+        $chkSch->execute();
+        if ($chkSch->get_result()->fetch_row()) {
+            $has_authorized_access = true;
+            $_SESSION['school_verified_members'][$member_id] = time() + 3600;
+        }
+        $chkSch->close();
+    }
+}
+if (!$has_authorized_access) {
     header('Location: ' . BASE_URL . 'doctor/school-students.php?err=verify_required');
     exit;
 }

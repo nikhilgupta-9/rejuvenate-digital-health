@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include_once "../config/connect.php";
 include_once "../util/function.php";
 
@@ -128,6 +130,29 @@ $contact = contact_us();
             font-size: .82rem;
             font-weight: 700;
         }
+        @media (max-width: 575.98px) {
+            .contact-card, .faq-card {
+                padding: 16px 14px;
+                border-radius: 12px;
+            }
+            .contact-info-item {
+                padding: .75rem;
+            }
+            .contact-icon {
+                width: 38px;
+                height: 38px;
+                font-size: 1rem;
+                margin-right: .75rem;
+            }
+            .faq-question {
+                padding: .85rem 1rem;
+                font-size: .86rem;
+            }
+            .faq-answer {
+                padding: 1rem;
+                font-size: .84rem;
+            }
+        }
     </style>
 </head>
 
@@ -135,9 +160,9 @@ $contact = contact_us();
     <?php $sidebar_active = 'help'; include("sidebar.php"); ?>
 
     <main class="patient-content">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div class="acc-header-banner">
             <div>
-                <h1 class="ap-h mb-1"><i class="fa fa-life-ring me-2 text-primary-theme"></i>Help & ABDM Support</h1>
+                <h1><i class="fa fa-life-ring me-2"></i>Help & ABDM Support</h1>
                 <div class="ap-sub">Patient care assistance, ABDM National Health Authority helpline, and FAQs</div>
             </div>
             <a href="<?= BASE_URL ?>user/user-dashboard.php" class="btn btn-outline-secondary btn-sm">

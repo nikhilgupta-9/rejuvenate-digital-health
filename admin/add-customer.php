@@ -276,7 +276,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
 
                     <div class="detail-card">
-                        <h5><i class="fas fa-id-card-clip me-2"></i>ABHA Health ID <span class="text-muted fw-normal text-uppercase" style="font-size:.68rem;letter-spacing:.3px;">(Optional)</span></h5>
+                        <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+                            <h5 class="mb-0"><i class="fas fa-id-card-clip me-2 text-success"></i>ABHA Health ID (ABDM Milestone 1)</h5>
+                            <a href="abha-m1.php" class="btn btn-sm btn-outline-success" style="font-size:.75rem;">
+                                <i class="fas fa-shield-halved me-1"></i>Create or Verify via ABDM M1
+                            </a>
+                        </div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">ABHA Number (14-digit)</label>
@@ -284,7 +289,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                        name="abha_number" maxlength="17" placeholder="XX-XXXX-XXXX-XXXX"
                                        value="<?= htmlspecialchars($_POST['abha_number'] ?? '') ?>">
                                 <?php if (isset($errors['abha_number'])): ?><div class="invalid-feedback d-block"><?= $errors['abha_number'] ?></div><?php endif; ?>
-                                <div class="hint" style="font-size:.75rem;color:#94a3b8;margin-top:4px;">Captured as-is — not verified with ABDM here. Verify later from ABHA Management.</div>
+                                <div class="hint" style="font-size:.75rem;color:#64748b;margin-top:4px;">14-digit national digital health ID. To create an ABHA via Aadhaar OTP or verify with UIDAI, open the <a href="abha-m1.php" class="fw-semibold">ABDM M1 Hub</a>.</div>
                             </div>
                         </div>
                     </div>

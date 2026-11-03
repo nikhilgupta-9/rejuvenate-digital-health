@@ -110,6 +110,8 @@ function slot_count(string $start, string $end, int $dur): int
 <title>Manage Schedule — REJUVENATE Doctor Portal</title>
 <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+<link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
+<link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/style.css">
 <style>
     .ms-head h1 { font-size: 1.2rem; font-weight: 800; color: #1f2937; margin: 0; }
     .ms-head .sub { font-size: .82rem; color: #9ca3af; }

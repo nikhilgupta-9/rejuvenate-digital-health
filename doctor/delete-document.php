@@ -1,10 +1,10 @@
 <?php
 include_once(__DIR__ . "/../config/connect.php");
 require_once __DIR__ . "/auth/guard.php";
-doctor_jwt_guard();
+$payload = doctor_jwt_guard();
 
-$doctor_id = $_SESSION['doctor_id'];
-$doc_id = intval($_GET['id']);
+$doctor_id = (int)($payload['doctor_id'] ?? $payload['sub'] ?? $_SESSION['doctor_id'] ?? 0);
+$doc_id = intval($_GET['id'] ?? 0);
 
 // Verify document belongs to doctor
 $check_sql = "SELECT file_path FROM doctor_documents WHERE id = ? AND doctor_id = ?";
@@ -17,8 +17,12 @@ if ($result->num_rows > 0) {
     $doc = $result->fetch_assoc();
     
     // Delete file from server
-    if (file_exists($doc['file_path'])) {
-        unlink($doc['file_path']);
+    $fullPath = $doc['file_path'];
+    if (!file_exists($fullPath)) {
+        $fullPath = dirname(__DIR__) . '/' . ltrim($fullPath, '/');
+    }
+    if (file_exists($fullPath) && is_file($fullPath)) {
+        @unlink($fullPath);
     }
     
     // Delete from database
@@ -32,6 +36,7 @@ if ($result->num_rows > 0) {
     $_SESSION['error_message'] = "Document not found or unauthorized.";
 }
 
-header("Location: my-contact.php");
+$redirect = !empty($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : "my-contact.php";
+header("Location: " . $redirect);
 exit();
 ?>

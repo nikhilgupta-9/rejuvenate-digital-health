@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include_once "../config/connect.php";
 include_once "../util/function.php";
 
@@ -146,7 +148,7 @@ $orders = $conn->query("
                         <div class="small text-muted mb-1 font-weight-bold">Total Bill:</div>
                         <div class="fs-5 fw-bold text-dark">₹<?= number_format($ord['total_amount'], 2) ?></div>
                         <div class="small text-muted text-uppercase">
-                            <?= htmlspecialchars($ord['payment_method']) ?> • <?= ucfirst($ord['payment_status'] ?? 'pending') ?>
+                            <?= htmlspecialchars($ord['payment_method'] ?? 'COD') ?> • <?= ucfirst($ord['payment_status'] ?? 'pending') ?>
                         </div>
                         <?php if (!empty($ord['tracking_number'])): ?>
                             <div class="mt-2 text-primary-theme small fw-bold">

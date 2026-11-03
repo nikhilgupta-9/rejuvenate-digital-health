@@ -36,6 +36,10 @@ class HprApi
 
     public function __construct()
     {
+        if (!defined('ABDM_HPR_CLIENT_ID')) {
+            require_once dirname(__DIR__) . '/config/abdm.php';
+        }
+
         $this->gatewayBase  = rtrim(defined('ABDM_HPR_GATEWAY_URL') ? ABDM_HPR_GATEWAY_URL : '', '/');
         $this->hprBase      = rtrim(defined('ABDM_HPR_BASE_URL') ? ABDM_HPR_BASE_URL : '', '/');
         $this->clientId     = defined('ABDM_HPR_CLIENT_ID') ? ABDM_HPR_CLIENT_ID : '';

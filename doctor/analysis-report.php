@@ -94,6 +94,8 @@ $red_flag_yesterday = 0;
     <title>Analysis Report — Rejuvenate</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/font-awesome.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/doctor.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>doctor/assets/style.css">
     <style>
         .report-card {
             background: #fff;
