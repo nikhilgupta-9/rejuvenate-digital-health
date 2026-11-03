@@ -30,6 +30,7 @@ require_once(__DIR__ . "/../lib/Abha.php");
 require_once(__DIR__ . "/../lib/HipLinking.php");   // ABDM care-context linking (async — worker: scripts/abdm-hip-worker.php)
 require_once(__DIR__ . "/../lib/HipApi.php");        // ABDM hiType canonical map (HipApi::canonicalHiType)
 require_once(__DIR__ . "/../util/prescription-render.php"); // shared read-only "parcha" — same as user/admin/video-call
+require_once(__DIR__ . "/inc/consent-helper.php");   // student_has_consent() / student_consent_block_reason()
 require_once(__DIR__ . "/auth/guard.php");
 
 $jwt_doctor = doctor_jwt_guard();
@@ -97,13 +98,31 @@ $ra->execute();
 $recent_appts = $ra->get_result()->fetch_all(MYSQLI_ASSOC);
 $ra->close();
 
-/* ── Today's students list for sidebar ── */
+/* ── Students list for the "Select Student" search ──
+   Scoped to schools this doctor is actually assigned to, and — per the
+   ABDM/consent rule enforced on student-profile.php — limited to members
+   who have a currently-valid parent consent on file (see
+   inc/consent-helper.php::student_has_consent()). A student with no/expired/
+   revoked consent must never be searchable here; the doctor can't write
+   them a prescription until a fresh consent is captured. */
 $today_students = [];
 $tss = $conn->prepare("
     SELECT m.id, m.name, m.school_id, s.school_name
-    FROM school_members m JOIN schools s ON s.id = m.school_id
-    ORDER BY m.name ASC LIMIT 20
+    FROM school_members m
+    JOIN schools s ON s.id = m.school_id
+    JOIN school_doctor_assignments sda ON sda.school_id = m.school_id AND sda.doctor_id = ? AND sda.status = 'active'
+    WHERE m.type = 'Student' AND m.status = 'Active'
+      AND EXISTS (
+          SELECT 1 FROM parent_consent_forms pcf
+          WHERE pcf.member_id = m.id
+            AND pcf.consent_given = 1
+            AND pcf.revoked = 0
+            AND (pcf.expires_at IS NULL OR pcf.expires_at >= CURDATE())
+            AND (pcf.plan_id IS NULL OR pcf.payment_status = 'paid')
+      )
+    ORDER BY m.name ASC LIMIT 50
 ");
+$tss->bind_param('i', $doctor_id);
 $tss->execute();
 $today_students = $tss->get_result()->fetch_all(MYSQLI_ASSOC);
 $tss->close();
@@ -194,6 +213,11 @@ if ($mode === 'student' && $member_id > 0) {
         header("Location: school-students.php");
         exit();
     }
+
+    // Same consent gate as the search list above — block direct/typed
+    // ?member_id= links from reaching a student with no valid parent
+    // consent on file.
+    $member_consent_reason = student_consent_block_reason($conn, $member_id);
 
     /* Load latest prescription for pre-fill */
     $srx = $conn->prepare("SELECT * FROM school_member_prescriptions WHERE member_id = ? ORDER BY created_at DESC LIMIT 1");
@@ -451,7 +475,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_student_prescrip
         'height_cm'    => trim($_POST['s_height']  ?? ''),
     ]);
 
-    if ($s_member_id && $s_rx_text) {
+    if ($s_member_id && $s_rx_text && student_has_consent($conn, $s_member_id)) {
         $sins = $conn->prepare("INSERT INTO school_member_prescriptions
             (member_id, school_id, doctor_id, diagnosis, symptoms, prescription_text, advice, follow_up_date, vitals)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -472,7 +496,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_student_prescrip
         }
         $sins->close();
     } else {
-        $save_error = 'Prescription text is required.';
+        $save_error = (!$s_member_id || !$s_rx_text)
+            ? 'Prescription text is required.'
+            : (student_consent_block_reason($conn, $s_member_id) ?? 'Parent consent is required before a prescription can be saved.');
     }
 }
 
@@ -1285,11 +1311,18 @@ $sidebar_active = 'patient-form';
             <div class="rx-card-header student-header"><i class="fa fa-graduation-cap"></i> Select Student</div>
             <div class="rx-card-body">
                 <?php if (empty($today_students)): ?>
-                    <p class="text-muted mb-0">No students found. <a href="school-students.php">View school students</a></p>
+                    <p class="text-muted mb-0">No students with a valid parent consent were found for your assigned
+                        school(s). <a href="school-students.php">Search all students</a> to capture a consent first.</p>
                 <?php else: ?>
-                    <div class="row g-2">
+                    <p class="text-muted small mb-2"><i class="fa fa-shield-alt me-1" style="color:var(--rdh-green);"></i>
+                        Only students with a currently-valid parent consent on file are listed here.</p>
+                    <div class="mb-3">
+                        <input type="text" id="studentSearchBox" class="form-control" placeholder="Search by student name or school…">
+                    </div>
+                    <div class="row g-2" id="studentSearchGrid">
                         <?php foreach ($today_students as $stu): ?>
-                            <div class="col-xl-3 col-lg-4 col-md-6 col-12">
+                            <div class="col-xl-3 col-lg-4 col-md-6 col-12 student-search-item"
+                                 data-search="<?= htmlspecialchars(mb_strtolower($stu['name'] . ' ' . $stu['school_name'])) ?>">
                                 <a href="patient-form.php?mode=student&member_id=<?= $stu['id'] ?>" class="select-card d-flex">
                                     <div class="sc-icon" style="background:#d1fae5;color:#065f46;">
                                         <i class="fa fa-user-graduate"></i>
@@ -1302,12 +1335,32 @@ $sidebar_active = 'patient-form';
                             </div>
                         <?php endforeach; ?>
                     </div>
+                    <p class="text-muted small mb-0 mt-2 d-none" id="studentSearchEmpty">No matching student found.</p>
                     <div class="mt-3">
                         <a href="school-students.php" class="btn btn-outline-success btn-sm">
                             <i class="fa fa-search me-1"></i> Browse All Students
                         </a>
                     </div>
                 <?php endif; ?>
+            </div>
+        </div>
+
+    <?php elseif ($member_consent_reason): ?>
+        <!-- Parent consent missing/expired/revoked — can't proceed -->
+        <div class="rx-card">
+            <div class="rx-card-header student-header"><i class="fa fa-shield-alt"></i> Parent Consent Required</div>
+            <div class="rx-card-body">
+                <div class="alert alert-warning mb-3">
+                    <strong><?= htmlspecialchars($member['name']) ?></strong> — <?= htmlspecialchars($member_consent_reason) ?>
+                </div>
+                <p class="text-muted small mb-3">A doctor can't record a checkup, prescription or health profile for a
+                    school student until a valid parent/guardian consent is on file for the current academic year.</p>
+                <a href="<?= BASE_URL ?>doctor/student-profile.php?id=<?= $member_id ?>#consent" class="btn btn-success btn-sm">
+                    <i class="fa fa-file-signature me-1"></i> Capture / Review Consent
+                </a>
+                <a href="patient-form.php?mode=student" class="btn btn-outline-secondary btn-sm">
+                    <i class="fa fa-arrow-left me-1"></i> Back to Student List
+                </a>
             </div>
         </div>
 
@@ -1482,6 +1535,24 @@ $sidebar_active = 'patient-form';
 
 <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
 <script>
+/* ── Student search box (filters the consent-cleared list client-side) ── */
+(function () {
+    const box = document.getElementById('studentSearchBox');
+    if (!box) return;
+    const items = Array.from(document.querySelectorAll('.student-search-item'));
+    const emptyMsg = document.getElementById('studentSearchEmpty');
+    box.addEventListener('input', function () {
+        const q = this.value.trim().toLowerCase();
+        let visible = 0;
+        items.forEach(function (el) {
+            const match = !q || el.dataset.search.includes(q);
+            el.classList.toggle('d-none', !match);
+            if (match) visible++;
+        });
+        if (emptyMsg) emptyMsg.classList.toggle('d-none', visible !== 0);
+    });
+})();
+
 /* ── Medication helpers ── */
 const freqOpts  = ['','Once daily','Twice daily','Thrice daily','Four times/day','Every 6 hours','Every 8 hours','Every 12 hours','As needed (SOS)','Stat (immediately)','Weekly','At bedtime'];
 const routeOpts = ['','Oral','IV','IM','SC','Topical','Inhaled','Sublingual','Rectal','Nasal'];
