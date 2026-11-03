@@ -87,6 +87,8 @@ $ORDER = [
     'migration_razorpay_webhook.sql',
     // 12. referential integrity — LAST (needs every table + type fix in place)
     'migration_core_foreign_keys.sql',
+    // 13. cleanup — after FKs, since it only drops tables nothing points into
+    'migration_drop_unused_tables.sql',
 ];
 
 // STDOUT is normally predefined by the CLI SAPI, but some hosts run this

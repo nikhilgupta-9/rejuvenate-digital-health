@@ -145,6 +145,12 @@ dump / phpMyAdmin: `doctors`, `users`, `admin_user`, `appointments`,
 |---|------|-------|
 | 42 | `migration_razorpay_webhook.sql` | Fixes "paid but booking not confirmed": appointment creation used to depend entirely on the browser's Razorpay Checkout callback reaching `util/appointment-handler.php`, with no server-side fallback if that tab died after a successful payment (common on mobile UPI app-switches). Adds **`razorpay_pending_bookings`** — the full booking form, captured by `util/create-razorpay-order.php` *before* Checkout opens, keyed by `razorpay_order_id`. **`webhook/razorpay.php`** (new, registered in the Razorpay Dashboard for `payment.captured`) uses it to create the appointment server-side if the browser never came back. **`razorpay_webhook_log`** — raw webhook deliveries, for debugging. Also adds a `UNIQUE` key on `appointments.razorpay_payment_id` — the idempotency guard shared by the browser path and the webhook, so whichever runs first wins and the other no-ops. **Manual step after deploy:** add `RAZORPAY_WEBHOOK_SECRET` to `.env` and register the webhook URL + that same secret in the Razorpay Dashboard. |
 
+## 12c. Dead-table cleanup — run after FKs
+
+| # | File | Notes |
+|---|------|-------|
+| 43 | `migration_drop_unused_tables.sql` | Drops **`address_list`**, **`blog_tags`**, **`user_admin_profiles`** — found via a full audit (every table in a production schema dump grepped against every `.php` file in this repo). All three are empty in production and local, have zero PHP references, and nothing has a foreign key into them. Superseded by `addresses`/`user_addresses`, an unused blog-tagging feature, and `admin_user`'s own profile columns respectively. |
+
 ## 13. Referential integrity — run LAST
 
 | # | File | Notes |
