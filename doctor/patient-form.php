@@ -132,6 +132,78 @@ $save_success = '';
 $save_error   = '';
 
 /* ════════════════════════════════════════════
+   PATIENT MODE — direct patient_id entry, no appointment yet (e.g. "Start
+   Consultation" from add-patient-abha.php right after Aadhaar/ABHA
+   verification). Every prescription is tied to one appointment_id — same
+   as every other entry point — so this creates (or reuses today's open)
+   walk-in OPD appointment and redirects into the normal flow below, instead
+   of adding a second, parallel "no appointment" code path through this file.
+════════════════════════════════════════════ */
+if ($mode === 'patient' && $appointment_id === 0 && isset($_GET['patient_id'])) {
+    $direct_patient_id = (int) $_GET['patient_id'];
+    if ($direct_patient_id > 0) {
+        $pChk = $conn->prepare("SELECT id, name, last_name, mobile, email FROM users WHERE id = ? LIMIT 1");
+        $pChk->bind_param('i', $direct_patient_id);
+        $pChk->execute();
+        $directPatient = $pChk->get_result()->fetch_assoc();
+        $pChk->close();
+
+        if ($directPatient) {
+            $linkChk = $conn->prepare("SELECT id FROM doctor_patients WHERE doctor_id=? AND patient_id=? LIMIT 1");
+            $linkChk->bind_param('ii', $doctor_id, $direct_patient_id);
+            $linkChk->execute();
+            if (!$linkChk->get_result()->fetch_row()) {
+                $insDp = $conn->prepare("INSERT IGNORE INTO doctor_patients (doctor_id, patient_id, added_via, added_at) VALUES (?, ?, 'opd_walkin', NOW())");
+                $insDp->bind_param('ii', $doctor_id, $direct_patient_id);
+                $insDp->execute();
+                $insDp->close();
+            }
+            $linkChk->close();
+
+            // Reuse today's still-open walk-in appointment for this patient, if any,
+            // instead of creating a fresh one every time the button is clicked.
+            $todayDate = date('Y-m-d');
+            $existingAppt = $conn->prepare("
+                SELECT id FROM appointments
+                WHERE doctor_id = ? AND user_id = ? AND appointment_date = ? AND status != 'completed'
+                ORDER BY id DESC LIMIT 1
+            ");
+            $existingAppt->bind_param('iis', $doctor_id, $direct_patient_id, $todayDate);
+            $existingAppt->execute();
+            $foundAppt = $existingAppt->get_result()->fetch_assoc();
+            $existingAppt->close();
+
+            $newApptId = $foundAppt ? (int) $foundAppt['id'] : 0;
+
+            if (!$newApptId) {
+                $pFullName = trim($directPatient['name'] . ' ' . ($directPatient['last_name'] ?? ''));
+                $pEmail  = $directPatient['email']  ?? '';
+                $pMobile = $directPatient['mobile'] ?? '';
+                $nowTime = date('H:i:s');
+
+                $ins = $conn->prepare("
+                    INSERT INTO appointments
+                        (patient_name, patient_email, patient_phone, user_id, doctor_id,
+                         appointment_date, appointment_time, purpose, appointment_type,
+                         visit_person, booking_source, status, payment_status, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'OPD Consultation', 'OPD Walk-in', 'self', 'public', 'approved', 'not_required', NOW())
+                ");
+                $ins->bind_param('sssiiss', $pFullName, $pEmail, $pMobile, $direct_patient_id, $doctor_id, $todayDate, $nowTime);
+                $ins->execute();
+                $newApptId = (int) $conn->insert_id;
+                $ins->close();
+            }
+
+            if ($newApptId > 0) {
+                header('Location: patient-form.php?appointment_id=' . $newApptId);
+                exit();
+            }
+        }
+    }
+    // No valid patient_id resolved — falls through to the normal empty-form load below.
+}
+
+/* ════════════════════════════════════════════
    PATIENT MODE — load appointment data
 ════════════════════════════════════════════ */
 if ($mode === 'patient' && $appointment_id > 0) {
