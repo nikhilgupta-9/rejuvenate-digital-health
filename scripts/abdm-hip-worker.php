@@ -56,20 +56,22 @@ if (!$DRY) {
     if ($conn->affected_rows) out("gave up on {$conn->affected_rows} link(s) older than {$GIVE_UP_HOURS}h");
 }
 
-// Pending care-context links + the patient behind each prescription.
-// prescription_id OR document_id is set (never both — see chk_cclink_one_source), so the
-// patient is resolved from whichever source this care-context row actually points at.
+// Pending care-context links + the patient behind each source row.
+// Exactly one of prescription_id / document_id / lab_booking_id is set (never more
+// than one — see chk_cclink_one_source), so the patient is resolved from whichever
+// source this care-context row actually points at.
 $rows = $conn->query("
-    SELECT ccl.id, ccl.prescription_id, ccl.document_id, ccl.reference_number, ccl.care_context_reference,
-           ccl.hi_type, ccl.request_id,
-           COALESCE(p.patient_id, pd.patient_id) AS patient_id,
+    SELECT ccl.id, ccl.prescription_id, ccl.document_id, ccl.lab_booking_id, ccl.reference_number,
+           ccl.care_context_reference, ccl.hi_type, ccl.request_id,
+           COALESCE(p.patient_id, pd.patient_id, lb.user_id) AS patient_id,
            u.name, u.last_name, u.gender, YEAR(u.dob) AS yob,
            COALESCE(aa.abha_number,  u.abha_id)      AS abha_number,
            COALESCE(aa.abha_address, u.abha_address) AS abha_address
     FROM abdm_care_context_links ccl
     LEFT JOIN prescriptions p      ON p.id = ccl.prescription_id
     LEFT JOIN patient_documents pd ON pd.id = ccl.document_id
-    JOIN users u ON u.id = COALESCE(p.patient_id, pd.patient_id)
+    LEFT JOIN lab_bookings lb      ON lb.id = ccl.lab_booking_id
+    JOIN users u ON u.id = COALESCE(p.patient_id, pd.patient_id, lb.user_id)
     LEFT JOIN abha_accounts aa ON aa.entity_type = 'patient' AND aa.entity_id = u.id
     WHERE ccl.status = 'pending'
     ORDER BY ccl.id

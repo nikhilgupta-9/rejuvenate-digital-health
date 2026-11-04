@@ -85,6 +85,38 @@ class AbdmCrypto
     }
 
     /**
+     * Generate our own ephemeral X25519 keypair + nonce for a data-flow
+     * request (M3, HIU role) — the dhPublicKey/nonce we hand to the HIP so
+     * it can encrypt the records it pushes back to us, and the matching
+     * private key we keep to decrypt that push later.
+     *
+     * @return array{privateKey:string,nonce:string,keyMaterial:array}
+     *   privateKey/nonce are base64, to store against the data-flow request row.
+     */
+    public static function generateReceiverKeyMaterial(): array
+    {
+        $keypair = sodium_crypto_box_keypair();
+        $priv    = sodium_crypto_box_secretkey($keypair);
+        $pub     = sodium_crypto_box_publickey($keypair);
+        $nonce   = random_bytes(32);
+
+        return [
+            'privateKey' => base64_encode($priv),
+            'nonce'      => base64_encode($nonce),
+            'keyMaterial' => [
+                'cryptoAlg'   => 'ECDH',
+                'curve'       => 'Curve25519',
+                'dhPublicKey' => [
+                    'expiry'     => gmdate('Y-m-d\TH:i:s.000\Z', strtotime('+1 day')),
+                    'parameters' => 'Curve25519/32byte',
+                    'keyValue'   => base64_encode($pub),
+                ],
+                'nonce'       => base64_encode($nonce),
+            ],
+        ];
+    }
+
+    /**
      * Decrypt an ABDM encrypted payload received from a HIP or HIU.
      *
      * @param string $encryptedDataB64 Base64-encoded (ciphertext . tag)

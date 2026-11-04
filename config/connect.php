@@ -73,3 +73,10 @@ if ($conn->connect_error) {
 // Every table + column in the DB is utf8mb4; the connection must match or
 // 4-byte characters (emoji, some Indic text) are truncated/mangled in transit.
 $conn->set_charset("utf8mb4");
+
+// Auto-apply any pending database/*.sql migration (shared hosting has no SSH /
+// CLI `mysql`, so this is how a new migration file reaches production — see
+// database/AutoMigrate.php). Cheap (one indexed SELECT + a small glob()) and
+// never fatal to the request if it fails.
+require_once dirname(__DIR__) . '/database/AutoMigrate.php';
+AutoMigrate::runPending($conn);

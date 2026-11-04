@@ -76,9 +76,11 @@ $documents_sql = "
         d.name as doctor_name,
         d.specialization,
         DATE_FORMAT(pd.uploaded_at, '%d/%m/%Y %h:%i %p') as formatted_date,
-        DATE(pd.uploaded_at) as upload_date
+        DATE(pd.uploaded_at) as upload_date,
+        ccl.status as abdm_link_status
     FROM patient_documents pd
     LEFT JOIN doctors d ON pd.doctor_id = d.id
+    LEFT JOIN abdm_care_context_links ccl ON ccl.document_id = pd.id
     $where_sql
     ORDER BY pd.uploaded_at DESC
 ";
@@ -468,6 +470,13 @@ $contact = contact_us();
                                                     class="badge badge-type ms-2 d-none d-md-inline"><?= $document['file_type'] ?></span>
                                             <?php endif; ?>
                                         </div>
+                                        <?php if (($document['abdm_link_status'] ?? null) === 'linked'): ?>
+                                            <span class="badge bg-success-subtle text-success mt-1" style="font-size:.66rem;"><i class="fa fa-check-circle me-1"></i>Linked to ABDM</span>
+                                        <?php elseif (($document['abdm_link_status'] ?? null) === 'pending'): ?>
+                                            <span class="badge bg-warning-subtle text-warning mt-1" style="font-size:.66rem;"><i class="fa fa-clock me-1"></i>ABDM Linking Pending</span>
+                                        <?php elseif (($document['abdm_link_status'] ?? null) === 'failed'): ?>
+                                            <span class="badge bg-danger-subtle text-danger mt-1" style="font-size:.66rem;"><i class="fa fa-triangle-exclamation me-1"></i>ABDM Link Failed</span>
+                                        <?php endif; ?>
                                     </td>
                                     <td class="d-none d-md-table-cell">
                                         <?php if ($document['file_type']): ?>

@@ -1,7 +1,11 @@
 <?php
 require_once __DIR__ . '/auth/guard.php';
 require_once dirname(__DIR__) . '/config/connect.php';
+require_once dirname(__DIR__) . '/lib/Security.php';
+require_once dirname(__DIR__) . '/config/abdm.php';
+require_once dirname(__DIR__) . '/lib/HiuDataFlow.php';
 $payload = doctor_jwt_guard();
+$docUploadCsrf = Security::csrfToken();
 $doctor_id = (int) ($payload['doctor_id'] ?? $payload['sub'] ?? 0);
 $patient_id = (int) ($_GET['id'] ?? 0);
 $just_added = isset($_GET['new']);
@@ -37,6 +41,27 @@ if (!$is_linked) {
     $insDp->execute();
     $insDp->close();
   }
+}
+
+// ABDM M3 — HIU consent requests this doctor has raised for this patient
+// (lib/HiuConsent.php; shown in the "ABDM Records" tab below).
+$hiu_consent_requests = [];
+if ($conn->query("SHOW TABLES LIKE 'abdm_hiu_consent_requests'")->num_rows) {
+  $hcrStmt = $conn->prepare(
+    "SELECT cr.*, (SELECT COUNT(*) FROM abdm_hiu_consent_artefacts a WHERE a.hiu_consent_request_id = cr.id AND a.status = 'fetched') AS fetched_count
+     FROM abdm_hiu_consent_requests cr
+     WHERE cr.patient_id = ?
+     ORDER BY cr.created_at DESC"
+  );
+  $hcrStmt->bind_param('i', $patient_id);
+  $hcrStmt->execute();
+  $hiu_consent_requests = $hcrStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+  $hcrStmt->close();
+}
+
+$hiu_received_records = [];
+if ($conn->query("SHOW TABLES LIKE 'abdm_hiu_received_records'")->num_rows) {
+  $hiu_received_records = HiuDataFlow::recordsForPatient($conn, $patient_id);
 }
 
 // Family members — same family_group_id, and this doctor also has access to them
@@ -391,6 +416,7 @@ if ($doc_check->num_rows > 0) {
       </div>
       <div class="p-tab" onclick="showTab('medical',this)"><i class="fa fa-heartbeat mr-1"></i> Medical Info</div>
       <div class="p-tab" onclick="showTab('history',this)"><i class="fa fa-history mr-1"></i> Patient History</div>
+      <div class="p-tab" onclick="showTab('abdm',this)"><i class="fa fa-exchange mr-1"></i> ABDM Records</div>
     </div>
 
     <!-- ── TAB: Information ── -->
@@ -833,6 +859,97 @@ if ($doc_check->num_rows > 0) {
       </div>
     </div>
 
+    <!-- ── TAB: ABDM Records (M3 — HIU consent requests) ── -->
+    <div class="tab-pane" id="tab-abdm">
+      <div class="info-section">
+        <div class="section-title"><i class="fa fa-exchange mr-2" style="color:#0C74C5;"></i>Request Records from Other Providers (ABDM)</div>
+
+        <?php if (empty($p['abha_address'])): ?>
+          <div class="alert alert-warning" style="font-size:.82rem;">This patient has no ABHA address on file yet — link their ABHA first (Information tab) before requesting external records.</div>
+        <?php else: ?>
+          <div id="abdmReqError" class="alert alert-danger" style="display:none;font-size:.82rem;"></div>
+          <div id="abdmReqSuccess" class="alert alert-success" style="display:none;font-size:.82rem;"></div>
+
+          <div class="form-field">
+            <label>Health record types to request</label>
+            <div class="bg-grid" style="grid-template-columns:repeat(2,1fr);">
+              <?php foreach (['Prescription', 'DiagnosticReport', 'OPConsultation', 'DischargeSummary', 'ImmunizationRecord', 'HealthDocumentRecord', 'WellnessRecord'] as $ht): ?>
+                <label><input type="checkbox" name="abdmHiType" value="<?= $ht ?>" <?= in_array($ht, ['Prescription', 'DiagnosticReport', 'OPConsultation'], true) ? 'checked' : '' ?>> <?= $ht ?></label>
+              <?php endforeach; ?>
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label>Date range</label>
+            <div class="d-flex" style="gap:10px;">
+              <input type="date" id="abdmDateFrom" class="form-control" value="<?= date('Y-m-d', strtotime('-1 year')) ?>">
+              <input type="date" id="abdmDateTo" class="form-control" value="<?= date('Y-m-d') ?>">
+            </div>
+          </div>
+
+          <button type="button" class="btn btn-success" style="min-width:160px;" id="btnRequestAbdm" onclick="requestAbdmConsent()">Request Consent</button>
+
+          <div style="font-size:.8rem;font-weight:700;color:#6b7280;margin:20px 0 10px;">Previous Requests</div>
+          <?php if (empty($hiu_consent_requests)): ?>
+            <div class="text-muted" style="font-size:.82rem;">No ABDM consent requests raised for this patient yet.</div>
+          <?php else: ?>
+            <table class="table table-sm">
+              <thead><tr><th>Requested</th><th>hiTypes</th><th>Status</th><th>Records Fetched</th></tr></thead>
+              <tbody>
+                <?php foreach ($hiu_consent_requests as $hcr):
+                  $hts = json_decode($hcr['hi_types'] ?? '[]', true) ?: [];
+                  $badgeClass = ['granted' => 'success', 'requested' => 'warning', 'denied' => 'danger', 'revoked' => 'danger', 'failed' => 'danger'][$hcr['status']] ?? 'secondary';
+                ?>
+                  <tr>
+                    <td style="font-size:.78rem;"><?= date('d M Y, h:i A', strtotime($hcr['created_at'])) ?></td>
+                    <td style="font-size:.78rem;"><?= htmlspecialchars(implode(', ', $hts)) ?></td>
+                    <td><span class="badge badge-<?= $badgeClass ?>"><?= ucfirst($hcr['status']) ?></span></td>
+                    <td style="font-size:.78rem;"><?= (int) $hcr['fetched_count'] ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+          <?php endif; ?>
+
+          <div style="font-size:.8rem;font-weight:700;color:#6b7280;margin:20px 0 10px;">Records Received</div>
+          <?php if (empty($hiu_received_records)): ?>
+            <div class="text-muted" style="font-size:.82rem;">No external records received for this patient yet.</div>
+          <?php else: ?>
+            <table class="table table-sm">
+              <thead><tr><th>Received</th><th>Care Context</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                <?php foreach ($hiu_received_records as $i => $rr): ?>
+                  <tr>
+                    <td style="font-size:.78rem;"><?= date('d M Y, h:i A', strtotime($rr['received_at'])) ?></td>
+                    <td style="font-size:.78rem;"><?= htmlspecialchars($rr['care_context_reference'] ?: '—') ?></td>
+                    <td><span class="badge badge-<?= $rr['hi_status'] === 'OK' ? 'success' : 'danger' ?>"><?= htmlspecialchars($rr['hi_status']) ?></span></td>
+                    <td><button type="button" class="btn btn-sm btn-outline-primary" onclick="viewAbdmRecord(<?= (int) $i ?>)">View FHIR</button></td>
+                  </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+            <div id="abdmRecordModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+              <div style="background:#fff;border-radius:10px;max-width:90vw;max-height:80vh;overflow:auto;padding:20px;">
+                <pre id="abdmRecordContent" style="font-size:.75rem;white-space:pre-wrap;"></pre>
+                <button type="button" class="btn btn-sm btn-secondary mt-2" onclick="document.getElementById('abdmRecordModal').style.display='none'">Close</button>
+              </div>
+            </div>
+            <script>
+              const ABDM_RECORDS = <?= json_encode(array_map(fn($r) => $r['fhir_bundle_json'], $hiu_received_records)) ?>;
+              function viewAbdmRecord(i) {
+                try {
+                  document.getElementById('abdmRecordContent').textContent = JSON.stringify(JSON.parse(ABDM_RECORDS[i]), null, 2);
+                } catch (e) {
+                  document.getElementById('abdmRecordContent').textContent = ABDM_RECORDS[i];
+                }
+                document.getElementById('abdmRecordModal').style.display = 'flex';
+              }
+            </script>
+          <?php endif; ?>
+        <?php endif; ?>
+      </div>
+    </div>
+
     <script>
       function showTab(name, el) {
         document.querySelectorAll('.tab-pane').forEach(t => t.classList.remove('active'));
@@ -867,6 +984,7 @@ if ($doc_check->num_rows > 0) {
         fd.append('document_type', document.getElementById('docType').value);
         fd.append('description', document.getElementById('docDescription').value);
         fd.append('document_file', fileInput.files[0]);
+        fd.append('csrf_token', <?= json_encode($docUploadCsrf) ?>);
 
         const btn = document.getElementById('btnUploadDoc');
         btn.disabled = true;
@@ -978,6 +1096,44 @@ if ($doc_check->num_rows > 0) {
             btn.disabled = false;
             btn.innerHTML = originalHtml;
             showField('medicalError', 'Network error: ' + err.message);
+          });
+      }
+
+      // ── ABDM M3 — request records from other providers ──
+      function requestAbdmConsent() {
+        hideField('abdmReqError');
+        hideField('abdmReqSuccess');
+
+        const hiTypes = Array.from(document.querySelectorAll('input[name="abdmHiType"]:checked')).map(el => el.value);
+        if (!hiTypes.length) { showField('abdmReqError', 'Select at least one record type.'); return; }
+
+        const btn = document.getElementById('btnRequestAbdm');
+        btn.disabled = true;
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+
+        fetch('<?= BASE_URL ?>doctor/api/hiu-consent-request.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patient_id: PATIENT_ID,
+            hi_types: hiTypes,
+            date_from: document.getElementById('abdmDateFrom').value,
+            date_to: document.getElementById('abdmDateTo').value,
+            csrf_token: <?= json_encode($docUploadCsrf) ?>
+          })
+        })
+          .then(r => r.json())
+          .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            if (!data.success) { showField('abdmReqError', data.error || 'Failed to request consent'); return; }
+            showField('abdmReqSuccess', 'Consent request sent — the patient will be notified in their ABHA app. This page will show the status once they respond.');
+          })
+          .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            showField('abdmReqError', 'Network error: ' + err.message);
           });
       }
 

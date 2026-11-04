@@ -72,6 +72,13 @@ if (!defined('ABDM_ENV')) {
     define('ABDM_HFR_FACILITY_ID', trim((string)($_ENV['ABDM_HFR_FACILITY_ID'] ?? $_ENV['ABDM_HIP_ID'] ?? 'IN0810000001')));
     define('ABDM_HIP_CONFIGURED', ABDM_CONFIGURED && ABDM_HIP_ID !== '');
 
+    /* ── HIU role (M3 — Consent flow: our system requesting a patient's
+       records held by OTHER providers). The same bridge/service id is
+       normally registered for both HIP and HIU roles on the NHA facility
+       registry, so this defaults to ABDM_HIP_ID unless a distinct one is set. ── */
+    define('ABDM_HIU_ID', trim((string)($_ENV['ABDM_HIU_ID'] ?? '')) ?: ABDM_HIP_ID);
+    define('ABDM_HIU_CONFIGURED', ABDM_CONFIGURED && ABDM_HIU_ID !== '');
+
     // Webhook (telemedicine/api/abdm-webhook.php) — optional hardening.
     define('ABDM_WEBHOOK_SECRET',      trim((string)($_ENV['ABDM_WEBHOOK_SECRET']      ?? '')));
     define('ABDM_WEBHOOK_ALLOWED_IPS', trim((string)($_ENV['ABDM_WEBHOOK_ALLOWED_IPS'] ?? '')));

@@ -120,10 +120,12 @@ $query = "
         u.mobile as patient_phone,
         u.gender,
         " . Abha::selectAliases('aa', 'u') . ",
-        TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) as patient_age
+        TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) as patient_age,
+        ccl.status as abdm_link_status
     FROM patient_documents pd
     INNER JOIN users u ON pd.patient_id = u.id
     " . Abha::joinClause('patient', 'u', 'aa') . "
+    LEFT JOIN abdm_care_context_links ccl ON ccl.document_id = pd.id
     WHERE pd.doctor_id = ?
 ";
 $types = 'i';
@@ -550,6 +552,13 @@ $pat_stmt->close();
                                                         <?= htmlspecialchars(mb_strimwidth($doc['description'], 0, 75, '...')) ?>
                                                     </div>
                                                 <?php endif; ?>
+                                                <?php if (($doc['abdm_link_status'] ?? null) === 'linked'): ?>
+                                                    <div class="mt-1"><span class="badge bg-success-subtle text-success" style="font-size:.66rem;"><i class="fa fa-check-circle me-1"></i>Linked to ABDM</span></div>
+                                                <?php elseif (($doc['abdm_link_status'] ?? null) === 'pending'): ?>
+                                                    <div class="mt-1"><span class="badge bg-warning-subtle text-warning" style="font-size:.66rem;"><i class="fa fa-clock me-1"></i>ABDM Linking Pending</span></div>
+                                                <?php elseif (($doc['abdm_link_status'] ?? null) === 'failed'): ?>
+                                                    <div class="mt-1"><span class="badge bg-danger-subtle text-danger" style="font-size:.66rem;"><i class="fa fa-triangle-exclamation me-1"></i>ABDM Link Failed</span></div>
+                                                <?php endif; ?>
                                             </div>
                                         </div>
                                     </td>
@@ -657,6 +666,14 @@ $pat_stmt->close();
                                 <p class="text-muted mb-2" style="font-size:.74rem;">
                                     <?= htmlspecialchars($doc['description']) ?>
                                 </p>
+                            <?php endif; ?>
+
+                            <?php if (($doc['abdm_link_status'] ?? null) === 'linked'): ?>
+                                <div class="mb-2"><span class="badge bg-success-subtle text-success" style="font-size:.68rem;"><i class="fa fa-check-circle me-1"></i>Linked to ABDM</span></div>
+                            <?php elseif (($doc['abdm_link_status'] ?? null) === 'pending'): ?>
+                                <div class="mb-2"><span class="badge bg-warning-subtle text-warning" style="font-size:.68rem;"><i class="fa fa-clock me-1"></i>ABDM Linking Pending</span></div>
+                            <?php elseif (($doc['abdm_link_status'] ?? null) === 'failed'): ?>
+                                <div class="mb-2"><span class="badge bg-danger-subtle text-danger" style="font-size:.68rem;"><i class="fa fa-triangle-exclamation me-1"></i>ABDM Link Failed</span></div>
                             <?php endif; ?>
 
                             <div class="p-2 rounded bg-light mb-3" style="font-size:.75rem;">

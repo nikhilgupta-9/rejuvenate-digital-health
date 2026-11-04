@@ -3,7 +3,7 @@
  * ABDM Milestone 2 (Phase B) — Health Information Push Worker.
  *
  * Processes pending 'acknowledged' health data requests from HIUs:
- *   1. Fetches requested health records (prescriptions + linked documents) matching consent & date range.
+ *   1. Fetches requested health records (prescriptions + OP consults + linked documents + linked lab reports) matching consent & date range.
  *   2. Builds NDHM FHIR R4 Document Bundles using FhirBundleBuilder.
  *   3. Encrypts bundles using ABDM Fidelius crypto (Curve25519 ECDH + HKDF-SHA256 + AES-256-GCM) with HIU public key.
  *   4. POSTs encrypted payload to HIU's dataPushUrl.
@@ -165,6 +165,45 @@ foreach ($requests as $req) {
         } catch (Throwable $e) {
             error_log("[ABDM-HIP] Encryption error for prescription #{$rx['id']}: " . $e->getMessage());
         }
+
+        // ABDM M2 Phase 3 — the same visit may also carry a separate OPConsultation
+        // care-context declaration (abdm_care_context_links row with the same
+        // prescription_id, hi_type='OPConsultation'). Only push it once that
+        // declaration has actually completed HIP-initiated linking.
+        $opLinkStmt = $conn->prepare("
+            SELECT care_context_reference FROM abdm_care_context_links
+            WHERE prescription_id = ? AND hi_type = 'OPConsultation' AND status = 'linked'
+            LIMIT 1
+        ");
+        $rxIdForOp = (int) $rx['id'];
+        $opLinkStmt->bind_param('i', $rxIdForOp);
+        $opLinkStmt->execute();
+        $opLink = $opLinkStmt->get_result()->fetch_assoc();
+        $opLinkStmt->close();
+
+        if ($opLink) {
+            try {
+                $opBundle = FhirBundleBuilder::buildOpConsultBundle($rx, $patient, $doctor, $org);
+                $opJson = json_encode($opBundle, JSON_UNESCAPED_SLASHES);
+                $opEnc = AbdmCrypto::encryptBundle($opJson, $hiuPubKeyB64, $hiuNonceB64);
+                $lastSenderKm = $opEnc['keyMaterial'];
+
+                $entries[] = [
+                    'content'              => $opEnc['encryptedData'],
+                    'media'                => 'application/fhir+json',
+                    'checksum'             => $opEnc['checksum'],
+                    'careContextReference' => $opLink['care_context_reference'],
+                ];
+
+                $careContextStatuses[] = [
+                    'careContextReference' => $opLink['care_context_reference'],
+                    'hiStatus'             => 'DELIVERED',
+                    'description'          => 'Delivered successfully',
+                ];
+            } catch (Throwable $e) {
+                error_log("[ABDM-HIP] Encryption error for OPConsult of prescription #{$rx['id']}: " . $e->getMessage());
+            }
+        }
     }
 
     // Fetch linked documents for this patient in range — only documents whose
@@ -205,6 +244,47 @@ foreach ($requests as $req) {
             ];
         } catch (Throwable $e) {
             error_log("[ABDM-HIP] Encryption error for document #{$doc['id']}: " . $e->getMessage());
+        }
+    }
+
+    // Fetch linked lab reports for this patient in range — only bookings whose
+    // care-context has actually completed HIP-initiated linking (status='linked')
+    // are shareable.
+    $labStmt = $conn->prepare("
+        SELECT lb.*, ccl.care_context_reference
+        FROM lab_bookings lb
+        JOIN abdm_care_context_links ccl ON ccl.lab_booking_id = lb.id
+        WHERE lb.user_id = ? AND ccl.status = 'linked'
+          AND lb.booking_date >= DATE(?) AND lb.booking_date <= DATE(?)
+        ORDER BY lb.booking_date DESC
+    ");
+    $labStmt->bind_param('iss', $patientId, $from, $to);
+    $labStmt->execute();
+    $linkedLabReports = $labStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $labStmt->close();
+
+    foreach ($linkedLabReports as $booking) {
+        $fhirBundle = FhirBundleBuilder::buildDiagnosticReportBundle($booking, $patient, $org);
+        $fhirJson = json_encode($fhirBundle, JSON_UNESCAPED_SLASHES);
+
+        try {
+            $enc = AbdmCrypto::encryptBundle($fhirJson, $hiuPubKeyB64, $hiuNonceB64);
+            $lastSenderKm = $enc['keyMaterial'];
+
+            $entries[] = [
+                'content'              => $enc['encryptedData'],
+                'media'                => 'application/fhir+json',
+                'checksum'             => $enc['checksum'],
+                'careContextReference' => $booking['care_context_reference'],
+            ];
+
+            $careContextStatuses[] = [
+                'careContextReference' => $booking['care_context_reference'],
+                'hiStatus'             => 'DELIVERED',
+                'description'          => 'Delivered successfully',
+            ];
+        } catch (Throwable $e) {
+            error_log("[ABDM-HIP] Encryption error for lab booking #{$booking['id']}: " . $e->getMessage());
         }
     }
 

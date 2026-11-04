@@ -17,11 +17,13 @@ if ($tab === 'patients') {
         $where .= " AND (pd.document_name LIKE '%$q%' OR u.name LIKE '%$q%' OR u.mobile LIKE '%$q%')";
     }
     $records = mysqli_query($conn, "SELECT pd.*, u.name as patient_name, u.last_name as patient_last_name, u.mobile as patient_mobile,
-        d.name as doctor_name, TRIM(CONCAT(au.first_name, ' ', au.last_name)) as admin_name
+        d.name as doctor_name, TRIM(CONCAT(au.first_name, ' ', au.last_name)) as admin_name,
+        ccl.status as abdm_link_status
         FROM patient_documents pd
         JOIN users u ON u.id = pd.patient_id
         LEFT JOIN doctors d ON d.id = pd.doctor_id
         LEFT JOIN admin_user au ON au.id = pd.uploaded_by_admin_id
+        LEFT JOIN abdm_care_context_links ccl ON ccl.document_id = pd.id
         $where ORDER BY pd.uploaded_at DESC LIMIT 300");
 } else {
     $where = "WHERE 1=1";
@@ -177,6 +179,16 @@ if ($tab === 'patients') {
                                                 <div class="fw-semibold" style="font-size:.85rem;"><?= htmlspecialchars($r['document_name']) ?></div>
                                                 <?php if (!empty($r['description'])): ?>
                                                     <small class="text-muted"><?= htmlspecialchars(substr($r['description'], 0, 60)) ?><?= strlen($r['description'])>60?'...':'' ?></small>
+                                                <?php endif; ?>
+                                                <?php if ($tab === 'patients'):
+                                                    $abdmStatus = $r['abdm_link_status'] ?? null;
+                                                    if ($abdmStatus === 'linked') { ?>
+                                                        <div><span class="badge bg-success-subtle text-success" style="font-size:.68rem;"><i class="fas fa-check-circle me-1"></i>Linked to ABDM</span></div>
+                                                    <?php } elseif ($abdmStatus === 'pending') { ?>
+                                                        <div><span class="badge bg-warning-subtle text-warning" style="font-size:.68rem;"><i class="fas fa-clock me-1"></i>ABDM Linking Pending</span></div>
+                                                    <?php } elseif ($abdmStatus === 'failed') { ?>
+                                                        <div><span class="badge bg-danger-subtle text-danger" style="font-size:.68rem;"><i class="fas fa-triangle-exclamation me-1"></i>ABDM Link Failed</span></div>
+                                                    <?php } ?>
                                                 <?php endif; ?>
                                             </div>
                                         </div>

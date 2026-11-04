@@ -193,6 +193,7 @@ if ($is_admin && isset($conn)) {
                 <li><a href="abha-management.php?tab=requests"><i class="fas fa-inbox me-1"></i> Link Requests <?php if ($abha_pend > 0): ?><span class="badge bg-danger ms-1" style="font-size:9px;"><?= $abha_pend ?></span><?php endif; ?></a></li>
                 <li><a href="hip-linking.php"><i class="fas fa-link me-1"></i> HIP Care-Context (M2)</a></li>
                 <li><a href="scan-share.php"><i class="fas fa-qrcode me-1"></i> Scan &amp; Share (M3)</a></li>
+                <li><a href="abdm-hiu-consents.php"><i class="fas fa-exchange-alt me-1"></i> HIU Consent Requests (M3)</a></li>
             </ul>
         </li>
         <?php endif; ?>

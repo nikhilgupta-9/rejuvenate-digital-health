@@ -7,6 +7,9 @@ require_once __DIR__ . '/db-conn.php';
 require_once __DIR__ . '/auth/guard.php';
 require_once dirname(__DIR__) . '/lib/Security.php';
 require_once dirname(__DIR__) . '/lib/WhatsAppNotifier.php';
+require_once dirname(__DIR__) . '/config/abdm.php';
+require_once dirname(__DIR__) . '/lib/HipLinking.php';
+require_once dirname(__DIR__) . '/lib/HipApi.php';
 admin_jwt_guard();
 
 $status_filter = $_GET['status'] ?? 'all';
@@ -76,6 +79,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_lab_status']))
                     error_log('[Lab Report Ready] WhatsApp error: ' . $e->getMessage());
                 }
             }
+
+            // Queue ABDM HIP-initiated care-context linking for this lab report (async —
+            // actual ABDM calls happen in scripts/abdm-hip-worker.php). Never blocks or
+            // fails this status update if the patient has no ABHA address yet, is a
+            // guest booking with no linked user_id, or ABDM isn't configured here.
+            if (defined('ABDM_HIP_CONFIGURED') && ABDM_HIP_CONFIGURED) {
+                try {
+                    $buStmt = $conn->prepare("SELECT user_id FROM lab_bookings WHERE id = ? LIMIT 1");
+                    $buStmt->bind_param('i', $bookingId);
+                    $buStmt->execute();
+                    $buRow = $buStmt->get_result()->fetch_assoc();
+                    $buStmt->close();
+                    $bookingUserId = (int) ($buRow['user_id'] ?? 0);
+
+                    if ($bookingUserId > 0) {
+                        $abhaStmt = $conn->prepare("SELECT abha_address FROM users WHERE id = ? LIMIT 1");
+                        $abhaStmt->bind_param('i', $bookingUserId);
+                        $abhaStmt->execute();
+                        $abhaRow = $abhaStmt->get_result()->fetch_assoc();
+                        $abhaStmt->close();
+                        $abhaAddr = trim((string) ($abhaRow['abha_address'] ?? ''));
+
+                        if ($abhaAddr !== '') {
+                            $existingLink = HipLinking::careContextLinkForLabReport($conn, $bookingId);
+                            if (!$existingLink || $existingLink['status'] === 'failed') {
+                                HipLinking::startLabReportCareContextLink(
+                                    $conn,
+                                    $bookingId,
+                                    'PATIENT-' . $bookingUserId,
+                                    'LAB-' . $bookingId,
+                                    HipApi::canonicalHiType('DiagnosticReport'),   // canonical, never a raw literal
+                                    HipLinking::newRequestId()
+                                );
+                            }
+                        }
+                    }
+                } catch (Throwable $e) {
+                    error_log('[admin/lab-bookings] care-context queue failed: ' . $e->getMessage());
+                }
+            }
         }
     }
     header("Location: lab-bookings.php");
@@ -84,14 +127,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_lab_status']))
 
 $where = "1=1";
 if (in_array($status_filter, ['scheduled', 'sample_collected', 'processing', 'report_uploaded', 'cancelled'], true)) {
-    $where .= " AND status = '" . $conn->real_escape_string($status_filter) . "'";
+    $where .= " AND lb.status = '" . $conn->real_escape_string($status_filter) . "'";
 }
 if ($search !== '') {
     $q = $conn->real_escape_string($search);
     $where .= " AND (booking_uid LIKE '%$q%' OR patient_name LIKE '%$q%' OR patient_phone LIKE '%$q%' OR city LIKE '%$q%')";
 }
 
-$bookings = $conn->query("SELECT * FROM lab_bookings WHERE $where ORDER BY booking_date DESC, created_at DESC LIMIT 200");
+$bookings = $conn->query("SELECT lb.*, ccl.status as abdm_link_status
+    FROM lab_bookings lb
+    LEFT JOIN abdm_care_context_links ccl ON ccl.lab_booking_id = lb.id
+    WHERE $where ORDER BY lb.booking_date DESC, lb.created_at DESC LIMIT 200");
 
 // Counts
 $c = fn($sql) => (int) ($conn->query($sql)->fetch_assoc()['c'] ?? 0);
@@ -184,6 +230,13 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
                                         <td>
                                             <span class="fw-bold text-primary"><?= htmlspecialchars($b['booking_uid']) ?></span>
                                             <div class="text-muted" style="font-size:.75rem;"><?= date('d M Y, h:i A', strtotime($b['created_at'])) ?></div>
+                                            <?php if (($b['abdm_link_status'] ?? null) === 'linked'): ?>
+                                                <div><span class="badge bg-success-subtle text-success" style="font-size:.66rem;"><i class="fas fa-check-circle me-1"></i>Linked to ABDM</span></div>
+                                            <?php elseif (($b['abdm_link_status'] ?? null) === 'pending'): ?>
+                                                <div><span class="badge bg-warning-subtle text-warning" style="font-size:.66rem;"><i class="fas fa-clock me-1"></i>ABDM Linking Pending</span></div>
+                                            <?php elseif (($b['abdm_link_status'] ?? null) === 'failed'): ?>
+                                                <div><span class="badge bg-danger-subtle text-danger" style="font-size:.66rem;"><i class="fas fa-triangle-exclamation me-1"></i>ABDM Link Failed</span></div>
+                                            <?php endif; ?>
                                         </td>
                                         <td>
                                             <strong><?= htmlspecialchars($b['patient_name']) ?></strong>

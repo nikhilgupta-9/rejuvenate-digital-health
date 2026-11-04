@@ -230,6 +230,29 @@ class HipLinking
     }
 
     /**
+     * Has this prescription already been linked (or is a link in flight) FOR A SPECIFIC
+     * hiType? A single prescription can carry more than one abdm_care_context_links row —
+     * one per hiType it is declared under (Phase 0: Prescription, Phase 3: OPConsultation,
+     * same prescription_id, different hi_type and care_context_reference). careContextLinkFor()
+     * above only returns the latest row regardless of hiType, so it can't tell these apart;
+     * this is the hiType-aware version used when queuing a second declaration for the same visit.
+     */
+    public static function careContextLinkForPrescriptionHiType(mysqli $conn, int $prescriptionId, string $hiType): ?array
+    {
+        $st = $conn->prepare(
+            "SELECT id, request_id, status, care_context_reference
+             FROM abdm_care_context_links
+             WHERE prescription_id = ? AND hi_type = ?
+             ORDER BY id DESC LIMIT 1"
+        );
+        $st->bind_param('is', $prescriptionId, $hiType);
+        $st->execute();
+        $row = $st->get_result()->fetch_assoc() ?: null;
+        $st->close();
+        return $row;
+    }
+
+    /**
      * Record a link/carecontext request for an uploaded document (status 'pending') — the
      * document equivalent of startCareContextLink(). Same abdm_care_context_links row shape,
      * just document_id instead of prescription_id (see database/migration notes: the table was
@@ -263,6 +286,46 @@ class HipLinking
              FROM abdm_care_context_links WHERE document_id = ? ORDER BY id DESC LIMIT 1"
         );
         $st->bind_param('i', $documentId);
+        $st->execute();
+        $row = $st->get_result()->fetch_assoc() ?: null;
+        $st->close();
+        return $row;
+    }
+
+    /**
+     * Record a link/carecontext request for a lab report (status 'pending') —
+     * same abdm_care_context_links row shape as startDocumentCareContextLink(),
+     * just lab_booking_id instead of document_id (Phase 2 of the same generalised
+     * table — see database/migration_abdm_m2_phase2_diagnostic_report.sql).
+     */
+    public static function startLabReportCareContextLink(
+        mysqli $conn,
+        int $labBookingId,
+        string $referenceNumber,
+        string $careContextReference,
+        string $hiType,
+        string $requestId
+    ): int {
+        $st = $conn->prepare(
+            "INSERT INTO abdm_care_context_links
+               (lab_booking_id, reference_number, care_context_reference, hi_type, request_id, status)
+             VALUES (?, ?, ?, ?, ?, 'pending')"
+        );
+        $st->bind_param('issss', $labBookingId, $referenceNumber, $careContextReference, $hiType, $requestId);
+        $st->execute();
+        $id = (int) $conn->insert_id;
+        $st->close();
+        return $id;
+    }
+
+    /** Has this lab report already been linked (or is a link in flight)? */
+    public static function careContextLinkForLabReport(mysqli $conn, int $labBookingId): ?array
+    {
+        $st = $conn->prepare(
+            "SELECT id, request_id, status, care_context_reference
+             FROM abdm_care_context_links WHERE lab_booking_id = ? ORDER BY id DESC LIMIT 1"
+        );
+        $st->bind_param('i', $labBookingId);
         $st->execute();
         $row = $st->get_result()->fetch_assoc() ?: null;
         $st->close();

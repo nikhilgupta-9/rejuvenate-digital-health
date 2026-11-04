@@ -14,9 +14,11 @@ $user_id = (int)$_SESSION['user_id'];
 $sidebar_active = 'lab';
 
 $bookings = $conn->query("
-    SELECT * FROM lab_bookings 
-    WHERE user_id = {$user_id} 
-    ORDER BY booking_date DESC, created_at DESC
+    SELECT lb.*, ccl.status as abdm_link_status
+    FROM lab_bookings lb
+    LEFT JOIN abdm_care_context_links ccl ON ccl.lab_booking_id = lb.id
+    WHERE lb.user_id = {$user_id}
+    ORDER BY lb.booking_date DESC, lb.created_at DESC
 ");
 ?>
 <!DOCTYPE html>
@@ -106,6 +108,14 @@ $bookings = $conn->query("
                         <i class="fa fa-circle me-1" style="font-size:.5rem;vertical-align:middle;"></i><?= $statusLabel ?>
                     </span>
                 </div>
+
+                <?php if (($bk['abdm_link_status'] ?? null) === 'linked'): ?>
+                    <div class="mb-2"><span class="badge bg-success-subtle text-success" style="font-size:.7rem;"><i class="fa fa-check-circle me-1"></i>Linked to ABDM</span></div>
+                <?php elseif (($bk['abdm_link_status'] ?? null) === 'pending'): ?>
+                    <div class="mb-2"><span class="badge bg-warning-subtle text-warning" style="font-size:.7rem;"><i class="fa fa-clock me-1"></i>ABDM Linking Pending</span></div>
+                <?php elseif (($bk['abdm_link_status'] ?? null) === 'failed'): ?>
+                    <div class="mb-2"><span class="badge bg-danger-subtle text-danger" style="font-size:.7rem;"><i class="fa fa-triangle-exclamation me-1"></i>ABDM Link Failed</span></div>
+                <?php endif; ?>
 
                 <div class="row g-3 align-items-center">
                     <div class="col-md-5">

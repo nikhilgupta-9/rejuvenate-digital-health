@@ -26,11 +26,14 @@ $rows = $conn->query("
            p.follow_up_date,
            d.name AS doctor_name, d.specialization,
            COALESCE(u.name, a.patient_name) AS patient_name,
-           a.appointment_type, a.appointment_date
+           a.appointment_type, a.appointment_date,
+           rx_link.status AS rx_abdm_status, op_link.status AS op_abdm_status
     FROM prescriptions p
     JOIN doctors d      ON d.id = p.doctor_id
     JOIN appointments a ON a.id = p.appointment_id
     LEFT JOIN users u   ON u.id = a.user_id
+    LEFT JOIN abdm_care_context_links rx_link ON rx_link.prescription_id = p.id AND rx_link.hi_type = 'Prescription'
+    LEFT JOIN abdm_care_context_links op_link ON op_link.prescription_id = p.id AND op_link.hi_type = 'OPConsultation'
     WHERE $where
     ORDER BY p.created_at DESC
     LIMIT 500
@@ -108,12 +111,13 @@ $t_month = $c("SELECT COUNT(*) c FROM prescriptions WHERE YEAR(created_at)=YEAR(
                                         <th>Medicines</th>
                                         <th>Visit</th>
                                         <th>Status</th>
+                                        <th>ABDM</th>
                                         <th>View</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                 <?php if (!$rows || $rows->num_rows === 0): ?>
-                                    <tr class="empty-row"><td colspan="7"><i class="fas fa-file-medical fa-3x mb-3 d-block opacity-25"></i>No prescriptions found.</td></tr>
+                                    <tr class="empty-row"><td colspan="8"><i class="fas fa-file-medical fa-3x mb-3 d-block opacity-25"></i>No prescriptions found.</td></tr>
                                 <?php else: while ($r = $rows->fetch_assoc()):
                                     $meds = json_decode($r['medications'] ?? '[]', true) ?: [];
                                     $meds = array_values(array_filter($meds, fn($m) => trim($m['name'] ?? '') !== ''));
@@ -133,6 +137,18 @@ $t_month = $c("SELECT COUNT(*) c FROM prescriptions WHERE YEAR(created_at)=YEAR(
                                         </td>
                                         <td data-label="Visit"><span class="cell-sub"><?= $r['visit_date'] ? date('d M Y', strtotime($r['visit_date'])) : date('d M Y', strtotime($r['created_at'])) ?></span></td>
                                         <td data-label="Status"><span class="pill <?= $r['status'] === 'final' ? 'pill-success' : 'pill-warn' ?>"><?= ucfirst($r['status']) ?></span></td>
+                                        <td data-label="ABDM">
+                                            <?php
+                                            $abdmBadge = function (?string $status, string $label) {
+                                                if ($status === 'linked') return "<span class=\"badge bg-success-subtle text-success d-block mb-1\" style=\"font-size:.65rem;\"><i class=\"fas fa-check-circle me-1\"></i>{$label} Linked</span>";
+                                                if ($status === 'pending') return "<span class=\"badge bg-warning-subtle text-warning d-block mb-1\" style=\"font-size:.65rem;\"><i class=\"fas fa-clock me-1\"></i>{$label} Pending</span>";
+                                                if ($status === 'failed') return "<span class=\"badge bg-danger-subtle text-danger d-block mb-1\" style=\"font-size:.65rem;\"><i class=\"fas fa-triangle-exclamation me-1\"></i>{$label} Failed</span>";
+                                                return '';
+                                            };
+                                            echo $abdmBadge($r['rx_abdm_status'] ?? null, 'Rx');
+                                            echo $abdmBadge($r['op_abdm_status'] ?? null, 'OPD');
+                                            ?>
+                                        </td>
                                         <td data-label="View">
                                             <button type="button" class="tbl-action-btn bg-primary text-white" data-rx-view="<?= (int) $r['appointment_id'] ?>" title="View full record"><i class="fas fa-eye"></i></button>
                                         </td>

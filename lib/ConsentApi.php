@@ -17,6 +17,7 @@ class ConsentApi
     private string $base;        // https://dev.abdm.gov.in/api/hiecm
     private string $xCmId;
     private string $hipId;
+    private string $hiuId;
     private bool   $sslVerify;
     private ?AbdmApi $abdm = null;
 
@@ -25,12 +26,18 @@ class ConsentApi
         $this->base      = rtrim(defined('ABDM_HIECM_BASE_URL') ? ABDM_HIECM_BASE_URL : '', '/');
         $this->xCmId     = defined('ABDM_X_CM_ID') ? ABDM_X_CM_ID : 'sbx';
         $this->hipId     = defined('ABDM_HIP_ID') ? ABDM_HIP_ID : '';
+        $this->hiuId     = defined('ABDM_HIU_ID') ? ABDM_HIU_ID : '';
         $this->sslVerify = defined('ABDM_SSL_VERIFY') ? (bool) ABDM_SSL_VERIFY : true;
     }
 
     public function isConfigured(): bool
     {
         return $this->hipId !== '' && defined('ABDM_CONFIGURED') && ABDM_CONFIGURED;
+    }
+
+    public function isHiuConfigured(): bool
+    {
+        return $this->hiuId !== '' && defined('ABDM_HIU_CONFIGURED') && ABDM_HIU_CONFIGURED;
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -120,7 +127,9 @@ class ConsentApi
         string $transactionId,
         string $sessionStatus = 'TRANSFERRED',
         array $careContextStatuses = [],
-        ?array $error = null
+        ?array $error = null,
+        string $notifierType = 'HIP',
+        ?string $hipIdOverride = null
     ): array {
         [$token, $err] = $this->token();
         if ($err !== null) return $this->fail($err);
@@ -134,18 +143,21 @@ class ConsentApi
             ];
         }
 
+        // statusNotification.hipId always names the HIP whose data this transaction
+        // is about — that is true whether WE are the HIP notifying (M2) or the HIU
+        // notifying receipt (M3), so a HIU call passes $hipIdOverride explicitly.
         $body = [
             'notification' => [
                 'consentId'          => $consentId,
                 'transactionId'      => $transactionId,
                 'doneAt'             => $this->timestamp(),
                 'notifier'           => [
-                    'type' => 'HIP',
-                    'id'   => $this->hipId,
+                    'type' => $notifierType,
+                    'id'   => $notifierType === 'HIU' ? $this->hiuId : $this->hipId,
                 ],
                 'statusNotification' => [
                     'sessionStatus'   => $sessionStatus,
-                    'hipId'           => $this->hipId,
+                    'hipId'           => $hipIdOverride ?? $this->hipId,
                     'statusResponses' => $statusResponses,
                 ]
             ]
@@ -165,6 +177,175 @@ class ConsentApi
         }
         $this->logSafe('hi notify accepted', ['transactionId' => $transactionId, 'http' => $r['_http']]);
         return $this->ok(['transactionId' => $transactionId, 'accepted' => true]);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       HIU — CONSENT REQUEST INIT  (M3, Phase 1)
+         POST {base}/consent/v3/request/init
+         202 Accepted, no body — the real consentRequest.id arrives later
+         via the on-init callback (telemedicine/api/abdm-hiu-consent-on-init.php).
+    ═══════════════════════════════════════════════════════════════ */
+
+    public function hiuConsentRequestInit(array $consent, string $requestId): array
+    {
+        if (!$this->isHiuConfigured()) {
+            return $this->fail('HIU role is not configured (set ABDM_HIU_ID / ABHA credentials in .env).');
+        }
+        [$token, $err] = $this->token();
+        if ($err !== null) return $this->fail($err);
+
+        $body = ['consent' => $consent];
+
+        $r = $this->http('POST', $this->base . '/consent/v3/request/init', $body, $token, ['X-HIU-ID' => $this->hiuId], $requestId);
+        if (!$this->is2xx($r)) {
+            $this->logSafe('hiu consent request init failed', ['requestId' => $requestId, 'http' => $r['_http'], 'curl' => $r['_curlErr']]);
+            return $this->fail($this->extractError($r, 'Could not initiate the consent request.'));
+        }
+        $this->logSafe('hiu consent request init accepted', ['requestId' => $requestId, 'http' => $r['_http']]);
+        return $this->ok(['requestId' => $requestId, 'accepted' => true]);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       HIU — RESPOND TO THE consent/request/notify CALLBACK
+         POST {base}/consent/v3/request/hiu/on-notify
+         Called once we've processed the APPROVED/REVOKED/DENIED notify.
+    ═══════════════════════════════════════════════════════════════ */
+
+    public function hiuConsentOnNotify(string $status, string $consentId, string $inboundRequestId, ?array $error = null): array
+    {
+        if (trim($inboundRequestId) === '') {
+            return $this->fail('No inbound REQUEST-ID to acknowledge against.', 'no_request_id');
+        }
+        [$token, $err] = $this->token();
+        if ($err !== null) return $this->fail($err);
+
+        $body = [
+            'acknowledgement' => [[
+                'status'    => $status !== '' ? $status : 'OK',
+                'consentId' => $consentId,
+            ]],
+            'response' => ['requestId' => $inboundRequestId],
+        ];
+        if ($error !== null) {
+            $body['error'] = [
+                'code'    => (string) ($error['code'] ?? 'ABDM-9999'),
+                'message' => (string) ($error['message'] ?? 'error'),
+            ];
+        }
+
+        $r = $this->http('POST', $this->base . '/consent/v3/request/hiu/on-notify', $body, $token);
+        if (!$this->is2xx($r)) {
+            $this->logSafe('hiu consent on-notify failed', ['requestId' => $inboundRequestId, 'http' => $r['_http'], 'curl' => $r['_curlErr']]);
+            return $this->fail($this->extractError($r, 'Could not acknowledge the consent notify.'));
+        }
+        $this->logSafe('hiu consent on-notify accepted', ['requestId' => $inboundRequestId, 'http' => $r['_http']]);
+        return $this->ok(['requestId' => $inboundRequestId, 'accepted' => true]);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       HIU — CONSENT REQUEST STATUS
+         POST {base}/consent/v3/request/status
+         202/200, no useful body — real answer via on-status callback.
+    ═══════════════════════════════════════════════════════════════ */
+
+    public function hiuConsentRequestStatus(string $consentRequestId, string $requestId): array
+    {
+        if (!$this->isHiuConfigured()) {
+            return $this->fail('HIU role is not configured (set ABDM_HIU_ID / ABHA credentials in .env).');
+        }
+        [$token, $err] = $this->token();
+        if ($err !== null) return $this->fail($err);
+
+        $body = ['consentRequestId' => $consentRequestId];
+
+        $r = $this->http('POST', $this->base . '/consent/v3/request/status', $body, $token, ['X-HIU-ID' => $this->hiuId], $requestId);
+        if (!$this->is2xx($r)) {
+            $this->logSafe('hiu consent status failed', ['requestId' => $requestId, 'http' => $r['_http'], 'curl' => $r['_curlErr']]);
+            return $this->fail($this->extractError($r, 'Could not request the consent status.'));
+        }
+        $this->logSafe('hiu consent status accepted', ['requestId' => $requestId, 'http' => $r['_http']]);
+        return $this->ok(['requestId' => $requestId, 'accepted' => true]);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       HIU — CONSENT FETCH
+         POST {base}/consent/v3/fetch
+         202 Accepted — real artefact arrives via the on-fetch callback.
+    ═══════════════════════════════════════════════════════════════ */
+
+    public function hiuConsentFetch(string $consentId, string $requestId): array
+    {
+        if (!$this->isHiuConfigured()) {
+            return $this->fail('HIU role is not configured (set ABDM_HIU_ID / ABHA credentials in .env).');
+        }
+        [$token, $err] = $this->token();
+        if ($err !== null) return $this->fail($err);
+
+        $body = ['consentId' => $consentId];
+
+        $r = $this->http('POST', $this->base . '/consent/v3/fetch', $body, $token, ['X-HIU-ID' => $this->hiuId], $requestId);
+        if (!$this->is2xx($r)) {
+            $this->logSafe('hiu consent fetch failed', ['requestId' => $requestId, 'http' => $r['_http'], 'curl' => $r['_curlErr']]);
+            return $this->fail($this->extractError($r, 'Could not fetch the consent artefact.'));
+        }
+        $this->logSafe('hiu consent fetch accepted', ['requestId' => $requestId, 'http' => $r['_http']]);
+        return $this->ok(['requestId' => $requestId, 'accepted' => true]);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       HIU — DATA FLOW REQUEST  (M3, Phase 2)
+         POST {base}/data-flow/v3/health-information/request
+         202 Accepted — the real transactionId arrives via the on-request
+         callback (telemedicine/api/abdm-hiu-health-information-on-request.php).
+    ═══════════════════════════════════════════════════════════════ */
+
+    public function hiuDataFlowRequest(
+        string $consentId,
+        string $dateFromIso,
+        string $dateToIso,
+        string $dataPushUrl,
+        array $keyMaterial,
+        string $requestId
+    ): array {
+        if (!$this->isHiuConfigured()) {
+            return $this->fail('HIU role is not configured (set ABDM_HIU_ID / ABHA credentials in .env).');
+        }
+        [$token, $err] = $this->token();
+        if ($err !== null) return $this->fail($err);
+
+        $body = [
+            'hiRequest' => [
+                'consent'     => ['id' => $consentId],
+                'dateRange'   => ['from' => $dateFromIso, 'to' => $dateToIso],
+                'dataPushUrl' => $dataPushUrl,
+                'keyMaterial' => $keyMaterial,
+            ],
+        ];
+
+        $r = $this->http('POST', $this->base . '/data-flow/v3/health-information/request', $body, $token, ['X-HIU-ID' => $this->hiuId], $requestId);
+        if (!$this->is2xx($r)) {
+            $this->logSafe('hiu data-flow request failed', ['requestId' => $requestId, 'http' => $r['_http'], 'curl' => $r['_curlErr']]);
+            return $this->fail($this->extractError($r, 'Could not request health information.'));
+        }
+        $this->logSafe('hiu data-flow request accepted', ['requestId' => $requestId, 'http' => $r['_http']]);
+        return $this->ok(['requestId' => $requestId, 'accepted' => true]);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       HIU — DATA FLOW NOTIFY  (M3, Phase 2)
+         Thin wrapper over hiNotify() with notifier.type=HIU — called once
+         we've decrypted (or failed to decrypt) the HIP's push.
+    ═══════════════════════════════════════════════════════════════ */
+
+    public function hiuDataFlowNotify(
+        string $consentId,
+        string $transactionId,
+        string $hipId,
+        string $sessionStatus,
+        array $careContextStatuses = [],
+        ?array $error = null
+    ): array {
+        return $this->hiNotify($consentId, $transactionId, $sessionStatus, $careContextStatuses, $error, 'HIU', $hipId);
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -190,13 +371,13 @@ class ConsentApi
     }
 
     /** @return array{_http:int,_json:mixed,_raw:string,_curlErr:?string} */
-    private function http(string $method, string $url, ?array $body, string $bearer, array $extra = []): array
+    private function http(string $method, string $url, ?array $body, string $bearer, array $extra = [], ?string $requestId = null): array
     {
         $headers = [
             'Content-Type: application/json',
             'Accept: application/json',
             'Authorization: Bearer ' . $bearer,
-            'REQUEST-ID: ' . $this->uuid(),
+            'REQUEST-ID: ' . ($requestId ?? $this->uuid()),
             'TIMESTAMP: ' . $this->timestamp(),
             'X-CM-ID: ' . $this->xCmId,
             'X-HIP-ID: ' . $this->hipId,

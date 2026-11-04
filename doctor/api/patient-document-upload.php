@@ -1,17 +1,28 @@
 <?php
 /**
  * Upload a document for a patient linked to the authenticated doctor.
- * POST multipart/form-data: patient_id, document_type, description, document_file
+ * POST multipart/form-data: patient_id, document_type, description, document_file, csrf_token
  * Returns { success, doc: {id, document_name, description, file_path, file_type, uploaded_at} }
  */
 require_once __DIR__ . '/../auth/guard.php';
 require_once dirname(dirname(__DIR__)) . '/config/connect.php';
+require_once dirname(dirname(__DIR__)) . '/config/abdm.php';
+require_once dirname(dirname(__DIR__)) . '/lib/HipLinking.php';
+require_once dirname(dirname(__DIR__)) . '/lib/HipApi.php';
+require_once dirname(dirname(__DIR__)) . '/lib/Security.php';
 
 header('Content-Type: application/json');
 
 $payload = doctor_jwt_guard(true);
 if (!$payload) { echo json_encode(['success' => false, 'error' => 'Unauthorized']); exit; }
 $doctor_id = (int)($payload['doctor_id'] ?? $payload['sub'] ?? 0);
+
+// doctor_jwt_guard accepts the auth cookie ambiently, so this endpoint is a CSRF
+// target without an explicit token check — a cross-site page could otherwise
+// upload an arbitrary "medical record" to a patient's file as the logged-in doctor.
+if (!isset($_POST['csrf_token']) || !Security::verifyCsrf($_POST['csrf_token'])) {
+    echo json_encode(['success' => false, 'error' => 'Invalid or missing security token. Please reload the page and try again.']); exit;
+}
 
 $patient_id = (int)($_POST['patient_id'] ?? 0);
 if (!$patient_id) {
@@ -93,10 +104,43 @@ if (!$ins->execute()) {
     echo json_encode(['success' => false, 'error' => 'Could not save the document. Please try again.']); exit;
 }
 
+$newDocId = (int) $conn->insert_id;
+
+// Queue ABDM HIP-initiated care-context linking for this document (async — the
+// actual generate-token/link/carecontext calls happen in scripts/abdm-hip-worker.php).
+// Never blocks or fails the upload itself if the patient has no ABHA address yet,
+// or if ABDM isn't configured on this environment.
+if (defined('ABDM_HIP_CONFIGURED') && ABDM_HIP_CONFIGURED) {
+    try {
+        $abhaStmt = $conn->prepare("SELECT abha_address FROM users WHERE id = ? LIMIT 1");
+        $abhaStmt->bind_param('i', $patient_id);
+        $abhaStmt->execute();
+        $abhaRow = $abhaStmt->get_result()->fetch_assoc();
+        $abhaStmt->close();
+        $abhaAddr = trim((string) ($abhaRow['abha_address'] ?? ''));
+
+        if ($abhaAddr !== '') {
+            $existingLink = HipLinking::careContextLinkForDocument($conn, $newDocId);
+            if (!$existingLink || $existingLink['status'] === 'failed') {
+                HipLinking::startDocumentCareContextLink(
+                    $conn,
+                    $newDocId,
+                    'PATIENT-' . $patient_id,
+                    'DOC-' . $newDocId,
+                    HipApi::canonicalHiType('HealthDocumentRecord'),   // canonical, never a raw literal
+                    HipLinking::newRequestId()
+                );
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('[patient-document-upload] care-context queue failed: ' . $e->getMessage());
+    }
+}
+
 echo json_encode([
     'success' => true,
     'doc' => [
-        'id'             => (int)$conn->insert_id,
+        'id'             => $newDocId,
         'document_name'  => $documentName,
         'document_type'  => $docType,
         'description'    => $description,

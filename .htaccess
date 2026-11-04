@@ -19,6 +19,14 @@ RewriteRule ^api/v3/hip/health-information/request$ telemedicine/api/abdm-hi-req
 RewriteRule ^api/v3/hip/patient/share$             telemedicine/api/abdm-scan-share.php [L,QSA]
 RewriteRule ^api/v3/hip/patient-share$             telemedicine/api/abdm-scan-share.php [L,QSA]
 
+# ── ABDM HIU callbacks (M3, Consent flow — our system requesting a
+#    patient's records from OTHER providers via the consent manager).
+RewriteRule ^api/v3/hiu/consent/request/on-init$   telemedicine/api/abdm-hiu-consent-on-init.php [L,QSA]
+RewriteRule ^api/v3/hiu/consent/request/notify$    telemedicine/api/abdm-hiu-consent-notify.php [L,QSA]
+RewriteRule ^api/v3/hiu/consent/on-fetch$          telemedicine/api/abdm-hiu-consent-on-fetch.php [L,QSA]
+RewriteRule ^api/v3/hiu/health-information/on-request$ telemedicine/api/abdm-hiu-health-information-on-request.php [L,QSA]
+RewriteRule ^api/v3/hiu/health-information/push$   telemedicine/api/abdm-hiu-health-information-push.php [L,QSA]
+
 # Rewrite Product Details URL
 RewriteRule ^department/([^/]+)/?$ e-cardiology.php?alias=$1 [L,QSA]
 RewriteRule ^departments/?$ departments.php? [L,QSA]

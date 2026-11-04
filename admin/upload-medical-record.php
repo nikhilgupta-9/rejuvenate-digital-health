@@ -1,9 +1,14 @@
 <?php
 require_once __DIR__ . '/db-conn.php';
 require_once __DIR__ . '/auth/guard.php';
+require_once __DIR__ . '/../config/abdm.php';
+require_once __DIR__ . '/../lib/HipLinking.php';
+require_once __DIR__ . '/../lib/HipApi.php';
+require_once __DIR__ . '/../lib/Security.php';
 admin_jwt_guard();
 
 $admin_id = $_SESSION['admin_id'] ?? 1;
+$csrf_token = Security::csrfToken();
 
 $record_for   = in_array($_GET['for'] ?? '', ['patient','school_member']) ? $_GET['for'] : 'patient';
 $pre_patient  = intval($_GET['patient_id'] ?? 0);
@@ -22,6 +27,10 @@ $old = $_POST ?: ['record_for' => $record_for, 'patient_id' => $pre_patient, 'me
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
+        if (!isset($_POST['csrf_token']) || !Security::verifyCsrf($_POST['csrf_token'])) {
+            throw new Exception("Invalid or expired security token. Please reload the page and try again.");
+        }
+
         $record_for   = $_POST['record_for'] ?? '';
         $patient_id   = intval($_POST['patient_id'] ?? 0);
         $member_id    = intval($_POST['member_id'] ?? 0);
@@ -69,6 +78,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 VALUES (?, NULL, 'admin', ?, ?, ?, ?, ?, NOW())");
             $ins->bind_param('iissss', $patient_id, $admin_id, $document_name, $description, $db_path, $file_type_mime);
             if (!$ins->execute()) { @unlink($upload_dir . $new_file); throw new Exception("Failed to save record: " . $conn->error); }
+
+            $newDocId = (int) $conn->insert_id;
+
+            // Queue ABDM HIP-initiated care-context linking for this document (async —
+            // actual ABDM calls happen in scripts/abdm-hip-worker.php). Never blocks or
+            // fails this upload if the patient has no ABHA address yet or ABDM isn't
+            // configured on this environment.
+            if (defined('ABDM_HIP_CONFIGURED') && ABDM_HIP_CONFIGURED) {
+                try {
+                    $abhaStmt = $conn->prepare("SELECT abha_address FROM users WHERE id = ? LIMIT 1");
+                    $abhaStmt->bind_param('i', $patient_id);
+                    $abhaStmt->execute();
+                    $abhaRow = $abhaStmt->get_result()->fetch_assoc();
+                    $abhaStmt->close();
+                    $abhaAddr = trim((string) ($abhaRow['abha_address'] ?? ''));
+
+                    if ($abhaAddr !== '') {
+                        $existingLink = HipLinking::careContextLinkForDocument($conn, $newDocId);
+                        if (!$existingLink || $existingLink['status'] === 'failed') {
+                            HipLinking::startDocumentCareContextLink(
+                                $conn,
+                                $newDocId,
+                                'PATIENT-' . $patient_id,
+                                'DOC-' . $newDocId,
+                                HipApi::canonicalHiType('HealthDocumentRecord'),   // canonical, never a raw literal
+                                HipLinking::newRequestId()
+                            );
+                        }
+                    }
+                } catch (Throwable $e) {
+                    error_log('[admin/upload-medical-record] care-context queue failed: ' . $e->getMessage());
+                }
+            }
 
             $_SESSION['success_message'] = "Medical record uploaded for patient successfully.";
             header("Location: medical-records.php?tab=patients");
@@ -133,6 +175,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <?php endif; ?>
 
                 <form method="post" enctype="multipart/form-data" id="recordForm">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
 
                     <div class="detail-card">
                         <h5><i class="fas fa-user-check me-2"></i>Record For</h5>

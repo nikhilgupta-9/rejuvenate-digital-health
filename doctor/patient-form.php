@@ -29,6 +29,7 @@ require_once(__DIR__ . "/../lib/Settlement.php");
 require_once(__DIR__ . "/../lib/Abha.php");
 require_once(__DIR__ . "/../lib/HipLinking.php");   // ABDM care-context linking (async — worker: scripts/abdm-hip-worker.php)
 require_once(__DIR__ . "/../lib/HipApi.php");        // ABDM hiType canonical map (HipApi::canonicalHiType)
+require_once(__DIR__ . "/../lib/Security.php");
 require_once(__DIR__ . "/../util/prescription-render.php"); // shared read-only "parcha" — same as user/admin/video-call
 require_once(__DIR__ . "/inc/consent-helper.php");   // student_has_consent() / student_consent_block_reason()
 require_once(__DIR__ . "/auth/guard.php");
@@ -362,6 +363,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_prescription']))
                 }
             } catch (Throwable $e) {
                 error_log('[patient-form] care-context queue failed: ' . $e->getMessage());
+            }
+
+            // ABDM M2 Phase 3 — the same finalised visit is also declared as an
+            // OPConsultation care-context (a separate abdm_care_context_links row,
+            // same prescription_id, different hi_type + care_context_reference — the
+            // consult note itself lives in this same prescriptions row: chief_complaints /
+            // examination / diagnosis / advice).
+            try {
+                $opHiType = HipApi::canonicalHiType('OPConsultation');
+                $existingOpLink = HipLinking::careContextLinkForPrescriptionHiType($conn, $rxId, $opHiType);
+                if (!$existingOpLink || $existingOpLink['status'] === 'failed') {
+                    HipLinking::startCareContextLink(
+                        $conn,
+                        $rxId,
+                        'PATIENT-' . (int) $pid,
+                        'OPD-' . $rxId,
+                        $opHiType,
+                        HipLinking::newRequestId()
+                    );
+                }
+            } catch (Throwable $e) {
+                error_log('[patient-form] OPConsultation care-context queue failed: ' . $e->getMessage());
             }
         }
 
@@ -1663,6 +1686,7 @@ function toggleParcha() {
     const BASE_URL = '<?= BASE_URL ?>';
     const PATIENT_ID = <?= (int)($patient['patient_id'] ?? 0) ?>;
     const APPT_ID = <?= (int)$appointment_id ?>;
+    const CSRF_TOKEN = <?= json_encode(Security::csrfToken()) ?>;
     const listEl = document.getElementById('rx-attach-list');
     const msgEl  = document.getElementById('rx-att-msg');
 
@@ -1688,6 +1712,7 @@ function toggleParcha() {
         fd.append('appointment_id', APPT_ID);
         fd.append('document_type', document.getElementById('rx-att-type').value);
         fd.append('document_file', fileEl.files[0]);
+        fd.append('csrf_token', CSRF_TOKEN);
         upBtn.disabled = true; msg('Uploading…', true);
         fetch(BASE_URL + 'doctor/api/patient-document-upload.php', { method: 'POST', body: fd })
             .then(r => r.json()).then(d => {

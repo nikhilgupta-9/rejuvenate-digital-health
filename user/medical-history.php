@@ -4,6 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 include_once "../config/connect.php";
 include_once "../util/function.php";
+require_once "../lib/HiuDataFlow.php";
 
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     header("Location: " . BASE_URL . "login.php");
@@ -11,6 +12,11 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 }
 
 $user_id = $_SESSION['user_id'];
+
+// ABDM M3 — records a doctor has pulled in from other providers on this patient's behalf.
+$hiu_received_records = $conn->query("SHOW TABLES LIKE 'abdm_hiu_received_records'")->num_rows
+    ? HiuDataFlow::recordsForPatient($conn, (int) $user_id)
+    : [];
 
 // Filters
 $search_query = trim($_GET['search'] ?? '');
@@ -46,10 +52,13 @@ $sql = "
         COALESCE(d.specialization, 'General Medicine') AS specialization,
         d.degrees,
         d.profile_image,
-        DATE_FORMAT(p.visit_date, '%d %M %Y') AS fmt_visit_date
+        DATE_FORMAT(p.visit_date, '%d %M %Y') AS fmt_visit_date,
+        rx_link.status AS rx_abdm_status, op_link.status AS op_abdm_status
     FROM prescriptions p
     LEFT JOIN appointments a ON a.id = p.appointment_id
     LEFT JOIN doctors d ON d.id = p.doctor_id
+    LEFT JOIN abdm_care_context_links rx_link ON rx_link.prescription_id = p.id AND rx_link.hi_type = 'Prescription'
+    LEFT JOIN abdm_care_context_links op_link ON op_link.prescription_id = p.id AND op_link.hi_type = 'OPConsultation'
     $where_sql
     ORDER BY p.visit_date DESC, a.appointment_time DESC
 ";
@@ -191,6 +200,27 @@ function mh_url($overrides, $doctor_filter, $search_query)
                 </form>
             </div>
 
+            <?php if (!empty($hiu_received_records)): ?>
+                <div class="mb-4">
+                    <h5 style="font-size:.95rem;font-weight:700;color:#374151;margin-bottom:10px;"><i class="fa fa-exchange me-2"></i>Records from Other Providers (via ABDM)</h5>
+                    <div class="ap-table-wrap">
+                        <table class="ap-table">
+                            <thead><tr><th>Received</th><th>Care Context</th><th>Status</th></tr></thead>
+                            <tbody>
+                                <?php foreach ($hiu_received_records as $rr): ?>
+                                    <tr>
+                                        <td><?= date('d M Y', strtotime($rr['received_at'])) ?></td>
+                                        <td style="font-size:.82rem;"><?= htmlspecialchars($rr['care_context_reference'] ?: '—') ?></td>
+                                        <td><span class="mh-meds-badge" style="background:<?= $rr['hi_status'] === 'OK' ? '#dcfce7' : '#fee2e2' ?>;color:<?= $rr['hi_status'] === 'OK' ? '#16a34a' : '#dc2626' ?>;"><?= htmlspecialchars($rr['hi_status']) ?></span></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-muted" style="font-size:.78rem;margin-top:6px;">These records were requested by your doctor with consent you approved in your ABHA app.</div>
+                </div>
+            <?php endif; ?>
+
             <?php if (empty($history)): ?>
                 <div class="no-appointments">
                     <i class="fa fa-file-medical"></i>
@@ -220,6 +250,16 @@ function mh_url($overrides, $doctor_filter, $search_query)
                     </div>
                     <?php return ob_get_clean();
                 };
+
+                $render_abdm_badges = function ($rx) {
+                    $badge = function (?string $status, string $label) {
+                        if ($status === 'linked') return "<span class=\"badge bg-success-subtle text-success\" style=\"font-size:.65rem;\"><i class=\"fa fa-check-circle me-1\"></i>{$label} Linked</span>";
+                        if ($status === 'pending') return "<span class=\"badge bg-warning-subtle text-warning\" style=\"font-size:.65rem;\"><i class=\"fa fa-clock me-1\"></i>{$label} Pending</span>";
+                        if ($status === 'failed') return "<span class=\"badge bg-danger-subtle text-danger\" style=\"font-size:.65rem;\"><i class=\"fa fa-triangle-exclamation me-1\"></i>{$label} Failed</span>";
+                        return '';
+                    };
+                    return $badge($rx['rx_abdm_status'] ?? null, 'Rx') . ' ' . $badge($rx['op_abdm_status'] ?? null, 'OPD');
+                };
                 ?>
 
                 <!-- Desktop table -->
@@ -231,6 +271,7 @@ function mh_url($overrides, $doctor_filter, $search_query)
                                 <th>Visit Date</th>
                                 <th>Diagnosis</th>
                                 <th>Medicines</th>
+                                <th>ABDM</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -259,6 +300,7 @@ function mh_url($overrides, $doctor_filter, $search_query)
                                     <td><?= htmlspecialchars($rx['fmt_visit_date']) ?></td>
                                     <td class="mh-dx"><?= htmlspecialchars(mb_strimwidth($dx, 0, 60, '…')) ?: '—' ?></td>
                                     <td><?php if ($meds_count > 0): ?><span class="mh-meds-badge"><?= $meds_count ?> medicine<?= $meds_count === 1 ? '' : 's' ?></span><?php else: ?>—<?php endif; ?></td>
+                                    <td><?= $render_abdm_badges($rx) ?></td>
                                     <td><?= $render_history_actions($rx) ?></td>
                                 </tr>
                             <?php endforeach; ?>
@@ -294,6 +336,7 @@ function mh_url($overrides, $doctor_filter, $search_query)
                             <?php if ($dx !== ''): ?>
                                 <div class="mh-dx mt-1"><i class="fa fa-stethoscope me-1"></i><?= htmlspecialchars(mb_strimwidth($dx, 0, 100, '…')) ?></div>
                             <?php endif; ?>
+                            <div class="mt-2"><?= $render_abdm_badges($rx) ?></div>
                             <div class="ac-row"><?= $render_history_actions($rx) ?></div>
                         </div>
                     <?php endforeach; ?>
