@@ -240,6 +240,30 @@ function build_preview(array $header, array $rows, mysqli $conn, int $school_id,
 $page_error = '';
 $stage = $_GET['stage'] ?? 'upload';
 
+// ── Plan limit (Students only) — null max_students = unlimited plan ─────
+$studentLimit = null; // ['max'=>int,'count'=>int] when the active plan caps students
+$planRow = mysqli_fetch_assoc(mysqli_query($conn, "
+    SELECT p.max_students FROM school_subscriptions s
+    JOIN school_plans p ON p.id = s.plan_id
+    WHERE s.school_id = $school_id AND s.status = 'active'
+    ORDER BY s.created_at DESC LIMIT 1"));
+if ($planRow && $planRow['max_students'] !== null) {
+    $studentCount = (int) (mysqli_fetch_assoc(mysqli_query($conn,
+        "SELECT COUNT(*) c FROM school_members WHERE school_id=$school_id AND type='Student'"))['c'] ?? 0);
+    $studentLimit = ['max' => (int) $planRow['max_students'], 'count' => $studentCount];
+}
+$studentLimitReached = $studentLimit && $studentLimit['count'] >= $studentLimit['max'];
+
+/** How many 'Student' rows in a preview array have no validation errors. */
+function count_valid_students(array $preview): int
+{
+    $n = 0;
+    foreach ($preview as $r) {
+        if ($r['type'] === 'Student' && empty($r['errors'])) $n++;
+    }
+    return $n;
+}
+
 // ---- Step 1: handle the file upload, parse + validate, stash in session, redirect (PRG) ----
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do_upload'])) {
     if (($_POST['csrf_token'] ?? '') !== $_SESSION['csrf_token']) {
@@ -267,12 +291,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do_upload'])) {
 
 // ---- Step 2: confirm — insert only the valid rows, in a transaction ----
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do_confirm'])) {
+    $incomingStudents = count_valid_students($_SESSION['import_preview'] ?? []);
     if (($_POST['csrf_token'] ?? '') !== $_SESSION['csrf_token']) {
         $page_error = 'Security check failed. Please try again.';
         $stage = 'preview';
     } elseif (empty($_SESSION['import_preview'])) {
         header('Location: import.php');
         exit();
+    } elseif ($studentLimit && ($studentLimit['count'] + $incomingStudents) > $studentLimit['max']) {
+        $page_error = "This import would add {$incomingStudents} students, taking you to " . ($studentLimit['count'] + $incomingStudents) . " — over your plan's limit of {$studentLimit['max']}. Please upgrade your plan, or remove students from the file, before importing.";
+        $stage = 'preview';
     } else {
         $valid_rows = array_values(array_filter($_SESSION['import_preview'], fn($r) => empty($r['errors'])));
         $inserted = 0;
@@ -472,6 +500,20 @@ if ($stage === 'done') unset($_SESSION['import_result']);
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
       </div>
     <?php endif; ?>
+    <?php if ($studentLimitReached): ?>
+      <div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <span><i class="fas fa-exclamation-triangle me-2"></i>You've reached your plan's student limit (<?= $studentLimit['count'] ?> / <?= $studentLimit['max'] ?>). Importing more students is blocked until you upgrade.</span>
+        <a href="../subscription.php" class="btn btn-sm btn-warning"><i class="fas fa-arrow-up me-1"></i>Upgrade Plan</a>
+      </div>
+    <?php elseif ($studentLimit && $stage === 'preview' && !empty($_SESSION['import_preview'])):
+      $incomingStudents = count_valid_students($_SESSION['import_preview']);
+      if (($studentLimit['count'] + $incomingStudents) > $studentLimit['max']): ?>
+      <div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <span><i class="fas fa-exclamation-triangle me-2"></i>This file has <?= $incomingStudents ?> valid students. Importing all of them would take you to <?= $studentLimit['count'] + $incomingStudents ?> / <?= $studentLimit['max'] ?> — over your plan's limit. Confirming the import will be blocked.</span>
+        <a href="../subscription.php" class="btn btn-sm btn-warning"><i class="fas fa-arrow-up me-1"></i>Upgrade Plan</a>
+      </div>
+      <?php endif;
+    endif; ?>
 
     <?php if ($stage === 'upload'): ?>
 

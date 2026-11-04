@@ -4,6 +4,20 @@ include_once "../auth/auth.php";
 
 $success = $error = '';
 
+// ── Plan limit (Students only) — null max_students = unlimited plan ─────
+$studentLimit = null; // ['max'=>int,'count'=>int] when the active plan caps students
+$planRow = mysqli_fetch_assoc(mysqli_query($conn, "
+    SELECT p.max_students FROM school_subscriptions s
+    JOIN school_plans p ON p.id = s.plan_id
+    WHERE s.school_id = $school_id AND s.status = 'active'
+    ORDER BY s.created_at DESC LIMIT 1"));
+if ($planRow && $planRow['max_students'] !== null) {
+  $studentCount = (int) (mysqli_fetch_assoc(mysqli_query($conn,
+      "SELECT COUNT(*) c FROM school_members WHERE school_id=$school_id AND type='Student'"))['c'] ?? 0);
+  $studentLimit = ['max' => (int) $planRow['max_students'], 'count' => $studentCount];
+}
+$studentLimitReached = $studentLimit && $studentLimit['count'] >= $studentLimit['max'];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $type = $_POST['type'] ?? '';
   $name = trim($_POST['name'] ?? '');
@@ -36,6 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // Validate
   if (!$type || !$name) {
     $error = "Member type and full name are required.";
+  } elseif ($type === 'Student' && $studentLimitReached) {
+    $error = "Your plan allows up to {$studentLimit['max']} students, and you already have {$studentLimit['count']}. Please upgrade your plan to add more students.";
   } elseif ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     $error = "Invalid email address.";
   } elseif ($aadhar && !preg_match('/^\d{12}$/', $aadhar)) {
@@ -427,6 +443,12 @@ $just_added = isset($_GET['added']);
       <div class="alert alert-danger alert-dismissible fade show">
         <i class="fas fa-exclamation-circle me-2"></i><?= htmlspecialchars($error) ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    <?php endif; ?>
+    <?php if ($studentLimitReached): ?>
+      <div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <span><i class="fas fa-exclamation-triangle me-2"></i>You've reached your plan's student limit (<?= $studentLimit['count'] ?> / <?= $studentLimit['max'] ?>). Adding a new student is blocked until you upgrade.</span>
+        <a href="../subscription.php" class="btn btn-sm btn-warning"><i class="fas fa-arrow-up me-1"></i>Upgrade Plan</a>
       </div>
     <?php endif; ?>
 

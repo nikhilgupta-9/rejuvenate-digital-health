@@ -110,6 +110,7 @@ if (!$activeMembership) {
   <title>Membership | <?= htmlspecialchars($student_school) ?></title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <link rel="stylesheet" href="../assets/school.css">
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <style>
     :root { --primary: #0C74C5; --accent: #02c9b8; }
@@ -159,17 +160,22 @@ if (!$activeMembership) {
   </style>
 </head>
 <body>
+<?php $active_page = 'membership'; $base_path = ''; include '../inc/sidebar-student.php'; ?>
 
-<nav class="s-topnav">
-  <div>
-    <div class="brand"><i class="fas fa-id-card me-2" style="color:var(--accent);"></i>Health Membership</div>
-    <div class="sub"><?= htmlspecialchars($student_school) ?></div>
+<div class="school-topbar">
+  <div class="d-flex align-items-center gap-2">
+    <button class="sidebar-toggler" id="sidebarToggle"><i class="fas fa-bars"></i></button>
+    <div>
+      <div style="font-size:1rem;font-weight:600;color:#1f2937;"><i class="fas fa-id-card me-2" style="color:var(--accent);"></i>Health Membership</div>
+      <div style="font-size:.75rem;color:#6b7280;"><?= htmlspecialchars($student_school) ?></div>
+    </div>
   </div>
-  <a href="dashboard.php" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:none;font-size:.76rem;">
-    <i class="fas fa-arrow-left me-1"></i><span class="d-none d-sm-inline">Dashboard</span>
-  </a>
-</nav>
+  <div class="d-flex align-items-center gap-2">
+    <a href="logout.php" class="btn btn-sm btn-outline-danger"><i class="fas fa-sign-out-alt"></i></a>
+  </div>
+</div>
 
+<main class="school-content">
 <div class="s-body">
 
 <?php if ($activeMembership): ?>
@@ -212,15 +218,7 @@ if (!$activeMembership) {
 <?php endif; ?>
 
 </div>
-
-<nav class="s-bottomnav">
-  <a href="dashboard.php"><i class="fas fa-home"></i>Home</a>
-  <a href="health.php"><i class="fas fa-heartbeat"></i>Health</a>
-  <a href="records.php"><i class="fas fa-file-medical"></i>Records</a>
-  <a href="abha.php"><i class="fas fa-id-card"></i>ABHA</a>
-  <a href="book-appointment.php"><i class="fas fa-stethoscope"></i>Book</a>
-  <a href="profile.php"><i class="fas fa-user-circle"></i>Profile</a>
-</nav>
+</main>
 
 <script>
 document.querySelectorAll('.buy-btn').forEach(btn => {

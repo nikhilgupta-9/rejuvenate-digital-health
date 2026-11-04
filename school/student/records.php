@@ -47,6 +47,7 @@ $active_tab = in_array($_GET['tab'] ?? '', ['reports', 'cert'], true) ? $_GET['t
   <title>My Records | <?= htmlspecialchars($student_school) ?></title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <link rel="stylesheet" href="../assets/school.css">
   <style>
     :root { --primary: #0C74C5; --accent: #02c9b8; }
     * { box-sizing: border-box; }
@@ -108,17 +109,22 @@ $active_tab = in_array($_GET['tab'] ?? '', ['reports', 'cert'], true) ? $_GET['t
   </style>
 </head>
 <body>
+<?php $active_page = 'records'; $base_path = ''; include '../inc/sidebar-student.php'; ?>
 
-<nav class="s-topnav">
-  <div>
-    <div class="brand"><i class="fas fa-file-medical me-2" style="color:var(--accent);"></i>My Records</div>
-    <div class="sub"><?= htmlspecialchars($student_school) ?></div>
+<div class="school-topbar">
+  <div class="d-flex align-items-center gap-2">
+    <button class="sidebar-toggler" id="sidebarToggle"><i class="fas fa-bars"></i></button>
+    <div>
+      <div style="font-size:1rem;font-weight:600;color:#1f2937;"><i class="fas fa-file-medical me-2" style="color:var(--accent);"></i>My Records</div>
+      <div style="font-size:.75rem;color:#6b7280;"><?= htmlspecialchars($student_school) ?></div>
+    </div>
   </div>
-  <a href="logout.php" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:none;font-size:.76rem;">
-    <i class="fas fa-sign-out-alt me-1"></i><span class="d-none d-sm-inline">Logout</span>
-  </a>
-</nav>
+  <div class="d-flex align-items-center gap-2">
+    <a href="logout.php" class="btn btn-sm btn-outline-danger"><i class="fas fa-sign-out-alt"></i></a>
+  </div>
+</div>
 
+<main class="school-content">
 <div class="s-body">
 
   <div class="rec-tabs">
@@ -239,16 +245,7 @@ $active_tab = in_array($_GET['tab'] ?? '', ['reports', 'cert'], true) ? $_GET['t
   </div>
 
 </div>
-
-<!-- Bottom Navigation -->
-<nav class="s-bottomnav">
-  <a href="dashboard.php"><i class="fas fa-home"></i>Home</a>
-  <a href="health.php"><i class="fas fa-heartbeat"></i>Health</a>
-  <a href="records.php" class="active"><i class="fas fa-file-medical"></i>Records</a>
-  <a href="abha.php"><i class="fas fa-id-card"></i>ABHA</a>
-  <a href="book-appointment.php"><i class="fas fa-stethoscope"></i>Book</a>
-  <a href="profile.php"><i class="fas fa-user-circle"></i>Profile</a>
-</nav>
+</main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>

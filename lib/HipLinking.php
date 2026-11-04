@@ -229,6 +229,46 @@ class HipLinking
         return $row;
     }
 
+    /**
+     * Record a link/carecontext request for an uploaded document (status 'pending') — the
+     * document equivalent of startCareContextLink(). Same abdm_care_context_links row shape,
+     * just document_id instead of prescription_id (see database/migration notes: the table was
+     * generalised in Phase 1 rather than adding a new one).
+     */
+    public static function startDocumentCareContextLink(
+        mysqli $conn,
+        int $documentId,
+        string $referenceNumber,
+        string $careContextReference,
+        string $hiType,
+        string $requestId
+    ): int {
+        $st = $conn->prepare(
+            "INSERT INTO abdm_care_context_links
+               (document_id, reference_number, care_context_reference, hi_type, request_id, status)
+             VALUES (?, ?, ?, ?, ?, 'pending')"
+        );
+        $st->bind_param('issss', $documentId, $referenceNumber, $careContextReference, $hiType, $requestId);
+        $st->execute();
+        $id = (int) $conn->insert_id;
+        $st->close();
+        return $id;
+    }
+
+    /** Has this document already been linked (or is a link in flight)? */
+    public static function careContextLinkForDocument(mysqli $conn, int $documentId): ?array
+    {
+        $st = $conn->prepare(
+            "SELECT id, request_id, status, care_context_reference
+             FROM abdm_care_context_links WHERE document_id = ? ORDER BY id DESC LIMIT 1"
+        );
+        $st->bind_param('i', $documentId);
+        $st->execute();
+        $row = $st->get_result()->fetch_assoc() ?: null;
+        $st->close();
+        return $row;
+    }
+
     /** Opportunistic housekeeping — expire link tokens past their window. */
     public static function expireStaleTokens(mysqli $conn): int
     {

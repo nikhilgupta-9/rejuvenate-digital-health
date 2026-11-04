@@ -6,6 +6,9 @@
  * Implements ABDM / NRCES FHIR R4 Profiles:
  *   - DocumentBundle: https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle
  *   - PrescriptionRecord: https://nrces.in/ndhm/fhir/r4/StructureDefinition/PrescriptionRecord
+ *   - HealthDocumentRecord: https://nrces.in/ndhm/fhir/r4/StructureDefinition/HealthDocumentRecord
+ *     (Phase 1 of the multi-hiType rollout — DiagnosticReport / OPConsultation / DischargeSummary /
+ *     ImmunizationRecord / WellnessRecord are later phases, same pattern.)
  *
  * Assembles consultation, prescription, doctor, patient, vitals and diagnosis data
  * into a fully valid FHIR R4 Document Bundle ready for Fidelius encryption and push to HIU.
@@ -401,6 +404,252 @@ class FhirBundleBuilder
             'timestamp' => $nowIso,
             'entry' => $finalEntries
         ];
+    }
+
+    /**
+     * Build an NDHM FHIR R4 HealthDocumentRecord Bundle from an uploaded patient document.
+     *
+     * @param array $doc Row from patient_documents (document_name, document_type, file_path, file_type, uploaded_at)
+     * @param array $patient Patient row from users table
+     * @param array $org Facility details (name, hfrId, etc.)
+     * @return array FHIR R4 Bundle structure
+     */
+    public static function buildHealthDocumentBundle(array $doc, array $patient, array $org = []): array
+    {
+        $bundleId = self::uuid();
+        $compId = self::uuid();
+        $docRefId = 'docref-' . self::uuid();
+        $binaryId = 'bin-' . self::uuid();
+        $patientId = 'pat-' . ($patient['id'] ?? '1');
+        $orgId = 'org-' . ($org['hfr_id'] ?? 'rejuvenate');
+        $nowIso = gmdate('Y-m-d\TH:i:s.000\Z');
+
+        $orgName = $org['name'] ?? defined('ABDM_HIP_NAME') ? ABDM_HIP_NAME : 'Rejuvenate Digital Health';
+        $hfrFacilityId = $org['hfr_id'] ?? defined('ABDM_HFR_FACILITY_ID') ? ABDM_HFR_FACILITY_ID : 'IN0810000001';
+
+        // Patient Resource — same shape as buildPrescriptionBundle().
+        $patientResource = [
+            'resourceType' => 'Patient',
+            'id' => $patientId,
+            'meta' => [
+                'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient']
+            ],
+            'identifier' => [],
+            'name' => [
+                [
+                    'use' => 'official',
+                    'text' => $patient['name'] ?? 'Patient'
+                ]
+            ],
+            'gender' => self::mapGender($patient['gender'] ?? ''),
+        ];
+
+        if (!empty($patient['dob']) && $patient['dob'] !== '0000-00-00') {
+            $patientResource['birthDate'] = date('Y-m-d', strtotime($patient['dob']));
+        }
+
+        if (!empty($patient['abha_id'])) {
+            $patientResource['identifier'][] = [
+                'type' => [
+                    'coding' => [
+                        [
+                            'system' => 'https://nrces.in/ndhm/fhir/r4/CodeSystem/ndhm-identifier-type-code',
+                            'code' => 'ABHA',
+                            'display' => 'Ayushman Bharat Health Account'
+                        ]
+                    ]
+                ],
+                'system' => 'https://healthid.ndhm.gov.in',
+                'value' => $patient['abha_id']
+            ];
+        }
+
+        if (!empty($patient['abha_address'])) {
+            $patientResource['identifier'][] = [
+                'type' => [
+                    'coding' => [
+                        [
+                            'system' => 'https://nrces.in/ndhm/fhir/r4/CodeSystem/ndhm-identifier-type-code',
+                            'code' => 'ABHA-Address',
+                            'display' => 'ABHA Address'
+                        ]
+                    ]
+                ],
+                'system' => 'https://phr.ndhm.gov.in',
+                'value' => $patient['abha_address']
+            ];
+        }
+
+        // Organization Resource
+        $organizationResource = [
+            'resourceType' => 'Organization',
+            'id' => $orgId,
+            'meta' => [
+                'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization']
+            ],
+            'identifier' => [
+                [
+                    'system' => 'https://facility.ndhm.gov.in',
+                    'value' => $hfrFacilityId
+                ]
+            ],
+            'name' => $orgName
+        ];
+
+        // DocumentReference + Binary — the actual uploaded file content, base64-encoded.
+        // The file is read from disk here (not stored pre-encoded) so a missing/unreadable
+        // file degrades to a DocumentReference with no attachment data instead of failing
+        // the whole push.
+        $contentType = $doc['file_type'] ?: 'application/octet-stream';
+        $docName = trim((string) ($doc['document_name'] ?? '')) ?: 'Health Document';
+        $docTypeText = trim((string) ($doc['document_type'] ?? '')) ?: 'Clinical Document';
+        $fileBytes = self::readDocumentFile((string) ($doc['file_path'] ?? ''));
+
+        $attachment = [
+            'contentType' => $contentType,
+            'url' => 'Binary/' . $binaryId,
+            'title' => $docName,
+        ];
+
+        $docRefResource = [
+            'resourceType' => 'DocumentReference',
+            'id' => $docRefId,
+            'meta' => [
+                'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference']
+            ],
+            'status' => 'current',
+            'type' => ['text' => $docTypeText],
+            'subject' => [
+                'reference' => 'Patient/' . $patientId,
+                'display' => $patient['name'] ?? 'Patient'
+            ],
+            'date' => date('Y-m-d\TH:i:s.000\Z', strtotime($doc['uploaded_at'] ?? 'now')),
+            'description' => $docName,
+            'content' => [
+                ['attachment' => $attachment]
+            ]
+        ];
+
+        $binaryResource = [
+            'resourceType' => 'Binary',
+            'id' => $binaryId,
+            'contentType' => $contentType,
+        ];
+        if ($fileBytes !== null) {
+            $binaryResource['data'] = base64_encode($fileBytes);
+        }
+
+        // Composition Resource (Document Entry #1 per FHIR Document specifications)
+        $compositionResource = [
+            'resourceType' => 'Composition',
+            'id' => $compId,
+            'meta' => [
+                'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/HealthDocumentRecord']
+            ],
+            'status' => 'final',
+            'type' => [
+                'coding' => [
+                    [
+                        'system' => 'http://snomed.info/sct',
+                        'code' => '419891008',
+                        'display' => 'Record artifact'
+                    ]
+                ],
+                'text' => 'Health document record'
+            ],
+            'subject' => [
+                'reference' => 'Patient/' . $patientId,
+                'display' => $patient['name'] ?? 'Patient'
+            ],
+            'date' => date('Y-m-d\TH:i:s.000\Z', strtotime($doc['uploaded_at'] ?? 'now')),
+            'author' => [
+                [
+                    'reference' => 'Organization/' . $orgId,
+                    'display' => $orgName
+                ]
+            ],
+            'title' => $docName,
+            'custodian' => [
+                'reference' => 'Organization/' . $orgId,
+                'display' => $orgName
+            ],
+            'section' => [
+                [
+                    'title' => 'Health Document',
+                    'code' => [
+                        'coding' => [
+                            [
+                                'system' => 'http://snomed.info/sct',
+                                'code' => '419891008',
+                                'display' => 'Record artifact'
+                            ]
+                        ]
+                    ],
+                    'entry' => [
+                        ['reference' => 'DocumentReference/' . $docRefId]
+                    ]
+                ]
+            ]
+        ];
+
+        // Bundle Assembly: Composition is ALWAYS first entry
+        $finalEntries = [
+            ['fullUrl' => 'Composition/' . $compId, 'resource' => $compositionResource],
+            ['fullUrl' => 'Patient/' . $patientId, 'resource' => $patientResource],
+            ['fullUrl' => 'Organization/' . $orgId, 'resource' => $organizationResource],
+            ['fullUrl' => 'DocumentReference/' . $docRefId, 'resource' => $docRefResource],
+            ['fullUrl' => 'Binary/' . $binaryId, 'resource' => $binaryResource],
+        ];
+
+        return [
+            'resourceType' => 'Bundle',
+            'id' => $bundleId,
+            'meta' => [
+                'versionId' => '1',
+                'lastUpdated' => $nowIso,
+                'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle']
+            ],
+            'identifier' => [
+                'system' => 'https://rejuvenatedigitalhealth.com/bundle',
+                'value' => $bundleId
+            ],
+            'type' => 'document',
+            'timestamp' => $nowIso,
+            'entry' => $finalEntries
+        ];
+    }
+
+    /**
+     * Resolve and read an uploaded document's bytes for FHIR Binary encoding.
+     *
+     * patient_documents.file_path has been saved inconsistently over time (some rows
+     * carry a '../uploads/...' prefix, newer rows just 'uploads/...'), so both forms are
+     * normalised to a path under the project's own uploads/ directory. The resolved real
+     * path is then required to stay inside that directory — never trust a stored path
+     * enough to let it read anything outside uploads/ (defends against a path-traversal
+     * value ever having been written into the column).
+     */
+    private static function readDocumentFile(string $relativePath): ?string
+    {
+        $relativePath = trim($relativePath);
+        if ($relativePath === '') {
+            return null;
+        }
+
+        $relativePath = preg_replace('#^(\.\./)+#', '', $relativePath);
+        $uploadsRoot = realpath(__DIR__ . '/../uploads');
+        if ($uploadsRoot === false) {
+            return null;
+        }
+
+        $full = __DIR__ . '/../' . $relativePath;
+        $realFull = realpath($full);
+        if ($realFull === false || strpos($realFull, $uploadsRoot . DIRECTORY_SEPARATOR) !== 0) {
+            return null;
+        }
+
+        $bytes = @file_get_contents($realFull);
+        return $bytes === false ? null : $bytes;
     }
 
     private static function mapGender(string $g): string

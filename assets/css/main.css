@@ -17210,7 +17210,7 @@ p.sticky-label {
 }
 
 .btn-primary {
-  background-color: #007bff;
+  background-color: var(--theme-color);
   border: none;
   border-radius: 10px;
   padding: 10px;
@@ -17219,12 +17219,23 @@ p.sticky-label {
 }
 
 .btn-primary:hover {
-  background-color: #0056b3;
+  background-color: #0a5fa0;
+}
+
+.btn-outline-primary {
+  color: var(--theme-color);
+  border-color: var(--theme-color);
+}
+
+.btn-outline-primary:hover {
+  background-color: var(--theme-color);
+  border-color: var(--theme-color);
+  color: #fff;
 }
 
 .form-text a {
   text-decoration: none;
-  color: #007bff;
+  color: var(--theme-color);
   transition: 0.2s;
 }
 
@@ -18356,10 +18367,24 @@ p.sticky-label {
 }
 
 .reg-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   text-align: center;
   font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
   color: #9ca3af;
   margin: 6px 0 18px;
+}
+
+.reg-divider::before,
+.reg-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e5e7eb;
 }
 
 .later-note {

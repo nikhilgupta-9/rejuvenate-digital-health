@@ -95,88 +95,133 @@ $statusColor = ['awaiting_parent' => '#d97706', 'approved' => '#16a34a', 'reject
   <title>Book Appointment | <?= htmlspecialchars($student_school) ?></title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <link rel="stylesheet" href="../assets/school.css">
   <style>
-    :root { --primary: #0C74C5; --accent: #02c9b8; }
+    :root { --primary: #0C74C5; --accent: #02c9b8; --slate-600: #475569; --slate-200: #e2e8f0; }
     * { box-sizing: border-box; }
     body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f7fb; margin: 0; }
-    .s-topnav {
-      background: var(--primary); color: #fff; padding: 0 16px; height: 58px;
-      display: flex; align-items: center; justify-content: space-between;
-      position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(12,116,197,.3);
+    .s-body { padding: 0 0 20px; }
+    /* Desktop: booking wizard on the left, requests/how-it-works on the right.
+       Mobile/tablet: everything stacks full-width in the same reading order. */
+    .book-col-main { min-width: 0; }
+    .book-col-side { min-width: 0; }
+    @media (max-width: 991.98px) {
+      .book-col-main, .book-col-side { max-width: 640px; margin: 0 auto; }
     }
-    .s-topnav .brand { font-size: .9rem; font-weight: 700; }
-    .s-topnav .sub   { font-size: .68rem; opacity: .75; }
-    .s-body { max-width: 700px; margin: 0 auto; padding: 18px 14px 90px; }
 
-    .notice-parent { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 14px 16px; font-size: .82rem; color: #1e3a5f; margin-bottom: 16px; }
-    .req-row { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; font-size: .82rem; }
+    /* Section cards (same language as health.php / abha.php) */
+    .s-card { background: #fff; border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; box-shadow: 0 1px 8px rgba(0,0,0,.06); }
+    .s-card-title { font-size: .82rem; font-weight: 700; color: #1f2937; display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+    .s-card-title .ic-badge { width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: .8rem; }
+
+    .notice-parent { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 14px 16px; font-size: .82rem; color: #1e3a5f; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 10px; }
+    .notice-parent i { color: var(--primary); margin-top: 2px; }
+
+    .req-row { background: #f9fafb; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .82rem; }
+    .req-row:last-child { margin-bottom: 0; }
     .req-status { font-size: .68rem; font-weight: 700; padding: 3px 9px; border-radius: 20px; color: #fff; white-space: nowrap; }
+
+    .how-step { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 14px; }
+    .how-step:last-child { margin-bottom: 0; }
+    .how-num { width: 24px; height: 24px; border-radius: 50%; background: #eff6ff; color: var(--primary); font-size: .72rem; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .how-step p { margin: 0; font-size: .78rem; color: #6b7280; line-height: 1.45; }
+    .how-step strong { color: #1f2937; font-size: .83rem; }
+
+    /* Step progress bar */
+    .wiz-progress { display: flex; align-items: center; margin-bottom: 22px; }
+    .wiz-progress .wp-step { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 0 0 auto; }
+    .wiz-progress .wp-circle {
+      width: 30px; height: 30px; border-radius: 50%; background: #f1f5f9; color: #94a3b8;
+      display: flex; align-items: center; justify-content: center; font-size: .78rem; font-weight: 800;
+      border: 2px solid #e5e7eb; transition: all .2s;
+    }
+    .wiz-progress .wp-label { font-size: .64rem; font-weight: 600; color: #9ca3af; white-space: nowrap; }
+    .wiz-progress .wp-line { flex: 1 1 auto; height: 2px; background: #e5e7eb; margin: 0 4px 18px; }
+    .wiz-progress .wp-step.done .wp-circle { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .wiz-progress .wp-step.done .wp-label { color: var(--primary); }
+    .wiz-progress .wp-step.current .wp-circle { border-color: var(--primary); color: var(--primary); box-shadow: 0 0 0 4px rgba(12,116,197,.12); }
+    .wiz-progress .wp-step.current .wp-label { color: #1f2937; }
+    .wiz-progress .wp-line.done { background: var(--primary); }
 
     .wiz-step { display: none; }
     .wiz-step.active { display: block; }
-    .wiz-title { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+    .wiz-title { font-size: 1rem; font-weight: 700; margin-bottom: 4px; color: #1f2937; }
     .wiz-sub { font-size: .8rem; color: #6b7280; margin-bottom: 14px; }
 
     .grid-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-    .pick-card { background: #fff; border: 2px solid #e5e7eb; border-radius: 12px; padding: 14px 10px; text-align: center; cursor: pointer; font-size: .78rem; font-weight: 600; color: #374151; }
+    .pick-card { position: relative; background: #fff; border: 2px solid #e5e7eb; border-radius: 12px; padding: 14px 10px; text-align: center; cursor: pointer; font-size: .78rem; font-weight: 600; color: #374151; transition: all .15s; }
+    .pick-card:hover { border-color: #c7d2e5; background: #f9fafb; }
     .pick-card.sel { border-color: var(--primary); background: #eff6ff; color: var(--primary); }
     .pick-card i { display: block; font-size: 1.3rem; margin-bottom: 6px; color: var(--primary); }
+    .pick-card.sel::after { content: '\f00c'; font-family: 'Font Awesome 6 Free'; font-weight: 900; position: absolute; top: 6px; right: 8px; font-size: .68rem; color: var(--primary); }
 
-    .doc-row { background: #fff; border: 2px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .doc-row { background: #fff; border: 2px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all .15s; }
+    .doc-row:hover { border-color: #c7d2e5; background: #f9fafb; }
     .doc-row.sel { border-color: var(--primary); background: #eff6ff; }
-    .doc-row .dname { font-weight: 700; font-size: .88rem; }
+    .doc-row .dname { font-weight: 700; font-size: .88rem; color: #1f2937; }
     .doc-row .dspec { font-size: .74rem; color: #6b7280; }
-    .doc-row .dfee { font-weight: 700; color: var(--primary); font-size: .85rem; }
+    .doc-row .dfee { font-weight: 700; color: var(--primary); font-size: .85rem; white-space: nowrap; }
 
     .date-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 14px; }
-    .date-chip { flex: 0 0 auto; width: 54px; text-align: center; border: 2px solid #e5e7eb; border-radius: 10px; padding: 8px 4px; cursor: pointer; font-size: .72rem; }
+    .date-chip { flex: 0 0 auto; width: 54px; text-align: center; border: 2px solid #e5e7eb; border-radius: 10px; padding: 8px 4px; cursor: pointer; font-size: .72rem; transition: all .15s; }
+    .date-chip:not(.disabled):hover { border-color: #c7d2e5; background: #f9fafb; }
     .date-chip.sel { border-color: var(--primary); background: #eff6ff; color: var(--primary); font-weight: 700; }
     .date-chip.disabled { opacity: .35; pointer-events: none; }
     .date-chip .dow { font-weight: 700; }
     .date-chip .num { font-size: 1rem; font-weight: 800; }
 
     .time-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .time-chip { border: 2px solid #e5e7eb; border-radius: 8px; padding: 8px 4px; text-align: center; font-size: .76rem; cursor: pointer; }
+    .time-chip { border: 2px solid #e5e7eb; border-radius: 8px; padding: 8px 4px; text-align: center; font-size: .76rem; cursor: pointer; transition: all .15s; }
+    .time-chip:not(.booked):hover { border-color: #c7d2e5; background: #f9fafb; }
     .time-chip.sel { border-color: var(--primary); background: #eff6ff; color: var(--primary); font-weight: 700; }
     .time-chip.booked { opacity: .3; pointer-events: none; text-decoration: line-through; }
 
-    .wiz-nav { display: flex; justify-content: space-between; margin-top: 16px; }
-    .btn-wiz { border: none; border-radius: 10px; padding: 10px 18px; font-size: .85rem; font-weight: 700; }
+    /* Floating bottom bar — stays anchored to the viewport (not the card), same left-offset
+       behaviour as .school-topbar so it slides with the sidebar on desktop and goes full-width
+       on mobile. .wiz-step gets bottom padding so content never sits under it. */
+    .wiz-nav {
+      display: flex; justify-content: space-between; align-items: center;
+      position: fixed; left: var(--sidebar-w); right: 0; bottom: 0;
+      background: #fff; border-top: 1px solid #e5e7eb;
+      padding: 12px 24px; z-index: 500;
+      box-shadow: 0 -4px 16px rgba(0,0,0,.08);
+      transition: left .3s ease;
+    }
+    .wiz-step { padding-bottom: 76px; }
+    @media (max-width: 767.98px) {
+      .wiz-nav { left: 0; padding: 10px 16px; }
+    }
+    .btn-wiz { border: none; border-radius: 10px; padding: 10px 18px; font-size: .85rem; font-weight: 700; transition: all .15s; }
     .btn-wiz-primary { background: var(--primary); color: #fff; }
+    .btn-wiz-primary:hover:not(:disabled) { background: #0a5fa0; }
     .btn-wiz-primary:disabled { opacity: .4; }
     .btn-wiz-ghost { background: transparent; color: #6b7280; }
+    .btn-wiz-ghost:hover { color: #1f2937; }
 
-    .s-bottomnav {
-      position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e5e7eb;
-      display: flex; z-index: 99; box-shadow: 0 -2px 10px rgba(0,0,0,.06);
+    @media (max-width: 480px) {
+      .s-card { padding: 14px 16px; }
+      .wiz-progress .wp-label { display: none; }
     }
-    .s-bottomnav a {
-      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-      padding: 9px 4px; text-decoration: none; color: #9ca3af; font-size: .58rem; font-weight: 600; gap: 3px;
-    }
-    .s-bottomnav a i { font-size: 1.05rem; }
-    .s-bottomnav a.active, .s-bottomnav a.active i { color: var(--primary); }
   </style>
 </head>
 <body>
+<?php $active_page = 'book'; $base_path = ''; include '../inc/sidebar-student.php'; ?>
 
-<nav class="s-topnav">
-  <div>
-    <div class="brand"><i class="fas fa-stethoscope me-2" style="color:var(--accent);"></i>Book Appointment</div>
-    <div class="sub"><?= htmlspecialchars($student_school) ?></div>
+<div class="school-topbar">
+  <div class="d-flex align-items-center gap-2">
+    <button class="sidebar-toggler" id="sidebarToggle"><i class="fas fa-bars"></i></button>
+    <div>
+      <div style="font-size:1rem;font-weight:600;color:#1f2937;"><i class="fas fa-stethoscope me-2" style="color:var(--accent);"></i>Book Appointment</div>
+      <div style="font-size:.75rem;color:#6b7280;"><?= htmlspecialchars($student_school) ?></div>
+    </div>
   </div>
-  <a href="dashboard.php" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:none;font-size:.76rem;">
-    <i class="fas fa-arrow-left me-1"></i><span class="d-none d-sm-inline">Dashboard</span>
-  </a>
-</nav>
-
-<div class="s-body">
-
-<div class="notice-parent">
-    <i class="fas fa-info-circle me-1"></i>
-    Booking a doctor yourself doesn't confirm it right away — your parent/guardian will get a link to
-    confirm consent and complete payment first. Once they approve, your appointment is booked.
+  <div class="d-flex align-items-center gap-2">
+    <a href="logout.php" class="btn btn-sm btn-outline-danger"><i class="fas fa-sign-out-alt"></i></a>
+  </div>
 </div>
+
+<main class="school-content">
+<div class="s-body">
 
 <?php if (isset($_GET['sent'])): ?>
     <div class="alert alert-success"><i class="fas fa-check-circle me-1"></i> Request sent! We've notified your parent/guardian — they need to approve it before your appointment is booked.</div>
@@ -185,8 +230,94 @@ $statusColor = ['awaiting_parent' => '#d97706', 'approved' => '#16a34a', 'reject
     <div class="alert alert-danger"><?= htmlspecialchars($page_error) ?></div>
 <?php endif; ?>
 
+<div class="row g-4">
+<div class="col-lg-7 book-col-main">
+
+<div class="notice-parent">
+    <i class="fas fa-info-circle"></i>
+    <div>Booking a doctor yourself doesn't confirm it right away — your parent/guardian will get a link to
+    confirm consent and complete payment first. Once they approve, your appointment is booked.</div>
+</div>
+
+<?php if (!$parent_mobile): ?>
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle me-1"></i>
+        No parent/guardian mobile number is on file. Please ask your school admin to add one before you can request a booking.
+    </div>
+<?php else: ?>
+
+<div class="s-card">
+
+    <!-- Step progress -->
+    <div class="wiz-progress" id="wizProgress">
+        <div class="wp-step current" data-step="1"><div class="wp-circle">1</div><div class="wp-label">Department</div></div>
+        <div class="wp-line" data-line="1"></div>
+        <div class="wp-step" data-step="2"><div class="wp-circle">2</div><div class="wp-label">Doctor</div></div>
+        <div class="wp-line" data-line="2"></div>
+        <div class="wp-step" data-step="3"><div class="wp-circle">3</div><div class="wp-label">Date &amp; Time</div></div>
+        <div class="wp-line" data-line="3"></div>
+        <div class="wp-step" data-step="4"><div class="wp-circle">4</div><div class="wp-label">Confirm</div></div>
+    </div>
+
+    <form method="POST" id="bookForm">
+        <input type="hidden" name="action" value="create_hold">
+        <input type="hidden" name="department" id="f_department">
+        <input type="hidden" name="doctor_id" id="f_doctor_id">
+        <input type="hidden" name="doctor_name" id="f_doctor_name">
+        <input type="hidden" name="date" id="f_date">
+        <input type="hidden" name="time" id="f_time">
+
+        <!-- STEP 1: Department -->
+        <div class="wiz-step active" id="step1">
+            <div class="wiz-title">Choose a department</div>
+            <div class="wiz-sub">Pick the speciality that best matches what you need.</div>
+            <div class="grid-cards" id="deptGrid">
+                <?php foreach ($departments as $dept): ?>
+                    <div class="pick-card" data-slug="<?= htmlspecialchars($dept['slug_url']) ?>" data-name="<?= htmlspecialchars(trim($dept['categories'])) ?>">
+                        <i class="fas fa-stethoscope"></i><?= htmlspecialchars(trim($dept['categories'])) ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+            <div class="wiz-nav"><span></span><button type="button" class="btn-wiz btn-wiz-primary" id="next1" disabled>Continue</button></div>
+        </div>
+
+        <!-- STEP 2: Doctor -->
+        <div class="wiz-step" id="step2">
+            <div class="wiz-title">Choose a doctor</div>
+            <div class="wiz-sub" id="docSub">Specialists in this department.</div>
+            <div id="doctorList"><div class="text-muted small">Loading…</div></div>
+            <div class="wiz-nav"><button type="button" class="btn-wiz btn-wiz-ghost" onclick="goStep(1)">Back</button><button type="button" class="btn-wiz btn-wiz-primary" id="next2" disabled>Continue</button></div>
+        </div>
+
+        <!-- STEP 3: Date & Time -->
+        <div class="wiz-step" id="step3">
+            <div class="wiz-title">Choose date &amp; time</div>
+            <div class="wiz-sub" id="schedSub">Doctor's availability.</div>
+            <div class="date-strip" id="dateStrip"></div>
+            <div class="time-grid" id="timeGrid"><div class="text-muted small">Pick a date to see available times.</div></div>
+            <div class="wiz-nav"><button type="button" class="btn-wiz btn-wiz-ghost" onclick="goStep(2)">Back</button><button type="button" class="btn-wiz btn-wiz-primary" id="next3" disabled>Continue</button></div>
+        </div>
+
+        <!-- STEP 4: Notes & Submit -->
+        <div class="wiz-step" id="step4">
+            <div class="wiz-title">Anything the doctor should know?</div>
+            <div class="wiz-sub">Optional — symptoms, reason for visit, etc.</div>
+            <textarea name="notes" class="form-control mb-3" rows="4" placeholder="Optional notes"></textarea>
+            <div class="alert alert-light border small">
+                <strong id="summaryText"></strong>
+            </div>
+            <div class="wiz-nav"><button type="button" class="btn-wiz btn-wiz-ghost" onclick="goStep(3)">Back</button><button type="submit" class="btn-wiz btn-wiz-primary"><i class="fas fa-paper-plane me-1"></i> Send Request to Parent</button></div>
+        </div>
+    </form>
+</div>
+<?php endif; ?>
+
+</div><!-- /.book-col-main -->
+<div class="col-lg-5 book-col-side">
+
 <?php if (!empty($holds)): ?>
-    <div class="mb-3">
+    <div class="s-card">
+        <div class="s-card-title" style="margin-bottom:14px;"><span class="ic-badge" style="background:#eaf4fd;color:#0C74C5;"><i class="fas fa-history"></i></span>Your Recent Requests</div>
         <?php foreach ($holds as $h): ?>
             <div class="req-row">
                 <span>Dr. <?= htmlspecialchars($h['doctor_name']) ?> — <?= date('d M', strtotime($h['appointment_date'])) ?>, <?= date('h:i A', strtotime($h['appointment_time'])) ?></span>
@@ -196,75 +327,27 @@ $statusColor = ['awaiting_parent' => '#d97706', 'approved' => '#16a34a', 'reject
     </div>
 <?php endif; ?>
 
-<?php if (!$parent_mobile): ?>
-    <div class="alert alert-warning">
-        <i class="fas fa-exclamation-triangle me-1"></i>
-        No parent/guardian mobile number is on file. Please ask your school admin to add one before you can request a booking.
+<div class="s-card">
+    <div class="s-card-title" style="margin-bottom:16px;"><span class="ic-badge" style="background:#eafaf1;color:#16a34a;"><i class="fas fa-circle-question"></i></span>How It Works</div>
+    <div class="how-step">
+        <div class="how-num">1</div>
+        <p><strong>Pick a department, doctor, date &amp; time.</strong><br>Takes less than a minute.</p>
     </div>
-<?php else: ?>
-
-<form method="POST" id="bookForm">
-    <input type="hidden" name="action" value="create_hold">
-    <input type="hidden" name="department" id="f_department">
-    <input type="hidden" name="doctor_id" id="f_doctor_id">
-    <input type="hidden" name="doctor_name" id="f_doctor_name">
-    <input type="hidden" name="date" id="f_date">
-    <input type="hidden" name="time" id="f_time">
-
-    <!-- STEP 1: Department -->
-    <div class="wiz-step active" id="step1">
-        <div class="wiz-title">Choose a department</div>
-        <div class="wiz-sub">Pick the speciality that best matches what you need.</div>
-        <div class="grid-cards" id="deptGrid">
-            <?php foreach ($departments as $dept): ?>
-                <div class="pick-card" data-slug="<?= htmlspecialchars($dept['slug_url']) ?>" data-name="<?= htmlspecialchars(trim($dept['categories'])) ?>">
-                    <i class="fas fa-stethoscope"></i><?= htmlspecialchars(trim($dept['categories'])) ?>
-                </div>
-            <?php endforeach; ?>
-        </div>
-        <div class="wiz-nav"><span></span><button type="button" class="btn-wiz btn-wiz-primary" id="next1" disabled>Continue</button></div>
+    <div class="how-step">
+        <div class="how-num">2</div>
+        <p><strong>Your parent/guardian gets a link.</strong><br>Sent to the mobile number on file with your school.</p>
     </div>
-
-    <!-- STEP 2: Doctor -->
-    <div class="wiz-step" id="step2">
-        <div class="wiz-title">Choose a doctor</div>
-        <div class="wiz-sub" id="docSub">Specialists in this department.</div>
-        <div id="doctorList"><div class="text-muted small">Loading…</div></div>
-        <div class="wiz-nav"><button type="button" class="btn-wiz btn-wiz-ghost" onclick="goStep(1)">Back</button><button type="button" class="btn-wiz btn-wiz-primary" id="next2" disabled>Continue</button></div>
+    <div class="how-step">
+        <div class="how-num">3</div>
+        <p><strong>They approve &amp; pay.</strong><br>Your appointment is only booked once they confirm.</p>
     </div>
-
-    <!-- STEP 3: Date & Time -->
-    <div class="wiz-step" id="step3">
-        <div class="wiz-title">Choose date &amp; time</div>
-        <div class="wiz-sub" id="schedSub">Doctor's availability.</div>
-        <div class="date-strip" id="dateStrip"></div>
-        <div class="time-grid" id="timeGrid"><div class="text-muted small">Pick a date to see available times.</div></div>
-        <div class="wiz-nav"><button type="button" class="btn-wiz btn-wiz-ghost" onclick="goStep(2)">Back</button><button type="button" class="btn-wiz btn-wiz-primary" id="next3" disabled>Continue</button></div>
-    </div>
-
-    <!-- STEP 4: Notes & Submit -->
-    <div class="wiz-step" id="step4">
-        <div class="wiz-title">Anything the doctor should know?</div>
-        <div class="wiz-sub">Optional — symptoms, reason for visit, etc.</div>
-        <textarea name="notes" class="form-control mb-3" rows="4" placeholder="Optional notes"></textarea>
-        <div class="alert alert-light border small">
-            <strong id="summaryText"></strong>
-        </div>
-        <div class="wiz-nav"><button type="button" class="btn-wiz btn-wiz-ghost" onclick="goStep(3)">Back</button><button type="submit" class="btn-wiz btn-wiz-primary"><i class="fas fa-paper-plane me-1"></i> Send Request to Parent</button></div>
-    </div>
-</form>
-<?php endif; ?>
-
 </div>
 
-<nav class="s-bottomnav">
-  <a href="dashboard.php"><i class="fas fa-home"></i>Home</a>
-  <a href="health.php"><i class="fas fa-heartbeat"></i>Health</a>
-  <a href="records.php"><i class="fas fa-file-medical"></i>Records</a>
-  <a href="abha.php"><i class="fas fa-id-card"></i>ABHA</a>
-  <a href="book-appointment.php" class="active"><i class="fas fa-stethoscope"></i>Book</a>
-  <a href="profile.php"><i class="fas fa-user-circle"></i>Profile</a>
-</nav>
+</div><!-- /.book-col-side -->
+</div><!-- /.row -->
+
+</div>
+</main>
 
 <script>
 const BASE_URL = '<?= BASE_URL ?>';
@@ -273,6 +356,17 @@ const state = { department: null, departmentName: null, doctorId: null, doctorNa
 function goStep(n) {
     document.querySelectorAll('.wiz-step').forEach(s => s.classList.remove('active'));
     document.getElementById('step' + n).classList.add('active');
+
+    document.querySelectorAll('#wizProgress .wp-step').forEach(s => {
+        const step = parseInt(s.dataset.step, 10);
+        s.classList.toggle('done', step < n);
+        s.classList.toggle('current', step === n);
+    });
+    document.querySelectorAll('#wizProgress .wp-line').forEach(l => {
+        l.classList.toggle('done', parseInt(l.dataset.line, 10) < n);
+    });
+
+    document.getElementById('bookForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 document.querySelectorAll('#deptGrid .pick-card').forEach(card => {

@@ -2,6 +2,18 @@
 include_once "../../config/connect.php";
 include_once "../auth/auth.php";
 require_once __DIR__ . "/../../lib/Abha.php";
+require_once __DIR__ . "/../../lib/Security.php";
+require_once __DIR__ . "/../../lib/AuditLogger.php";
+require_once __DIR__ . "/../../lib/Validator.php";
+require_once __DIR__ . "/../../config/abdm.php";
+require_once __DIR__ . "/../../lib/AbdmApi.php";
+
+// ABDM security norms: standard response headers, CSRF-token for every state-changing
+// form below, an audit trail (AuditLogger — ABDM-compliant: no raw Aadhaar/OTP/skey ever
+// logged), and a rate limit on repeated writes from one admin.
+Security::setSecurityHeaders();
+$csrf_token = Security::csrfToken();
+$logger = new AuditLogger($conn);
 
 /** True when this member belongs to the signed-in school (ABHA writes are school-scoped). */
 function _member_in_school(mysqli $conn, int $memberId, int $schoolId): bool
@@ -20,12 +32,26 @@ $success = $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    /* Link / Update ABHA manually */
+    // ABDM security norm: every state-changing request must carry a valid CSRF token,
+    // and repeated writes from one admin are rate-limited (brute-force / scripting guard).
+    if (!Security::verifyCsrf($_POST['csrf'] ?? '')) {
+        $logger->logAccessViolation('school/health/abha.php:' . $action, 'Invalid or missing CSRF token', (int) $school_user_id);
+        $error = "Your session security token expired. Please reload the page and try again.";
+        $action = ''; // skip every handler below
+    } elseif (Security::isRateLimited(Security::rlKey('abha_admin_write', Security::clientIp(), (string) $school_user_id), 40, 300)) {
+        $logger->logApiAnomaly('school/health/abha.php', $action, 'Rate limit exceeded', (int) $school_user_id, 429);
+        $error = "Too many actions in a short time. Please wait a few minutes and try again.";
+        $action = '';
+    }
+
+    /* Link / Update ABHA manually — admin-entered, NOT ABDM-verified.
+       "verified" is reserved for a real ABDM confirmation (see verify_abdm below), so
+       this never sets it itself; Abha::save() leaves whatever verified state already
+       existed untouched when the key is omitted. */
     if ($action === 'link_abha') {
         $mid       = (int)$_POST['mid'];
         $abha_id   = trim($_POST['abha_id']   ?? '');
         $abha_addr = trim($_POST['abha_address'] ?? '');
-        $verified  = isset($_POST['mark_verified']) ? 1 : 0;
 
         $raw = preg_replace('/\D/', '', $abha_id);
         if (strlen($raw) !== 14) {
@@ -36,16 +62,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($abha_addr && strpos($abha_addr,'@') === false) $abha_addr .= '@abdm';
 
             if (!_member_in_school($conn, $mid, (int) $school_id)) {
+                $logger->logAccessViolation('school/health/abha.php:link_abha', 'Member not in admin\'s school', (int) $school_user_id);
                 $error = "Member not found in your school.";
             } else {
                 Abha::save($conn, 'school_member', $mid, [
                     'abha_number'  => $abha_fmt,
                     'abha_address' => $abha_addr,
                     'linked'       => 1,
-                    'verified'     => $verified,
                     'source'       => 'school',
                 ]);
-                $success = "ABHA linked successfully for member.";
+                $logger->logDataAccess((int) $school_user_id, 'school_admin', $mid, 'abha_profile', 'link_abha');
+                $success = "ABHA linked. Use \"Verify via ABDM\" to confirm it against the national registry.";
             }
         }
     }
@@ -54,10 +81,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'unlink_abha') {
         $mid = (int)$_POST['mid'];
         if (!_member_in_school($conn, $mid, (int) $school_id)) {
+            $logger->logAccessViolation('school/health/abha.php:unlink_abha', 'Member not in admin\'s school', (int) $school_user_id);
             $error = "Member not found in your school.";
         } else {
             Abha::unlink($conn, 'school_member', $mid);
+            $logger->logDataAccess((int) $school_user_id, 'school_admin', $mid, 'abha_profile', 'unlink_abha');
             $success = "ABHA unlinked.";
+        }
+    }
+
+    /* Verify a linked ABHA number against the live ABDM registry (real M1 call —
+       lib/AbdmApi.php::searchByHealthId, same capability the student/teacher self-service
+       wizard uses). Only a genuine ABDM confirmation is allowed to set verified=1 — an
+       admin can no longer self-tick "verified" from this screen. */
+    if ($action === 'verify_abdm') {
+        $mid = (int)$_POST['mid'];
+        if (!_member_in_school($conn, $mid, (int) $school_id)) {
+            $logger->logAccessViolation('school/health/abha.php:verify_abdm', 'Member not in admin\'s school', (int) $school_user_id);
+            $error = "Member not found in your school.";
+        } else {
+            $row = Abha::get($conn, 'school_member', $mid);
+            $num = $row['abha_number'] ?? '';
+            if (!$num || !Validator::isValidAbhaNumber(preg_replace('/\D/', '', $num))) {
+                $error = "This member has no valid ABHA number saved yet.";
+            } elseif (!ABDM_CONFIGURED) {
+                $error = "ABDM is not configured on this server. Contact the administrator.";
+            } else {
+                try {
+                    $abdm = new AbdmApi();
+                    $res  = $abdm->searchByHealthId($num);
+                    $found = !empty($res['healthIdNumber']) || !empty($res['healthId']) || !empty($res['ABHANumber']);
+                    if ($found) {
+                        Abha::save($conn, 'school_member', $mid, ['verified' => true]);
+                        $logger->logAbhaAuth($mid, 'member', 'ABDM_SEARCH', '', 'SUCCESS', 'Y', ['admin_id' => $school_user_id]);
+                        $logger->logDataAccess((int) $school_user_id, 'school_admin', $mid, 'abha_profile', 'verify_abdm');
+                        $success = "ABHA verified against the ABDM registry for this member.";
+                    } else {
+                        $logger->logAbhaAuth($mid, 'member', 'ABDM_SEARCH', '', 'FAILURE', 'Y', ['admin_id' => $school_user_id]);
+                        $error = "ABDM did not confirm this ABHA number. Please re-check it with the member.";
+                    }
+                } catch (Throwable $e) {
+                    $logger->logApiAnomaly('school/health/abha.php', 'verify_abdm', $e->getMessage(), (int) $school_user_id);
+                    $error = "Could not reach ABDM right now. Please try again shortly.";
+                }
+            }
         }
     }
 
@@ -76,6 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'linked'       => 1,
                     'source'       => 'school',
                 ]);
+                $logger->logDataAccess((int) $school_user_id, 'school_admin', (int) $req['member_id'], 'abha_profile', 'approve_request');
             }
             $done = $conn->prepare("UPDATE abha_link_requests SET status='Approved', reviewed_at=NOW(), reviewed_by=? WHERE id=?");
             $done->bind_param('ii', $school_user_id, $req_id);
@@ -90,7 +158,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $notes  = trim($_POST['notes'] ?? 'Rejected by admin');
         $done = $conn->prepare("UPDATE abha_link_requests SET status='Rejected', reviewed_at=NOW(), reviewed_by=?, notes=? WHERE id=? AND school_id=? AND status='Pending'");
         $done->bind_param('isii', $school_user_id, $notes, $req_id, $school_id);
-        if ($done->execute()) $success = "Request rejected.";
+        if ($done->execute()) {
+            $logger->logDataAccess((int) $school_user_id, 'school_admin', $req_id, 'abha_link_request', 'reject_request');
+            $success = "Request rejected.";
+        }
     }
 }
 
@@ -392,6 +463,7 @@ $req_list = mysqli_query($conn, "
             </div>
             <div class="d-flex gap-2 flex-shrink-0 flex-wrap">
               <form method="POST" class="d-inline">
+                <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf_token) ?>">
                 <input type="hidden" name="action"  value="approve_request">
                 <input type="hidden" name="req_id"  value="<?= $req['id'] ?>">
                 <button type="submit" class="btn btn-sm btn-success">
@@ -485,9 +557,9 @@ $req_list = mysqli_query($conn, "
             <td>
               <?php if ($m['abha_linked']): ?>
                 <?php if ($m['abha_verified']): ?>
-                  <span class="badge-verified"><i class="fas fa-shield-alt me-1"></i>Verified</span>
+                  <span class="badge-verified"><i class="fas fa-shield-alt me-1"></i>ABDM Verified</span>
                 <?php else: ?>
-                  <span class="badge-linked"><i class="fas fa-link me-1"></i>Linked</span>
+                  <span class="badge-linked"><i class="fas fa-link me-1"></i>Linked, not verified</span>
                 <?php endif; ?>
               <?php else: ?>
                 <span class="badge-unlinked"><i class="fas fa-unlink me-1"></i>Not Linked</span>
@@ -497,11 +569,22 @@ $req_list = mysqli_query($conn, "
               <div class="d-flex justify-content-end gap-1">
                 <button type="button" class="btn btn-sm btn-outline-primary"
                   style="font-size:.71rem;padding:3px 8px;"
-                  onclick="openLinkModal(<?= $m['id'] ?>,'<?= addslashes(htmlspecialchars($m['name'])) ?>','<?= htmlspecialchars($m['abha_id'] ?? '') ?>','<?= htmlspecialchars(str_replace('@abdm','',$m['abha_address'] ?? '')) ?>',<?= (int)$m['abha_verified'] ?>)">
+                  onclick="openLinkModal(<?= $m['id'] ?>,'<?= addslashes(htmlspecialchars($m['name'])) ?>','<?= htmlspecialchars($m['abha_id'] ?? '') ?>','<?= htmlspecialchars(str_replace('@abdm','',$m['abha_address'] ?? '')) ?>')">
                   <i class="fas fa-<?= $m['abha_linked'] ? 'pen' : 'link' ?> me-1"></i><?= $m['abha_linked'] ? 'Update' : 'Link' ?>
                 </button>
+                <?php if ($m['abha_linked'] && !$m['abha_verified']): ?>
+                <form method="POST" class="d-inline">
+                  <input type="hidden" name="csrf"   value="<?= htmlspecialchars($csrf_token) ?>">
+                  <input type="hidden" name="action" value="verify_abdm">
+                  <input type="hidden" name="mid"    value="<?= $m['id'] ?>">
+                  <button type="submit" class="btn btn-sm btn-outline-success" style="font-size:.71rem;padding:3px 8px;" title="Check this ABHA number against the live ABDM registry">
+                    <i class="fas fa-shield-alt me-1"></i>Verify
+                  </button>
+                </form>
+                <?php endif; ?>
                 <?php if ($m['abha_linked']): ?>
                 <form method="POST" class="d-inline" onsubmit="return confirm('Remove ABHA link for <?= addslashes($m['name']) ?>?')">
+                  <input type="hidden" name="csrf"   value="<?= htmlspecialchars($csrf_token) ?>">
                   <input type="hidden" name="action" value="unlink_abha">
                   <input type="hidden" name="mid"    value="<?= $m['id'] ?>">
                   <button type="submit" class="btn btn-sm btn-outline-danger" style="font-size:.71rem;padding:3px 8px;" title="Unlink ABHA">
@@ -531,6 +614,7 @@ $req_list = mysqli_query($conn, "
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <form method="POST">
+        <input type="hidden" name="csrf"   value="<?= htmlspecialchars($csrf_token) ?>">
         <input type="hidden" name="action" value="link_abha">
         <input type="hidden" name="mid"    id="m_id">
         <div class="modal-body p-4">
@@ -558,11 +642,11 @@ $req_list = mysqli_query($conn, "
             </div>
             <small class="text-muted">PHR address e.g. john.doe@abdm</small>
           </div>
-          <div class="form-check">
-            <input type="checkbox" class="form-check-input" name="mark_verified" id="markVerified">
-            <label class="form-check-label fw-normal" for="markVerified" style="font-size:.83rem;">
-              <i class="fas fa-shield-alt text-primary me-1"></i>Mark as <strong>Verified</strong> — ABHA confirmed against original credentials
-            </label>
+          <div class="alert alert-light border mb-0" style="font-size:.78rem;">
+            <i class="fas fa-info-circle me-1 text-muted"></i>
+            This only saves the number. Use the <strong>Verify</strong> button on the members
+            table afterwards to confirm it against the live ABDM registry — an admin can no
+            longer mark an ABHA as verified by hand.
           </div>
         </div>
         <div class="modal-footer border-0 pt-0">
@@ -585,6 +669,7 @@ $req_list = mysqli_query($conn, "
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form method="POST">
+        <input type="hidden" name="csrf"   value="<?= htmlspecialchars($csrf_token) ?>">
         <input type="hidden" name="action" value="reject_request">
         <input type="hidden" name="req_id" id="rej_req_id">
         <div class="modal-body">
@@ -602,12 +687,11 @@ $req_list = mysqli_query($conn, "
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-function openLinkModal(id, name, abhaId, abhaAddr, verified) {
+function openLinkModal(id, name, abhaId, abhaAddr) {
   document.getElementById('m_id').value   = id;
   document.getElementById('m_name').textContent = name;
   document.getElementById('m_abha_id').value    = abhaId || '';
   document.getElementById('m_abha_addr').value  = abhaAddr || '';
-  document.getElementById('markVerified').checked = !!verified;
   document.getElementById('prev_abha_num').textContent = abhaId || 'XX-XXXX-XXXX-XXXX';
   document.getElementById('prev_abha_addr').textContent = abhaAddr ? abhaAddr+'@abdm' : 'address@abdm';
   new bootstrap.Modal(document.getElementById('linkAbhaModal')).show();

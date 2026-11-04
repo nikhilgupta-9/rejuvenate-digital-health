@@ -36,26 +36,25 @@ if (!empty($hp['height_cm']) && !empty($hp['weight_kg'])) {
   <title>My Health | <?= htmlspecialchars($student_school) ?></title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <link rel="stylesheet" href="../assets/school.css">
   <style>
     :root { --primary: #0C74C5; --accent: #02c9b8; }
     * { box-sizing: border-box; }
     body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f7fb; margin: 0; }
 
-    .s-topnav {
-      background: var(--primary); color: #fff; padding: 0 16px; height: 58px;
-      display: flex; align-items: center; justify-content: space-between;
-      position: sticky; top: 0; z-index: 100;
-      box-shadow: 0 2px 10px rgba(12,116,197,.3);
+    .s-body { padding: 0 0 20px; }
+    /* Desktop: detailed record sections on the left, at-a-glance summary on the right.
+       Mobile/tablet: everything stacks full-width in the same reading order. */
+    .health-col-main { min-width: 0; }
+    .health-col-side { min-width: 0; }
+    @media (max-width: 991.98px) {
+      .health-col-main, .health-col-side { max-width: 640px; margin: 0 auto; }
     }
-    .s-topnav .brand { font-size: .9rem; font-weight: 700; }
-    .s-topnav .sub   { font-size: .68rem; opacity: .75; }
-
-    .s-body { max-width: 700px; margin: 0 auto; padding: 18px 14px 90px; }
 
     /* Summary tiles */
     .health-summary {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(2, 1fr);
       gap: 10px;
       margin-bottom: 18px;
     }
@@ -76,12 +75,16 @@ if (!empty($hp['height_cm']) && !empty($hp['weight_kg'])) {
     .bmi-bar { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #16a34a, #eab308, #ea580c, #dc2626); }
 
     /* Section cards */
-    .s-card { background: #fff; border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; box-shadow: 0 1px 6px rgba(0,0,0,.07); }
+    .s-card { background: #fff; border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; box-shadow: 0 1px 8px rgba(0,0,0,.06); transition: box-shadow .15s; }
+    .s-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.09); }
     .s-card-title {
-      font-size: .7rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: .8px; color: #6b7280;
-      display: flex; align-items: center; gap: 7px;
-      margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #f3f4f6;
+      font-size: .82rem; font-weight: 700; color: #1f2937;
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #f3f4f6;
+    }
+    .s-card-title .ic-badge {
+      width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: .8rem;
     }
 
     /* Read-only info grid */
@@ -107,44 +110,94 @@ if (!empty($hp['height_cm']) && !empty($hp['weight_kg'])) {
     }
     .locked-note i { margin-top: 2px; }
 
-    /* Bottom nav */
-    .s-bottomnav {
-      position: fixed; bottom: 0; left: 0; right: 0;
-      background: #fff; border-top: 1px solid #e5e7eb;
-      display: flex; z-index: 99;
-      box-shadow: 0 -2px 10px rgba(0,0,0,.06);
-    }
-    .s-bottomnav a {
-      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-      padding: 9px 4px; text-decoration: none; color: #9ca3af;
-      font-size: .58rem; font-weight: 600; gap: 3px; transition: color .15s;
-    }
-    .s-bottomnav a i { font-size: 1.05rem; }
-    .s-bottomnav a.active { color: var(--primary); }
-
-    @media (max-width: 420px) {
-      .health-summary { grid-template-columns: repeat(2, 1fr); }
+    @media (max-width: 480px) {
+      .h-tile { padding: 10px 8px; }
+      .s-card { padding: 14px 16px; }
     }
   </style>
 </head>
 <body>
+<?php $active_page = 'health'; $base_path = ''; include '../inc/sidebar-student.php'; ?>
 
-<nav class="s-topnav">
-  <div>
-    <div class="brand"><i class="fas fa-heartbeat me-2" style="color:var(--accent);"></i>My Health Record</div>
-    <div class="sub"><?= htmlspecialchars($student_school) ?></div>
+<div class="school-topbar">
+  <div class="d-flex align-items-center gap-2">
+    <button class="sidebar-toggler" id="sidebarToggle"><i class="fas fa-bars"></i></button>
+    <div>
+      <div style="font-size:1rem;font-weight:600;color:#1f2937;"><i class="fas fa-heartbeat me-2" style="color:var(--accent);"></i>My Health Record</div>
+      <div style="font-size:.75rem;color:#6b7280;"><?= htmlspecialchars($student_school) ?></div>
+    </div>
   </div>
-  <a href="logout.php" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:none;font-size:.76rem;">
-    <i class="fas fa-sign-out-alt me-1"></i><span class="d-none d-sm-inline">Logout</span>
-  </a>
-</nav>
+  <div class="d-flex align-items-center gap-2">
+    <a href="logout.php" class="btn btn-sm btn-outline-danger"><i class="fas fa-sign-out-alt"></i></a>
+  </div>
+</div>
 
+<main class="school-content">
 <div class="s-body">
 
   <div class="locked-note">
     <i class="fas fa-lock"></i>
     <div>This is a <strong>read-only</strong> record. Only your school nurse, teacher or doctor can update it. If something looks wrong, please let them know.</div>
   </div>
+
+  <div class="row g-4">
+  <div class="col-lg-7 health-col-main">
+
+  <?php if (!$hp): ?>
+
+    <div class="s-card text-center" style="padding: 40px 20px;">
+      <i class="fas fa-heartbeat fa-2x mb-3 d-block" style="color:#0C74C5;opacity:.25;"></i>
+      <div class="fw-semibold" style="color:#374151;margin-bottom:6px;">Health Profile Not Set Up</div>
+      <p style="font-size:.82rem;color:#9ca3af;margin-bottom:0;">Your school admin, teacher or doctor hasn't created your health profile yet.</p>
+    </div>
+
+  <?php else: ?>
+
+    <!-- Physical Measurements -->
+    <div class="s-card">
+      <div class="s-card-title"><span class="ic-badge" style="background:#eaf4fd;color:#0C74C5;"><i class="fas fa-ruler"></i></span>Physical Measurements</div>
+      <div class="info-grid">
+        <div class="info-box"><div class="lbl">Vision</div><div class="val <?= $hp['vision'] ? '' : 'empty' ?>"><?= $hp['vision'] ? htmlspecialchars($hp['vision']) : 'Not recorded' ?></div></div>
+        <div class="info-box"><div class="lbl">Hearing</div><div class="val <?= $hp['hearing'] ? '' : 'empty' ?>"><?= $hp['hearing'] ? htmlspecialchars($hp['hearing']) : 'Not recorded' ?></div></div>
+        <div class="info-box"><div class="lbl">Dental Health</div><div class="val <?= $hp['dental'] ? '' : 'empty' ?>"><?= $hp['dental'] ? htmlspecialchars($hp['dental']) : 'Not recorded' ?></div></div>
+      </div>
+    </div>
+
+    <!-- Medical History -->
+    <div class="s-card">
+      <div class="s-card-title"><span class="ic-badge" style="background:#fdeaea;color:#dc2626;"><i class="fas fa-notes-medical"></i></span>Medical History</div>
+      <div class="mb-3">
+        <div class="lbl" style="font-size:.72rem;color:#9ca3af;margin-bottom:4px;">Known Allergies</div>
+        <div class="text-block <?= $hp['known_allergies'] ? '' : 'empty' ?>"><?= $hp['known_allergies'] ? nl2br(htmlspecialchars($hp['known_allergies'])) : 'None recorded' ?></div>
+      </div>
+      <div class="mb-3">
+        <div class="lbl" style="font-size:.72rem;color:#9ca3af;margin-bottom:4px;">Chronic Conditions</div>
+        <div class="text-block <?= $hp['chronic_conditions'] ? '' : 'empty' ?>"><?= $hp['chronic_conditions'] ? nl2br(htmlspecialchars($hp['chronic_conditions'])) : 'None recorded' ?></div>
+      </div>
+      <div>
+        <div class="lbl" style="font-size:.72rem;color:#9ca3af;margin-bottom:4px;">Current Medications</div>
+        <div class="text-block <?= $hp['current_medications'] ? '' : 'empty' ?>"><?= $hp['current_medications'] ? nl2br(htmlspecialchars($hp['current_medications'])) : 'None recorded' ?></div>
+      </div>
+    </div>
+
+    <!-- Vaccination -->
+    <div class="s-card">
+      <div class="s-card-title"><span class="ic-badge" style="background:#eafaf1;color:#16a34a;"><i class="fas fa-syringe"></i></span>Vaccination Status</div>
+      <div class="text-block <?= $hp['vaccination_status'] ? '' : 'empty' ?>"><?= $hp['vaccination_status'] ? nl2br(htmlspecialchars($hp['vaccination_status'])) : 'Not recorded' ?></div>
+    </div>
+
+    <!-- Notes -->
+    <?php if ($hp['notes']): ?>
+    <div class="s-card">
+      <div class="s-card-title"><span class="ic-badge" style="background:#f3f4f6;color:#6b7280;"><i class="fas fa-sticky-note"></i></span>Additional Notes</div>
+      <div class="text-block"><?= nl2br(htmlspecialchars($hp['notes'])) ?></div>
+    </div>
+    <?php endif; ?>
+
+  <?php endif; ?>
+
+  </div><!-- /.health-col-main -->
+  <div class="col-lg-5 health-col-side">
 
   <!-- Health summary tiles -->
   <?php if ($hp || !empty($student['blood_group'])): ?>
@@ -192,29 +245,10 @@ if (!empty($hp['height_cm']) && !empty($hp['weight_kg'])) {
     </div>
   <?php endif; ?>
 
-  <?php if (!$hp): ?>
-
-    <div class="s-card text-center" style="padding: 40px 20px;">
-      <i class="fas fa-heartbeat fa-2x mb-3 d-block" style="color:#0C74C5;opacity:.25;"></i>
-      <div class="fw-semibold" style="color:#374151;margin-bottom:6px;">Health Profile Not Set Up</div>
-      <p style="font-size:.82rem;color:#9ca3af;margin-bottom:0;">Your school admin, teacher or doctor hasn't created your health profile yet.</p>
-    </div>
-
-  <?php else: ?>
-
-    <!-- Physical Measurements -->
-    <div class="s-card">
-      <div class="s-card-title"><i class="fas fa-ruler" style="color:#0C74C5;"></i>Physical Measurements</div>
-      <div class="info-grid">
-        <div class="info-box"><div class="lbl">Vision</div><div class="val <?= $hp['vision'] ? '' : 'empty' ?>"><?= $hp['vision'] ? htmlspecialchars($hp['vision']) : 'Not recorded' ?></div></div>
-        <div class="info-box"><div class="lbl">Hearing</div><div class="val <?= $hp['hearing'] ? '' : 'empty' ?>"><?= $hp['hearing'] ? htmlspecialchars($hp['hearing']) : 'Not recorded' ?></div></div>
-        <div class="info-box"><div class="lbl">Dental Health</div><div class="val <?= $hp['dental'] ? '' : 'empty' ?>"><?= $hp['dental'] ? htmlspecialchars($hp['dental']) : 'Not recorded' ?></div></div>
-      </div>
-    </div>
-
+  <?php if ($hp): ?>
     <!-- Blood Group -->
     <div class="s-card">
-      <div class="s-card-title"><i class="fas fa-tint" style="color:#dc2626;"></i>Blood Group</div>
+      <div class="s-card-title"><span class="ic-badge" style="background:#fdeaea;color:#dc2626;"><i class="fas fa-tint"></i></span>Blood Group</div>
       <?php if (!empty($student['blood_group'])): ?>
         <span class="blood-chip-ro"><?= htmlspecialchars($student['blood_group']) ?></span>
       <?php else: ?>
@@ -222,59 +256,21 @@ if (!empty($hp['height_cm']) && !empty($hp['weight_kg'])) {
       <?php endif; ?>
     </div>
 
-    <!-- Medical History -->
-    <div class="s-card">
-      <div class="s-card-title"><i class="fas fa-notes-medical" style="color:#dc2626;"></i>Medical History</div>
-      <div class="mb-3">
-        <div class="lbl" style="font-size:.72rem;color:#9ca3af;margin-bottom:4px;">Known Allergies</div>
-        <div class="text-block <?= $hp['known_allergies'] ? '' : 'empty' ?>"><?= $hp['known_allergies'] ? nl2br(htmlspecialchars($hp['known_allergies'])) : 'None recorded' ?></div>
-      </div>
-      <div class="mb-3">
-        <div class="lbl" style="font-size:.72rem;color:#9ca3af;margin-bottom:4px;">Chronic Conditions</div>
-        <div class="text-block <?= $hp['chronic_conditions'] ? '' : 'empty' ?>"><?= $hp['chronic_conditions'] ? nl2br(htmlspecialchars($hp['chronic_conditions'])) : 'None recorded' ?></div>
-      </div>
-      <div>
-        <div class="lbl" style="font-size:.72rem;color:#9ca3af;margin-bottom:4px;">Current Medications</div>
-        <div class="text-block <?= $hp['current_medications'] ? '' : 'empty' ?>"><?= $hp['current_medications'] ? nl2br(htmlspecialchars($hp['current_medications'])) : 'None recorded' ?></div>
-      </div>
-    </div>
-
-    <!-- Vaccination -->
-    <div class="s-card">
-      <div class="s-card-title"><i class="fas fa-syringe" style="color:#16a34a;"></i>Vaccination Status</div>
-      <div class="text-block <?= $hp['vaccination_status'] ? '' : 'empty' ?>"><?= $hp['vaccination_status'] ? nl2br(htmlspecialchars($hp['vaccination_status'])) : 'Not recorded' ?></div>
-    </div>
-
     <!-- Emergency Contact -->
     <div class="s-card">
-      <div class="s-card-title"><i class="fas fa-phone-alt" style="color:#d97706;"></i>Emergency Contact</div>
+      <div class="s-card-title"><span class="ic-badge" style="background:#fff4e6;color:#d97706;"><i class="fas fa-phone-alt"></i></span>Emergency Contact</div>
       <div class="info-grid">
         <div class="info-box"><div class="lbl">Guardian / Parent</div><div class="val <?= $hp['emergency_contact'] ? '' : 'empty' ?>"><?= $hp['emergency_contact'] ? htmlspecialchars($hp['emergency_contact']) : 'Not recorded' ?></div></div>
         <div class="info-box"><div class="lbl">Phone</div><div class="val <?= $hp['emergency_phone'] ? '' : 'empty' ?>"><?= $hp['emergency_phone'] ? htmlspecialchars($hp['emergency_phone']) : 'Not recorded' ?></div></div>
       </div>
     </div>
-
-    <!-- Notes -->
-    <?php if ($hp['notes']): ?>
-    <div class="s-card">
-      <div class="s-card-title"><i class="fas fa-sticky-note" style="color:#6b7280;"></i>Additional Notes</div>
-      <div class="text-block"><?= nl2br(htmlspecialchars($hp['notes'])) ?></div>
-    </div>
-    <?php endif; ?>
-
   <?php endif; ?>
 
-</div>
+  </div><!-- /.health-col-side -->
+  </div><!-- /.row -->
 
-<!-- Bottom Navigation -->
-<nav class="s-bottomnav">
-  <a href="dashboard.php"><i class="fas fa-home"></i>Home</a>
-  <a href="health.php" class="active"><i class="fas fa-heartbeat"></i>Health</a>
-  <a href="records.php"><i class="fas fa-file-medical"></i>Records</a>
-  <a href="abha.php"><i class="fas fa-id-card"></i>ABHA</a>
-  <a href="book-appointment.php"><i class="fas fa-stethoscope"></i>Book</a>
-  <a href="profile.php"><i class="fas fa-user-circle"></i>Profile</a>
-</nav>
+</div>
+</main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>

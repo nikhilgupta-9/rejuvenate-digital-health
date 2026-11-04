@@ -78,8 +78,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/swiper-bundle.min.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/nice-select.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css" integrity="sha512-QeR2VH+lsBE5LSAe1Q5EnTBbe7XTBubt8dG93Y7gidSgdMCr8nVqKcfKAMyN96SV8KDbZVTDXChatu5G2KQGzg==" crossorigin="anonymous" referrerpolicy="no-referrer">
     <style>
         /* ── Align this landing page to the brand palette (#0C74C5 / #02c9b8) ── */
         .school-program-page {
@@ -119,6 +117,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
             background-color: var(--sp-blue) !important;
         }
 
+        /* The solid !important backgrounds above defeat Bootstrap's
+           bg-opacity-10 utility (badges, icon circles), which needs an
+           actual light tint — not the full solid brand colour — behind
+           same-colour text/icons. Restore the tint with higher-specificity
+           rules so it wins over the single-class overrides above. */
+        .school-program-page .bg-primary.bg-opacity-10 {
+            background-color: rgba(12, 116, 197, .1) !important;
+        }
+
+        .school-program-page .bg-success.bg-opacity-10,
+        .school-program-page .bg-info.bg-opacity-10 {
+            background-color: rgba(2, 201, 184, .1) !important;
+        }
+
+        .school-program-page .bg-warning.bg-opacity-10 {
+            background-color: rgba(12, 116, 197, .1) !important;
+        }
+
         .school-program-page .btn-outline-success {
             color: var(--sp-teal) !important;
             border-color: var(--sp-teal) !important;
@@ -126,6 +142,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
 
         .school-program-page .btn-outline-success:hover {
             background-color: var(--sp-teal) !important;
+            color: #fff !important;
+        }
+
+        /* Buttons — main.css's own .btn-primary override (#007bff) still isn't
+           the brand colour, so pin it here within this page. */
+        .school-program-page .btn-primary {
+            background-color: var(--sp-blue) !important;
+            border-color: var(--sp-blue) !important;
+            color: #fff !important;
+        }
+
+        .school-program-page .btn-primary:hover,
+        .school-program-page .btn-primary:focus {
+            background-color: var(--sp-blue-dk) !important;
+            border-color: var(--sp-blue-dk) !important;
+        }
+
+        .school-program-page .btn-outline-primary {
+            color: var(--sp-blue) !important;
+            border-color: var(--sp-blue) !important;
+        }
+
+        .school-program-page .btn-outline-primary:hover {
+            background-color: var(--sp-blue) !important;
             color: #fff !important;
         }
 
@@ -204,7 +244,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
             <div class="row g-4 align-items-center">
                 <div class="col-lg-6">
                     <div class="pe-lg-5">
-                        <span class="badge bg-primary bg-opacity-10 text-light mb-3 px-3 py-2 fs-6 fw-semibold">
+                        <span class="badge bg-primary bg-opacity-10 text-primary mb-3 px-3 py-2 fs-6 fw-semibold">
                             <i class="fas fa-graduation-cap me-2"></i>Education Health Initiative
                         </span>
 
@@ -307,7 +347,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
         <div class="container">
             <div class="row text-center mb-5">
                 <div class="col-lg-8 mx-auto">
-                    <span class="badge bg-primary bg-opacity-10 text-light mb-3 px-3 py-2 fs-6 fw-semibold">
+                    <span class="badge bg-primary bg-opacity-10 text-primary mb-3 px-3 py-2 fs-6 fw-semibold">
                         <i class="fas fa-id-card me-2"></i>Digital Health ID &amp; Certificates
                     </span>
                     <h2 class="display-6 fw-bold mb-3">Everything Your Child's Health Record Needs</h2>
@@ -320,7 +360,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
                     <div class="card border-0 shadow-sm h-100 border-top border-4 border-primary">
                         <div class="card-body p-4 text-center">
                             <div class="bg-primary bg-opacity-10 rounded-circle p-3 d-inline-block mb-3">
-                                <i class="fas fa-id-badge fs-1 text-light"></i>
+                                <i class="fas fa-id-badge fs-1 text-primary"></i>
                             </div>
                             <h5 class="fw-bold">Health ID Card</h5>
                             <p class="text-muted small mb-0">Photo ID with Student ID, class, DOB, gender, blood group,
@@ -332,7 +372,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
                     <div class="card border-0 shadow-sm h-100 border-top border-4 border-success">
                         <div class="card-body p-4 text-center">
                             <div class="bg-success bg-opacity-10 rounded-circle p-3 d-inline-block mb-3">
-                                <i class="fas fa-syringe fs-1 text-light"></i>
+                                <i class="fas fa-syringe fs-1 text-success"></i>
                             </div>
                             <h5 class="fw-bold">Vaccination Certificate</h5>
                             <p class="text-muted small mb-0">Full immunization record — BCG, OPV, DPT, Hepatitis B, MMR,
@@ -373,7 +413,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
         <div class="container">
             <div class="row text-center mb-5">
                 <div class="col-lg-8 mx-auto">
-                    <span class="badge bg-success bg-opacity-10 text-light mb-3 px-3 py-2 fs-6 fw-semibold">
+                    <span class="badge bg-success bg-opacity-10 text-success mb-3 px-3 py-2 fs-6 fw-semibold">
                         <i class="fas fa-leaf me-2"></i>Health Tips for Students
                     </span>
                     <h2 class="display-6 fw-bold mb-3">A Healthy Body, A Healthy Mind, A Happy Life</h2>
@@ -411,7 +451,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
         <div class="container">
             <div class="row text-center mb-5">
                 <div class="col-lg-8 mx-auto">
-                    <span class="badge bg-primary bg-opacity-10 text-light mb-3 px-3 py-2 fs-6 fw-semibold">
+                    <span class="badge bg-primary bg-opacity-10 text-primary mb-3 px-3 py-2 fs-6 fw-semibold">
                         <i class="fas fa-shield-alt me-2"></i>School Health Plans
                     </span>
                     <h2 class="display-6 fw-bold mb-3">Every Child. Every School. Every Future.</h2>
@@ -505,7 +545,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
         <div class="container">
             <div class="row text-center mb-5">
                 <div class="col-lg-8 mx-auto">
-                    <span class="badge bg-primary bg-opacity-10 text-light mb-3 px-3 py-2 fs-6 fw-semibold">
+                    <span class="badge bg-primary bg-opacity-10 text-primary mb-3 px-3 py-2 fs-6 fw-semibold">
                         <i class="fas fa-cogs me-2"></i>How It Works
                     </span>
                     <h2 class="display-6 fw-bold mb-3">Simple Implementation Process</h2>
@@ -594,7 +634,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
                     </div>
                 </div>
                 <div class="col-lg-6">
-                    <span class="badge bg-primary bg-opacity-10 text-light mb-3 px-3 py-2 fs-6 fw-semibold">
+                    <span class="badge bg-primary bg-opacity-10 text-primary mb-3 px-3 py-2 fs-6 fw-semibold">
                         <i class="fas fa-gem me-2"></i>Why Choose Us
                     </span>
                     <h2 class="display-6 fw-bold mb-4">Benefits for Your School</h2>
@@ -638,7 +678,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
         <div class="container">
             <div class="row g-5 align-items-center">
                 <div class="col-lg-5">
-                    <span class="badge bg-primary bg-opacity-10 text-light mb-3 px-3 py-2 fs-6 fw-semibold">
+                    <span class="badge bg-primary bg-opacity-10 text-primary mb-3 px-3 py-2 fs-6 fw-semibold">
                         <i class="fas fa-handshake me-2"></i>Partner With Us
                     </span>
                     <h2 class="display-6 fw-bold mb-3">Bring the Health Program to Your School</h2>
@@ -738,7 +778,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
         <div class="container">
             <div class="row text-center mb-5">
                 <div class="col-lg-8 mx-auto">
-                    <span class="badge bg-primary bg-opacity-10 text-light mb-3 px-3 py-2 fs-6 fw-semibold">
+                    <span class="badge bg-primary bg-opacity-10 text-primary mb-3 px-3 py-2 fs-6 fw-semibold">
                         <i class="fas fa-shield-alt me-2"></i>Why Choose REJUVENATE Digital Health?
                     </span>
                     <h2 class="display-6 fw-bold mb-3">A Health Partner Schools Can Trust</h2>
@@ -751,7 +791,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
                     <div class="card border-0 shadow-sm h-100">
                         <div class="card-body p-4 text-center">
                             <div class="bg-primary bg-opacity-10 rounded-circle p-3 d-inline-block mb-3">
-                                <i class="fas fa-school fs-2 text-light"></i>
+                                <i class="fas fa-school fs-2 text-primary"></i>
                             </div>
                             <h6 class="fw-bold mb-1">Trusted by Schools</h6>
                             <p class="text-muted small mb-0">500+ institutions across India</p>
@@ -762,7 +802,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
                     <div class="card border-0 shadow-sm h-100">
                         <div class="card-body p-4 text-center">
                             <div class="bg-success bg-opacity-10 rounded-circle p-3 d-inline-block mb-3">
-                                <i class="fas fa-id-card fs-2 text-light"></i>
+                                <i class="fas fa-id-card fs-2 text-success"></i>
                             </div>
                             <h6 class="fw-bold mb-1">Digital Health ID &amp; Records</h6>
                             <p class="text-muted small mb-0">Every visit stored as an ABHA care context</p>
@@ -773,7 +813,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
                     <div class="card border-0 shadow-sm h-100">
                         <div class="card-body p-4 text-center">
                             <div class="bg-info bg-opacity-10 rounded-circle p-3 d-inline-block mb-3">
-                                <i class="fas fa-user-md fs-2 text-light"></i>
+                                <i class="fas fa-user-md fs-2 text-info"></i>
                             </div>
                             <h6 class="fw-bold mb-1">Expert Doctors</h6>
                             <p class="text-muted small mb-0">HPR-verified health professionals</p>
@@ -784,7 +824,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
                     <div class="card border-0 shadow-sm h-100">
                         <div class="card-body p-4 text-center">
                             <div class="bg-warning bg-opacity-10 rounded-circle p-3 d-inline-block mb-3">
-                                <i class="fas fa-lock fs-2 text-light"></i>
+                                <i class="fas fa-lock fs-2 text-warning"></i>
                             </div>
                             <h6 class="fw-bold mb-1">Safe &amp; Confidential</h6>
                             <p class="text-muted small mb-0">Consent-based access, fully audited</p>
@@ -837,7 +877,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
         <div class="container">
             <div class="row text-center mb-5">
                 <div class="col-lg-8 mx-auto">
-                    <span class="badge bg-primary bg-opacity-10 text-light mb-3 px-3 py-2 fs-6 fw-semibold">
+                    <span class="badge bg-primary bg-opacity-10 text-primary mb-3 px-3 py-2 fs-6 fw-semibold">
                         <i class="fas fa-question-circle me-2"></i>FAQs
                     </span>
                     <h2 class="display-6 fw-bold mb-3">Frequently Asked Questions</h2>
@@ -909,12 +949,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sp_enquiry'])) {
     </section>
 
     <?php include("footer.php") ?>
-
-    <!-- Scripts -->
-    <script src="<?= BASE_URL ?>assets/js/jquery-3.6.0.min.js"></script>
-    <script src="<?= BASE_URL ?>assets/js/bootstrap.bundle.min.js"></script>
-    <script src="<?= BASE_URL ?>assets/js/swiper-bundle.min.js"></script>
-    <script src="<?= BASE_URL ?>assets/js/main.js"></script>
 
     <script>
         /* ── Age finder: highlight the plan band matching the child's age ── */

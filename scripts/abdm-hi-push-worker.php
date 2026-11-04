@@ -3,7 +3,7 @@
  * ABDM Milestone 2 (Phase B) — Health Information Push Worker.
  *
  * Processes pending 'acknowledged' health data requests from HIUs:
- *   1. Fetches requested health records (prescriptions/consultations) matching consent & date range.
+ *   1. Fetches requested health records (prescriptions + linked documents) matching consent & date range.
  *   2. Builds NDHM FHIR R4 Document Bundles using FhirBundleBuilder.
  *   3. Encrypts bundles using ABDM Fidelius crypto (Curve25519 ECDH + HKDF-SHA256 + AES-256-GCM) with HIU public key.
  *   4. POSTs encrypted payload to HIU's dataPushUrl.
@@ -164,6 +164,47 @@ foreach ($requests as $req) {
             ];
         } catch (Throwable $e) {
             error_log("[ABDM-HIP] Encryption error for prescription #{$rx['id']}: " . $e->getMessage());
+        }
+    }
+
+    // Fetch linked documents for this patient in range — only documents whose
+    // care-context has actually completed HIP-initiated linking (status='linked')
+    // are shareable; an unlinked document has never been declared to ABDM.
+    $docStmt2 = $conn->prepare("
+        SELECT pd.*, ccl.care_context_reference
+        FROM patient_documents pd
+        JOIN abdm_care_context_links ccl ON ccl.document_id = pd.id
+        WHERE pd.patient_id = ? AND ccl.status = 'linked'
+          AND pd.uploaded_at >= ? AND pd.uploaded_at <= ?
+        ORDER BY pd.uploaded_at DESC
+    ");
+    $docStmt2->bind_param('iss', $patientId, $from, $to);
+    $docStmt2->execute();
+    $linkedDocuments = $docStmt2->get_result()->fetch_all(MYSQLI_ASSOC);
+    $docStmt2->close();
+
+    foreach ($linkedDocuments as $doc) {
+        $fhirBundle = FhirBundleBuilder::buildHealthDocumentBundle($doc, $patient, $org);
+        $fhirJson = json_encode($fhirBundle, JSON_UNESCAPED_SLASHES);
+
+        try {
+            $enc = AbdmCrypto::encryptBundle($fhirJson, $hiuPubKeyB64, $hiuNonceB64);
+            $lastSenderKm = $enc['keyMaterial'];
+
+            $entries[] = [
+                'content'              => $enc['encryptedData'],
+                'media'                => 'application/fhir+json',
+                'checksum'             => $enc['checksum'],
+                'careContextReference' => $doc['care_context_reference'],
+            ];
+
+            $careContextStatuses[] = [
+                'careContextReference' => $doc['care_context_reference'],
+                'hiStatus'             => 'DELIVERED',
+                'description'          => 'Delivered successfully',
+            ];
+        } catch (Throwable $e) {
+            error_log("[ABDM-HIP] Encryption error for document #{$doc['id']}: " . $e->getMessage());
         }
     }
 

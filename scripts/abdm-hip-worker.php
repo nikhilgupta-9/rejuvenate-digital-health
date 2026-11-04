@@ -57,16 +57,19 @@ if (!$DRY) {
 }
 
 // Pending care-context links + the patient behind each prescription.
+// prescription_id OR document_id is set (never both — see chk_cclink_one_source), so the
+// patient is resolved from whichever source this care-context row actually points at.
 $rows = $conn->query("
-    SELECT ccl.id, ccl.prescription_id, ccl.reference_number, ccl.care_context_reference,
+    SELECT ccl.id, ccl.prescription_id, ccl.document_id, ccl.reference_number, ccl.care_context_reference,
            ccl.hi_type, ccl.request_id,
-           p.patient_id,
+           COALESCE(p.patient_id, pd.patient_id) AS patient_id,
            u.name, u.last_name, u.gender, YEAR(u.dob) AS yob,
            COALESCE(aa.abha_number,  u.abha_id)      AS abha_number,
            COALESCE(aa.abha_address, u.abha_address) AS abha_address
     FROM abdm_care_context_links ccl
-    JOIN prescriptions p ON p.id = ccl.prescription_id
-    JOIN users u         ON u.id = p.patient_id
+    LEFT JOIN prescriptions p      ON p.id = ccl.prescription_id
+    LEFT JOIN patient_documents pd ON pd.id = ccl.document_id
+    JOIN users u ON u.id = COALESCE(p.patient_id, pd.patient_id)
     LEFT JOIN abha_accounts aa ON aa.entity_type = 'patient' AND aa.entity_id = u.id
     WHERE ccl.status = 'pending'
     ORDER BY ccl.id

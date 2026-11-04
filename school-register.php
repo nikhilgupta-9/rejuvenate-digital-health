@@ -319,7 +319,7 @@ $states = [
                   ]); ?>
                 </div>
 
-                <div class="reg-divider">─── Admin Account ───</div>
+                <div class="reg-divider"><span>Admin Account</span></div>
 
                 <!-- Admin name -->
                 <div class="field-group">

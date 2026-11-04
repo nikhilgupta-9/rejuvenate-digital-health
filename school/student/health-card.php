@@ -85,6 +85,13 @@ if ($hp && !empty($hp['height_cm']) && !empty($hp['weight_kg'])) {
 
   <?php else: ?>
 
+    <div class="text-center mb-3 pt-2">
+      <img src="<?= BASE_URL ?>assets/img/logo/logo.png" alt="Rejuvenate Digital Health" style="height:38px;width:auto;" onerror="this.onerror=null; this.src='../../assets/img/logo/logo.png';">
+      <div style="font-size:.68rem;font-weight:800;color:#0C74C5;letter-spacing:1.2px;text-transform:uppercase;margin-top:4px;">
+        Institutional Health Network &middot; Verified Emergency Health Pass
+      </div>
+    </div>
+
     <div class="banner">
       <i class="fas fa-triangle-exclamation"></i>
       <div>Emergency Health Information &mdash; for use by medical staff, teachers or first responders only.</div>

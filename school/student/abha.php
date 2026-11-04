@@ -104,28 +104,19 @@ if ($student['dob']) {
   <title>My ABHA | <?= htmlspecialchars($student_school) ?></title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <link rel="stylesheet" href="../assets/school.css">
   <style>
     :root { --primary:#0C74C5; --accent:#02c9b8; --ab-green:#00875a; }
     body { font-family:'Segoe UI',system-ui,sans-serif; background:#f4f7fb; margin:0; }
 
-    /* Topnav */
-    .s-topnav {
-      background: var(--primary);
-      color: #fff;
-      padding: 0 16px;
-      height: 58px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      box-shadow: 0 2px 10px rgba(12,116,197,.3);
+    .s-body { padding: 0 0 20px; }
+    /* Desktop: ABHA status/wizard on the left, health summary/history/about on the right.
+       Mobile: everything stacks full-width, in the same reading order. */
+    .abha-col-main { min-width: 0; }
+    .abha-col-side { min-width: 0; }
+    @media (max-width: 991.98px) {
+      .abha-col-main, .abha-col-side { max-width: 640px; margin: 0 auto; }
     }
-    .s-topnav .brand { font-size:.9rem; font-weight:700; }
-    .s-topnav .sub   { font-size:.65rem; opacity:.75; }
-
-    .s-body { max-width:760px; margin:0 auto; padding:18px 14px 50px; }
 
     /* ABHA card */
     .abha-card {
@@ -226,29 +217,34 @@ if ($student['dob']) {
     .hist-item.rejected { border-color:#dc2626; background:#fff5f5; }
     .hist-item.pending  { border-color:#d97706; background:#fffbeb; }
 
-    /* Bottom nav */
-    .s-bottomnav { position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid #e5e7eb; display:flex; z-index:99; }
-    .s-bottomnav a { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px 4px; text-decoration:none; color:#6b7280; font-size:.6rem; font-weight:600; gap:3px; }
-    .s-bottomnav a i { font-size:1.1rem; }
-    .s-bottomnav a.active { color:var(--primary); }
+    /* Mobile tightening */
+    @media (max-width: 480px) {
+      .abha-card { padding: 20px 16px; }
+      .abha-num { font-size: 1.15rem; }
+      .req-form-card { padding: 16px; }
+      .wiz-tabs button { font-size: .7rem; padding: 8px 2px; }
+      .wiz-tabs button i { display: block; margin: 0 0 2px; }
+      .health-pill { padding: 8px 10px; }
+    }
   </style>
 </head>
 <body>
+<?php $active_page = 'abha'; $base_path = ''; include '../inc/sidebar-student.php'; ?>
 
-<!-- Top nav -->
-<div class="s-topnav">
-  <div>
-    <div class="brand"><i class="fas fa-id-card me-2" style="color:#86efac;"></i>My ABHA</div>
-    <div class="sub"><?= htmlspecialchars($student_school) ?></div>
+<div class="school-topbar">
+  <div class="d-flex align-items-center gap-2">
+    <button class="sidebar-toggler" id="sidebarToggle"><i class="fas fa-bars"></i></button>
+    <div>
+      <div style="font-size:1rem;font-weight:600;color:#1f2937;"><i class="fas fa-id-card me-2" style="color:#00875a;"></i>My ABHA</div>
+      <div style="font-size:.75rem;color:#6b7280;"><?= htmlspecialchars($student_school) ?></div>
+    </div>
   </div>
   <div class="d-flex align-items-center gap-2">
-    <a href="dashboard.php" class="text-white text-decoration-none" style="font-size:.8rem;opacity:.8;"><i class="fas fa-arrow-left me-1"></i>Dashboard</a>
-    <a href="logout.php" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;font-size:.75rem;">
-      <i class="fas fa-sign-out-alt"></i>
-    </a>
+    <a href="logout.php" class="btn btn-sm btn-outline-danger"><i class="fas fa-sign-out-alt"></i></a>
   </div>
 </div>
 
+<main class="school-content">
 <div class="s-body">
 
   <?php if ($success): ?>
@@ -263,6 +259,9 @@ if ($student['dob']) {
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
   </div>
   <?php endif; ?>
+
+  <div class="row g-4">
+  <div class="col-lg-7 abha-col-main">
 
   <?php if ($student['abha_linked'] && $student['abha_id']): ?>
   <!-- ═══ ABHA LINKED — show health card ═══ -->
@@ -334,6 +333,28 @@ if ($student['dob']) {
       Link or create your ABHA with OTP verification — instant, no admin wait needed.
     </p>
   </div>
+
+  <?php if ($pending_req && ABDM_CONFIGURED): ?>
+  <!-- A manual request is still sitting with the school admin — the instant OTP wizard
+       below works too and, if used, supersedes this (create/link auto-approves it). -->
+  <div class="info-card mb-3" style="border-left:4px solid #d97706;">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <i class="fas fa-hourglass-half text-warning"></i>
+      <h6 class="mb-0" style="color:#92400e;">Manual Request Still Pending</h6>
+    </div>
+    <p style="font-size:.78rem;color:#6b7280;margin-bottom:10px;">
+      You submitted ABHA <strong style="font-family:monospace;color:#00875a;"><?= htmlspecialchars($pending_req['abha_id']) ?></strong>
+      for school admin review on <?= date('d M Y, h:i A', strtotime($pending_req['requested_at'])) ?>.
+      You can keep waiting, or use instant OTP verification below instead — either one will link your ABHA.
+    </p>
+    <form method="POST" class="d-inline">
+      <input type="hidden" name="action" value="cancel_request">
+      <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Cancel the pending manual request?')">
+        <i class="fas fa-times me-1"></i>Cancel Manual Request
+      </button>
+    </form>
+  </div>
+  <?php endif; ?>
 
   <?php if (ABDM_CONFIGURED): ?>
   <!-- ═══ ABDM LIVE OTP WIZARD ═══ -->
@@ -640,6 +661,9 @@ if ($student['dob']) {
   <?php endif; /* ABDM_CONFIGURED */ ?>
   <?php endif; /* end abha_linked */ ?>
 
+  </div><!-- /.abha-col-main -->
+  <div class="col-lg-5 abha-col-side">
+
   <!-- ═══ Health Summary ═══ -->
   <?php if ($hp): ?>
   <div class="info-card">
@@ -739,17 +763,11 @@ if ($student['dob']) {
     </a>
   </div>
 
-</div><!-- /.s-body -->
+  </div><!-- /.abha-col-side -->
+  </div><!-- /.row -->
 
-<!-- Bottom nav -->
-<nav class="s-bottomnav">
-  <a href="dashboard.php"><i class="fas fa-home"></i>Home</a>
-  <a href="health.php"><i class="fas fa-heartbeat"></i>Health</a>
-  <a href="records.php"><i class="fas fa-file-medical"></i>Records</a>
-  <a href="abha.php" class="active"><i class="fas fa-id-card"></i>ABHA</a>
-  <a href="book-appointment.php"><i class="fas fa-stethoscope"></i>Book</a>
-  <a href="profile.php"><i class="fas fa-user-circle"></i>Profile</a>
-</nav>
+</div><!-- /.s-body -->
+</main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
